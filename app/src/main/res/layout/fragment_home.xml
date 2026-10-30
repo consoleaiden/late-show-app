@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- 顶栏：源站下拉 + 搜索框 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/btnSource"
+            android:layout_width="126dp"
+            android:layout_height="36dp"
+            android:gravity="center_vertical"
+            android:paddingLeft="12dp"
+            android:paddingRight="8dp"
+            android:background="@drawable/bg_capsule"
+            android:text="全部源站"
+            android:textSize="12sp"
+            android:textColor="@color/t1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:drawablePadding="4dp" />
+
+        <EditText
+            android:id="@+id/inputSearch"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginLeft="8dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:background="@drawable/bg_capsule"
+            android:hint="搜片名 / 演员"
+            android:textSize="12sp"
+            android:textColor="@color/t1"
+            android:textColorHint="@color/t3"
+            android:maxLines="1"
+            android:inputType="text"
+            android:imeOptions="actionSearch"
+            android:drawableStart="@drawable/ic_search"
+            android:drawablePadding="6dp" />
+    </LinearLayout>
+
+    <!-- 分类横滑 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/chips"
+        android:layout_width="match_parent"
+        android:layout_height="30dp"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:clipToPadding="false" />
+
+    <!-- 元信息条 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/metaCount"
+            style="@style/MetaLabel"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="已收录 -- 部" />
+
+        <TextView
+            android:id="@+id/metaSync"
+            style="@style/MetaLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="● -- 同步" />
+    </LinearLayout>
+
+    <!-- 卡片墙 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/grid"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:clipToPadding="false" />
+
+    <TextView
+        android:id="@+id/emptyView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="换个关键词试试\n试试片名、演员，或切回「全部」"
+        android:textSize="13sp"
+        android:textColor="@color/t2"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 浅色主题（values-night 为深色） -->
+    <color name="ink900">#F2F3F6</color>
+    <color name="ink800">#FFFFFF</color>
+    <color name="ink700">#E9EBEF</color>
+    <color name="ink600">#DFE2E8</color>
+    <color name="line">#1A12181F</color>
+    <color name="lineStrong">#38121820</color>
+    <color name="t1">#1B2026</color>
+    <color name="t2">#5C6672</color>
+    <color name="t3">#8B95A1</color>
+    <color name="acc">#FF5A36</color>
+    <color name="accInk">#170A05</color>
+    <color name="accSoft">#21FF5A36</color>
+    <color name="ok">#2E7D52</color>
+    <color name="okSoft">#1A5FBF8E</color>
+    <color name="warn">#B97A1E</color>
+    <color name="warnSoft">#1AE8A33D</color>
+    <color name="bad">#C5453A</color>
+    <color name="badSoft">#1AE0574F</color>
+    <color name="maskText">#FFFFFF</color>
+    <color name="barBg">#F7F8FA</color>
+</resources>

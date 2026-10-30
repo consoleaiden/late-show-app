@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LateShow" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/ink900</item>
+        <item name="colorPrimary">@color/acc</item>
+        <item name="colorOnPrimary">@color/accInk</item>
+        <item name="colorSurface">@color/ink800</item>
+        <item name="android:colorBackground">@color/ink900</item>
+        <item name="android:statusBarColor">@color/ink900</item>
+        <item name="android:navigationBarColor">@color/ink900</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

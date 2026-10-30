@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="TabItem">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+
+    <style name="TabIcon">
+        <item name="android:layout_width">22dp</item>
+        <item name="android:layout_height">22dp</item>
+    </style>
+
+    <style name="TabLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">9.5sp</item>
+        <item name="android:textColor">@color/t2</item>
+        <item name="android:layout_marginTop">3dp</item>
+    </style>
+
+    <style name="Mono" >
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:letterSpacing">0.04</item>
+    </style>
+
+    <style name="MetaLabel" parent="Mono">
+        <item name="android:textSize">9.5sp</item>
+        <item name="android:textColor">@color/t3</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
+    <style name="Smbtn">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">25dp</item>
+        <item name="android:paddingLeft">9dp</item>
+        <item name="android:paddingRight">9dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">10.5sp</item>
+        <item name="android:textColor">@color/t2</item>
+        <item name="android:background">@drawable/bg_smbtn</item>
+    </style>
+
+    <style name="SectionTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/t1</item>
+    </style>
+
+    <style name="SettingsCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:background">@drawable/bg_card_lg</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="OpBtn">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/bg_smbtn</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/t1</item>
+    </style>
+</resources>

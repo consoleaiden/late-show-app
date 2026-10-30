@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ink900">
+
+    <FrameLayout
+        android:id="@+id/container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/line" />
+
+    <LinearLayout
+        android:id="@+id/tabbar"
+        android:layout_width="match_parent"
+        android:layout_height="62dp"
+        android:orientation="horizontal"
+        android:background="@color/barBg">
+
+        <LinearLayout android:id="@+id/tab_home" style="@style/TabItem">
+            <ImageView android:id="@+id/tab_home_icon" android:src="@drawable/ic_home" style="@style/TabIcon" />
+            <TextView android:id="@+id/tab_home_label" android:text="首页" style="@style/TabLabel" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/tab_fav" style="@style/TabItem">
+            <ImageView android:id="@+id/tab_fav_icon" android:src="@drawable/ic_bookmark" style="@style/TabIcon" />
+            <TextView android:id="@+id/tab_fav_label" android:text="收藏" style="@style/TabLabel" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/tab_settings" style="@style/TabItem">
+            <ImageView android:id="@+id/tab_settings_icon" android:src="@drawable/ic_settings" style="@style/TabIcon" />
+            <TextView android:id="@+id/tab_settings_label" android:text="设置" style="@style/TabLabel" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="18dp"
+        android:background="@color/barBg">
+        <View
+            android:layout_width="120dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal|top"
+            android:layout_marginTop="7dp"
+            android:background="@drawable/home_indicator" />
+    </FrameLayout>
+</LinearLayout>

@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="24dp">
+
+        <!-- 页头 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="14dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="设置"
+                    android:textSize="25sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/t1" />
+
+                <TextView
+                    style="@style/MetaLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="同步与播放偏好" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/btnTheme"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_circle"
+                android:src="@drawable/ic_settings"
+                android:contentDescription="主题" />
+        </LinearLayout>
+
+        <!-- ① 播放源 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放源" />
+
+                <TextView
+                    style="@style/MetaLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:text="SOURCE" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="VodSync 后端地址，保存后全站接口即时生效。"
+                android:textSize="10.5sp"
+                android:textColor="@color/t2"
+                android:lineSpacingMultiplier="1.6" />
+
+            <EditText
+                android:id="@+id/inputBaseUrl"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:background="@drawable/bg_field"
+                android:textSize="12sp"
+                android:textColor="@color/t1"
+                android:inputType="textUri"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/srcStatus"
+                style="@style/MetaLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="● 未检测" />
+
+            <TextView
+                android:id="@+id/btnSave"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:background="@drawable/bg_btn_main"
+                android:text="保存"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/accInk"
+                android:letterSpacing="0.08" />
+        </LinearLayout>
+
+        <!-- ② 运行概览 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="运行概览" />
+
+            <GridLayout
+                android:id="@+id/statsGrid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:columnCount="2" />
+        </LinearLayout>
+
+        <!-- ③ 同步操作 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步操作" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnSyncAll"
+                    android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp"
+                    android:gravity="center"
+                    android:background="@drawable/bg_btn_main"
+                    android:text="全站增量同步"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accInk" />
+
+                <TextView
+                    android:id="@+id/btnRefresh"
+                    style="@style/OpBtn" android:text="刷新源站列表" android:layout_marginLeft="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnFullSync"
+                    style="@style/OpBtn" android:text="全站全量同步" />
+
+                <TextView
+                    android:id="@+id/btnRecount"
+                    style="@style/OpBtn" android:text="条数校准" android:layout_marginLeft="8dp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="全量同步仅建议数据异常时使用，耗时较长且会重跑全部页码。"
+                android:textSize="10.5sp"
+                android:textColor="@color/warn"
+                android:lineSpacingMultiplier="1.6" />
+        </LinearLayout>
+
+        <!-- ④ 同步暂停 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步暂停" />
+
+            <TextView
+                android:id="@+id/pauseWarn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:padding="10dp"
+                android:background="@color/warnSoft"
+                android:textSize="10.5sp"
+                android:textColor="@color/warn"
+                android:lineSpacingMultiplier="1.6"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/pauseRows"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="vertical" />
+        </LinearLayout>
+
+        <!-- ⑤ 源站同步状态 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView style="@style/SectionTitle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="源站同步状态" />
+
+                <TextView
+                    android:id="@+id/autoCount"
+                    style="@style/MetaLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="自动同步 --/--" />
+            </LinearLayout>
+
+            <!-- 批量工具条 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <CheckBox
+                    android:id="@+id/chkAll"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="全选"
+                    android:textSize="11sp"
+                    android:textColor="@color/t2" />
+
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                <TextView android:id="@+id/btnAllOn" style="@style/Smbtn" android:text="全部开启" />
+                <TextView android:id="@+id/btnAllOff" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="全部暂停" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/selCount"
+                    style="@style/MetaLabel"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="未选择源站" />
+
+                <TextView android:id="@+id/btnSelOn" style="@style/Smbtn" android:text="开启所选" />
+                <TextView android:id="@+id/btnSelOff" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="暂停所选" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/srcList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- ⑥ 最近同步日志 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="最近同步日志" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/logList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                android:layout_marginTop="6dp" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/MetaLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:layout_marginTop="16dp"
+            android:text="夜场 LATE SHOW · 1.4.0 (2026.10)" />
+    </LinearLayout>
+</ScrollView>
