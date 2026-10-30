@@ -1,5 +1,6 @@
 package com.lateshow.app.adapter;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,7 +35,7 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.VH> {
     @Override
     public void onBindViewHolder(@NonNull VH h, int pos) {
         Models.SyncLog l = items.get(pos);
-        int ctx = h.itemView.getContext();
+        Context ctx = h.itemView.getContext();
 
         int dot, color;
         String label;

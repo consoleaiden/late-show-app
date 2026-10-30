@@ -77,7 +77,7 @@ public class FavFragment extends Fragment {
     }
 
     private void openDetail(CardItem item) {
-        PlayActivity.start(this, item);
+        if (getContext() != null) PlayActivity.start(getContext(), item);
     }
 
     @Override

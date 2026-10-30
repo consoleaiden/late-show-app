@@ -107,7 +107,7 @@ public class HomeFragment extends Fragment {
     }
 
     private void openDetail(CardItem item) {
-        PlayActivity.start(this, item);
+        if (getContext() != null) PlayActivity.start(getContext(), item);
     }
 
     /** 源站列表：菜单数据 + 元信息 */
@@ -151,7 +151,6 @@ public class HomeFragment extends Fragment {
         pw.setBackgroundDrawable(getResources().getDrawable(R.drawable.bg_card_lg));
         pw.setOutsideTouchable(true);
         pw.showAsDropDown(btnSource, 0, (int) (6 * getResources().getDisplayMetrics().density));
-        pw.setTag(box);
         box.setTag(pw);
     }
 

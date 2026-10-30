@@ -1,5 +1,6 @@
 package com.lateshow.app.adapter;
 
+import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.view.LayoutInflater;
 import android.view.View;

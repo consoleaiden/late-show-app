@@ -1,5 +1,6 @@
 package com.lateshow.app.adapter;
 
+import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -90,7 +91,7 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
         });
 
         // 状态判定（API 文档 §5.1）：running > paused > syncing(断点) > 已完成
-        int ctx = h.itemView.getContext();
+        Context ctx = h.itemView.getContext();
         String pill;
         int dotRes, colorRes;
         if (s.running) {
