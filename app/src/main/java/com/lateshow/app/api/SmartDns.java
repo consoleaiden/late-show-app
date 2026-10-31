@@ -114,10 +114,15 @@ public final class SmartDns implements okhttp3.Dns {
     }
 
     private static InetAddress parseLiteral(String host) {
+        String h = host.trim();
+        // 仅对真正的 IP 字面量走直连，普通域名交给下面的系统 DNS / DoH 流程
+        boolean ipv4 = h.matches("^\\d{1,3}(\\.\\d{1,3}){3}$");
+        boolean ipv6 = h.indexOf(':') >= 0 && h.matches("^[0-9a-fA-F:.]+$");
+        if (!ipv4 && !ipv6) return null;
         try {
-            return InetAddress.getByName(host.trim());
+            return InetAddress.getByName(h);
         } catch (Exception e) {
-            return null; // 非字面量 IP 交给后续流程
+            return null;
         }
     }
 

@@ -48,6 +48,22 @@ public final class UpdateChecker {
             .readTimeout(30, TimeUnit.SECONDS)
             .build();
 
+    /** 下载用：超时更长，跟随重定向（GitHub 资产会 302 到 release-assets 域名） */
+    private static final OkHttpClient DOWNLOAD = new OkHttpClient.Builder()
+            .dns(SmartDns.INSTANCE)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build();
+
+    /** 备用加速线路（直连 GitHub 资产域名在部分移动网络被拦截时使用） */
+    private static final String[] MIRRORS = {
+            "https://ghproxy.net/",
+            "https://gh-proxy.com/",
+            "https://ghfast.top/"
+    };
+
     private UpdateChecker() { }
 
     /** 当前版本号（构建时注入） */
@@ -156,7 +172,7 @@ public final class UpdateChecker {
         return out;
     }
 
-    /** 下载 APK 并唤起系统安装器（带进度条） */
+    /** 下载 APK 并唤起系统安装器（带进度条；直连失败自动切换加速线路） */
     public static void downloadAndInstall(final Activity act, final Info info) {
         if (info == null || TextUtils.isEmpty(info.apkUrl)) {
             Toast.makeText(act, "该版本没有可下载的 APK", Toast.LENGTH_SHORT).show();
@@ -172,38 +188,96 @@ public final class UpdateChecker {
 
         new Thread(() -> {
             final File out = new File(act.getCacheDir(), "late-show-update.apk");
-            try (Response r = CLIENT.newCall(new Request.Builder().url(info.apkUrl)
-                    .header("User-Agent", "LateShow-App").build()).execute()) {
-                if (!r.isSuccessful() || r.body() == null) throw new IOException("HTTP " + r.code());
-                long total = r.body().contentLength();
-                try (InputStream in = r.body().byteStream();
-                     FileOutputStream fo = new FileOutputStream(out)) {
-                    byte[] buf = new byte[16 * 1024];
-                    long got = 0;
-                    int n;
-                    while ((n = in.read(buf)) > 0) {
-                        fo.write(buf, 0, n);
-                        got += n;
-                        if (total > 0) {
-                            final int p = (int) (got * 100 / total);
-                            MAIN.post(() -> {
-                                pd.setProgress(p);
-                                pd.setMessage("已下载 " + p + "%");
-                            });
-                        }
+            String[] urls = buildUrlCandidates(info.apkUrl);
+            String lastErr = "未知错误";
+            for (int i = 0; i < urls.length; i++) {
+                final int idx = i;
+                MAIN.post(() -> pd.setMessage(idx == 0 ? "直连 GitHub…"
+                        : "切换线路 " + idx + "/" + (urls.length - 1) + "…"));
+                try {
+                    if (fetch(urls[i], out, pd, info.size)) {
+                        MAIN.post(() -> {
+                            pd.dismiss();
+                            install(act, out);
+                        });
+                        return;
+                    }
+                    lastErr = "文件校验失败（可能下载到错误页面）";
+                } catch (Exception e) {
+                    String m = e.getMessage();
+                    lastErr = (m == null || m.trim().isEmpty()) ? e.getClass().getSimpleName() : m;
+                }
+            }
+            final String err = lastErr;
+            MAIN.post(() -> {
+                pd.dismiss();
+                showFailDialog(act, info, err);
+            });
+        }).start();
+    }
+
+    private static String[] buildUrlCandidates(String apkUrl) {
+        String[] out = new String[1 + MIRRORS.length];
+        out[0] = apkUrl;
+        for (int i = 0; i < MIRRORS.length; i++) out[i + 1] = MIRRORS[i] + apkUrl;
+        return out;
+    }
+
+    /** 下载单个线路；成功返回 true（大小与 APK 头都对得上） */
+    private static boolean fetch(String url, File out, ProgressDialog pd, long expectSize) throws IOException {
+        Request req = new Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android) LateShow-App")
+                .header("Accept", "application/octet-stream,application/vnd.android.package-archive,*/*")
+                .build();
+        try (Response r = DOWNLOAD.newCall(req).execute()) {
+            if (!r.isSuccessful() || r.body() == null) {
+                throw new IOException("HTTP " + r.code());
+            }
+            long total = r.body().contentLength();
+            if (total <= 0) total = expectSize;
+            long got = 0;
+            byte[] head = new byte[2];
+            int headLen = 0;
+            try (InputStream in = r.body().byteStream();
+                 FileOutputStream fo = new FileOutputStream(out)) {
+                byte[] buf = new byte[32 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) {
+                    if (headLen < 2) {
+                        for (int k = 0; k < n && headLen < 2; k++) head[headLen++] = buf[k];
+                    }
+                    fo.write(buf, 0, n);
+                    got += n;
+                    if (total > 0) {
+                        final int p = (int) Math.min(100, got * 100 / total);
+                        MAIN.post(() -> {
+                            pd.setProgress(p);
+                            pd.setMessage("已下载 " + p + "%");
+                        });
                     }
                 }
-                MAIN.post(() -> {
-                    pd.dismiss();
-                    install(act, out);
-                });
-            } catch (Exception e) {
-                MAIN.post(() -> {
-                    pd.dismiss();
-                    Toast.makeText(act, "下载失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
-                });
             }
-        }).start();
+            // 校验：APK 是 zip，头两字节必须是 PK；大小需与 Release 记录一致
+            if (headLen < 2 || head[0] != 'P' || head[1] != 'K') return false;
+            if (expectSize > 0 && got != expectSize) return false;
+            return got > 0;
+        }
+    }
+
+    private static void showFailDialog(final Activity act, final Info info, String err) {
+        if (act == null || act.isFinishing()) return;
+        new AlertDialog.Builder(act)
+                .setTitle("下载失败")
+                .setMessage(err + "\n\n可以改用浏览器下载安装包。")
+                .setPositiveButton("浏览器下载", (d, w) -> {
+                    try {
+                        act.startActivity(new Intent(Intent.ACTION_VIEW,
+                                Uri.parse(TextUtils.isEmpty(info.pageUrl) ? RELEASES_PAGE : info.pageUrl)));
+                    } catch (Exception ignored) { }
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private static void install(final Activity act, File apk) {
