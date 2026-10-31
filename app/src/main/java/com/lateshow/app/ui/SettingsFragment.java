@@ -38,7 +38,7 @@ public class SettingsFragment extends Fragment {
 
     private EditText inputBaseUrl;
     private TextView srcStatus, btnSave, pauseWarn, autoCount, selCount;
-    private GridLayout statsGrid;
+    private LinearLayout statsGrid;
     private LinearLayout pauseRows;
     private CheckBox chkAll;
     private RecyclerView srcList, logList;
