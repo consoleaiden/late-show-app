@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:layout_marginBottom="15dp">
 
-    <!-- 封面：固定 16:9 -->
+    <!-- 封面：竖版海报（宽9:高16） -->
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/cover"
         android:layout_width="0dp"
@@ -13,7 +13,7 @@
         android:scaleType="centerCrop"
         android:background="@color/ink700"
         android:contentDescription="封面"
-        app:layout_constraintDimensionRatio="16:9"
+        app:layout_constraintDimensionRatio="9:16"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />

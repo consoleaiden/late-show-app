@@ -3,15 +3,25 @@ package com.lateshow.app.ui;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.Player;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -23,11 +33,12 @@ import com.lateshow.app.api.VodSyncApi;
 import com.lateshow.app.model.CardItem;
 import com.lateshow.app.model.Models;
 import com.lateshow.app.store.PrefStore;
+import com.lateshow.app.util.GestureSeek;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** 播放详情页：大封面 + 简介 + 收藏 + 线路/选集网格 */
+/** 播放详情页：竖版海报 + 简介 + 收藏 + 线路/选集网格 + 内嵌播放器（点全屏进横屏） */
 public class PlayActivity extends AppCompatActivity {
 
     private String slug, sourceName, title, pic, remark;
@@ -38,6 +49,25 @@ public class PlayActivity extends AppCompatActivity {
     private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount, badge, breadcrumb;
     private ImageButton btnFav;
     private RecyclerView lines, epGrid;
+
+    // 内嵌播放器
+    private ExoPlayer player;
+    private PlayerView playerView;
+    private TextView seekOverlay;
+    private View playerContainer, posterBox;
+    private String curUrl;
+    private final Handler saveHandler = new Handler(Looper.getMainLooper());
+
+    /** 全屏播放返回后带回进度，无缝续播内嵌播放 */
+    private final ActivityResultLauncher<Intent> fsLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                long pos = result.getData() != null ? result.getData().getLongExtra("pos", 0) : 0;
+                if (player != null) {
+                    if (pos > 0) player.seekTo(pos);
+                    player.play();
+                }
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,6 +95,10 @@ public class PlayActivity extends AppCompatActivity {
         breadcrumb = findViewById(R.id.breadcrumb);
         lines = findViewById(R.id.lines);
         epGrid = findViewById(R.id.epGrid);
+        playerView = findViewById(R.id.playerView);
+        seekOverlay = findViewById(R.id.seekOverlay);
+        playerContainer = findViewById(R.id.playerContainer);
+        posterBox = findViewById(R.id.posterBox);
 
         tvTitle.setText(title);
         breadcrumb.setText("DETAIL / " + (sourceName != null ? sourceName : slug));
@@ -75,7 +109,15 @@ public class PlayActivity extends AppCompatActivity {
 
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
         findViewById(R.id.btnPlayCover).setOnClickListener(v -> playCurrent(0));
-        btnPlay.setOnClickListener(v -> playCurrent(0));
+        btnPlay.setOnClickListener(v -> {
+            // 已在内嵌播放中：按钮变为 播放/暂停 切换
+            if (player != null) {
+                if (player.isPlaying()) player.pause();
+                else player.play();
+            } else {
+                playCurrent(0);
+            }
+        });
         btnToggleDesc.setOnClickListener(v -> {
             boolean expanded = tvDesc.getMaxLines() == Integer.MAX_VALUE;
             tvDesc.setMaxLines(expanded ? 3 : Integer.MAX_VALUE);
@@ -241,8 +283,34 @@ public class PlayActivity extends AppCompatActivity {
 
     private void updatePlayLabel() {
         PrefStore.HistItem h = PrefStore.get().getHist(slug, vodId);
-        String prefix = (h != null && h.playedSec > 0 && h.epIndex == curEp) ? "继续播放 · " : "播放 · ";
+        String prefix;
+        if (player != null) {
+            prefix = player.isPlaying() ? "暂停 · " : "继续播放 · ";
+        } else {
+            prefix = (h != null && h.playedSec > 0 && h.epIndex == curEp) ? "继续播放 · " : "播放 · ";
+        }
         btnPlay.setText(prefix + epName(curEp));
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // 离开页面（含进全屏）时保存进度并暂停内嵌播放
+        if (player != null) {
+            long d = player.getDuration() > 0 ? player.getDuration() / 1000 : 0;
+            saveProgress(player.getCurrentPosition() / 1000, d);
+            player.pause();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        saveHandler.removeCallbacksAndMessages(null);
+        if (player != null) {
+            player.release();
+            player = null;
+        }
     }
 
     private void playCurrent(long seekMs) {
@@ -258,35 +326,123 @@ public class PlayActivity extends AppCompatActivity {
         long startMs = seekMs;
         if (startMs == 0 && h != null && h.epIndex == curEp) startMs = h.playedSec * 1000;
 
-        // 先写一条历史占位（播放器内会更新进度）
+        // 先写一条历史占位（播放器内会持续更新进度）
+        saveProgress(startMs / 1000, h != null ? h.totalSec : 0);
+        startInline(e.url, startMs);
+    }
+
+    // ==================== 内嵌播放 ====================
+
+    /** 在详情页内嵌窗口播放（横版 16:9），不进入全屏 */
+    private void startInline(String url, long startMs) {
+        curUrl = url;
+        posterBox.setVisibility(View.GONE);
+        playerContainer.setVisibility(View.VISIBLE);
+        if (player == null) {
+            DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(10000)
+                    .setReadTimeoutMs(30000);
+            player = new ExoPlayer.Builder(this)
+                    .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
+                    .build();
+            playerView.setPlayer(player);
+            playerView.setControllerShowTimeoutMs(2500);
+            // 点全屏按钮才进入横屏全屏
+            playerView.setFullscreenButtonClickListener(v -> goFullscreen());
+            player.addListener(new Player.Listener() {
+                @Override public void onPlaybackStateChanged(int state) {
+                    if (state == Player.STATE_READY) {
+                        long d = player.getDuration() / 1000;
+                        if (d > 0) saveProgress(player.getCurrentPosition() / 1000, d);
+                    } else if (state == Player.STATE_ENDED) {
+                        long d = player.getDuration() / 1000;
+                        saveProgress(Math.max(0, d), d);
+                    }
+                }
+                @Override public void onIsPlayingChanged(boolean p) {
+                    updatePlayLabel();
+                }
+            });
+            attachSeekGesture();
+            saveHandler.postDelayed(saveTick, 5000);
+        }
+        player.setMediaItem(MediaItem.fromUri(url), Math.max(0, startMs));
+        player.prepare();
+        player.play();
+    }
+
+    /** 横向滑动手势快进/快退（内嵌窗口） */
+    private void attachSeekGesture() {
+        GestureSeek.attach(playerView, 150_000L, new GestureSeek.Callback() {
+            @Override public long durationMs() { return player != null ? player.getDuration() : 0; }
+            @Override public long positionMs() { return player != null ? player.getCurrentPosition() : 0; }
+            @Override public void onSeekStart() {
+                if (playerView.isControllerFullyVisible()) playerView.hideController();
+                seekOverlay.setVisibility(View.VISIBLE);
+            }
+            @Override public void onSeekPreview(long targetMs, String previewText) {
+                seekOverlay.setText(previewText);
+            }
+            @Override public void onSeekEnd(long targetMs) {
+                seekOverlay.setVisibility(View.GONE);
+                if (player != null) player.seekTo(targetMs);
+            }
+            @Override public void onTap() {
+                if (playerView.isControllerFullyVisible()) playerView.hideController();
+                else playerView.showController();
+            }
+        });
+    }
+
+    /** 点全屏按钮：暂停内嵌播放并携带当前进度进入横屏全屏 */
+    private void goFullscreen() {
+        if (player == null || curUrl == null) return;
+        long pos = player.getCurrentPosition();
+        player.pause();
+        Intent it = new Intent(this, PlayerActivity.class);
+        it.putExtra("url", curUrl);
+        it.putExtra("title", title + " · " + epName(curEp));
+        it.putExtra("slug", slug);
+        it.putExtra("vodId", vodId);
+        it.putExtra("epIndex", curEp);
+        it.putExtra("lineIndex", curLine);
+        it.putExtra("epName", epName(curEp));
+        it.putExtra("pic", pic != null ? pic : (detail != null ? detail.vodPic : null));
+        it.putExtra("remarks", remark);
+        it.putExtra("sourceName", sourceName);
+        it.putExtra("startMs", pos);
+        fsLauncher.launch(it);
+    }
+
+    /** 每 5 秒落一次播放进度（收藏/历史页可实时展示） */
+    private final Runnable saveTick = new Runnable() {
+        @Override public void run() {
+            if (player != null && player.isPlaying()) {
+                long d = player.getDuration() > 0 ? player.getDuration() / 1000 : 0;
+                saveProgress(player.getCurrentPosition() / 1000, d);
+            }
+            saveHandler.postDelayed(this, 5000);
+        }
+    };
+
+    private void saveProgress(long playedSec, long totalSec) {
+        List<Models.Episode> eps = currentEpisodes();
+        Models.Episode e = eps.isEmpty() ? null : eps.get(Math.min(curEp, eps.size() - 1));
         PrefStore.HistItem item = new PrefStore.HistItem();
         item.slug = slug;
         item.sourceName = sourceName;
         item.vodId = vodId;
         item.title = title;
-        item.pic = pic != null ? pic : detail.vodPic;
+        item.pic = pic != null ? pic : (detail != null ? detail.vodPic : null);
         item.remarks = remark;
         item.lineIndex = curLine;
         item.epIndex = curEp;
-        item.epName = e.name;
-        item.playedSec = startMs / 1000;
-        item.totalSec = h != null ? h.totalSec : 0;
+        item.epName = e != null ? e.name : null;
+        item.playedSec = playedSec;
+        item.totalSec = totalSec;
         item.lastPlayedAt = System.currentTimeMillis();
         PrefStore.get().saveHist(item);
-
-        Intent it = new Intent(this, PlayerActivity.class);
-        it.putExtra("url", e.url);
-        it.putExtra("title", title + " · " + e.name);
-        it.putExtra("slug", slug);
-        it.putExtra("vodId", vodId);
-        it.putExtra("epIndex", curEp);
-        it.putExtra("lineIndex", curLine);
-        it.putExtra("epName", e.name);
-        it.putExtra("pic", item.pic);
-        it.putExtra("remarks", remark);
-        it.putExtra("sourceName", sourceName);
-        it.putExtra("startMs", startMs);
-        startActivity(it);
     }
 
     @Override

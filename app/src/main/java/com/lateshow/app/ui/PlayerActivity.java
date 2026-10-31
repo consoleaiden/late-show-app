@@ -2,6 +2,8 @@ package com.lateshow.app.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
+import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.media3.common.MediaItem;
@@ -12,8 +14,9 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
 import com.lateshow.app.R;
 import com.lateshow.app.store.PrefStore;
+import com.lateshow.app.util.GestureSeek;
 
-/** ExoPlayer 全屏播放（HLS 直链 + 断点续播） */
+/** ExoPlayer 横屏全屏播放（HLS 直链 + 断点续播 + 滑动快进快退），退出时把进度带回内嵌播放器 */
 public class PlayerActivity extends AppCompatActivity {
 
     private ExoPlayer player;
@@ -59,6 +62,28 @@ public class PlayerActivity extends AppCompatActivity {
                 .build();
         pv.setPlayer(player);
 
+        // 横向滑动手势快进/快退（横屏全屏滑动全程更快）
+        final TextView seekOverlay = findViewById(R.id.seekOverlay);
+        GestureSeek.attach(pv, 240_000L, new GestureSeek.Callback() {
+            @Override public long durationMs() { return player != null ? player.getDuration() : 0; }
+            @Override public long positionMs() { return player != null ? player.getCurrentPosition() : 0; }
+            @Override public void onSeekStart() {
+                if (pv.isControllerFullyVisible()) pv.hideController();
+                seekOverlay.setVisibility(View.VISIBLE);
+            }
+            @Override public void onSeekPreview(long targetMs, String previewText) {
+                seekOverlay.setText(previewText);
+            }
+            @Override public void onSeekEnd(long targetMs) {
+                seekOverlay.setVisibility(View.GONE);
+                if (player != null) player.seekTo(targetMs);
+            }
+            @Override public void onTap() {
+                if (pv.isControllerFullyVisible()) pv.hideController();
+                else pv.showController();
+            }
+        });
+
         MediaItem mi = MediaItem.fromUri(url);
         player.setMediaItem(mi, Math.max(0, startMs));
         player.prepare();
@@ -102,8 +127,13 @@ public class PlayerActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         if (player != null) {
+            long pos = player.getCurrentPosition();
             long dur = player.getDuration() > 0 ? player.getDuration() / 1000 : 0;
-            saveProgress(player.getCurrentPosition() / 1000, dur);
+            saveProgress(pos / 1000, dur);
+            // 把进度带回详情页内嵌播放器
+            Intent d = new Intent();
+            d.putExtra("pos", pos);
+            setResult(RESULT_OK, d);
             player.pause();
         }
     }
