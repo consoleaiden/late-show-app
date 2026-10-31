@@ -21,7 +21,6 @@
             android:layout_width="38dp"
             android:layout_height="38dp"
             android:background="@drawable/bg_ring_off"
-            android:foreground="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="切换源站">
 
             <androidx.appcompat.widget.AppCompatImageView

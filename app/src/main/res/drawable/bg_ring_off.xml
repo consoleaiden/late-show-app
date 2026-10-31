@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 源站按钮：后端不通 → 灰色圆环 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-    <solid android:color="@color/ink800" />
-    <stroke android:width="1.5dp" android:color="@color/t3" />
-</shape>
+<!-- 源站按钮：后端不通 → 灰色圆环（圆形涟漪反馈，避免方形灰底闪一下） -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#26727B88">
+    <item android:id="@android:id/mask">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/ink800" />
+            <stroke android:width="1.5dp" android:color="@color/t3" />
+        </shape>
+    </item>
+</ripple>
