@@ -53,14 +53,16 @@ public final class UpdateChecker {
             .dns(SmartDns.INSTANCE)
             .followRedirects(true)
             .followSslRedirects(true)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(150, TimeUnit.SECONDS)
             .build();
 
-    /** 备用加速线路（直连 GitHub 资产域名在部分移动网络被拦截时使用） */
+    /** 备用加速线路（按实测可用率排序；直连 GitHub 资产域名在部分移动网络被拦截时使用） */
     private static final String[] MIRRORS = {
-            "https://ghproxy.net/",
             "https://gh-proxy.com/",
+            "https://ghps.cc/",
+            "https://ghproxy.net/",
             "https://ghfast.top/"
     };
 
