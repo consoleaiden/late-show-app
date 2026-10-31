@@ -84,6 +84,8 @@ public final class Models {
         public String slug;
         public String name;
         public String status;
+        @SerializedName("api_url") public String apiUrl;
+        public boolean enabled;
         @SerializedName("total_videos") public int totalVideos;
         public boolean running;
         @SerializedName("running_mode") public String runningMode;

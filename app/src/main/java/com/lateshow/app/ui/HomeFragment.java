@@ -39,7 +39,7 @@ public class HomeFragment extends Fragment {
     private ChipAdapter chipAdapter;
     private VideoAdapter videoAdapter;
 
-    private final List<Models.Source> sources = new ArrayList<>();
+    private final List<Models.SyncSource> sources = new ArrayList<>();
     private String curSlug = "";      // 空 = 全部源站
     private String curName = "全部源站";
     private String curCategory = null; // null = 全部
@@ -112,52 +112,85 @@ public class HomeFragment extends Fragment {
         if (getContext() != null) PlayActivity.start(getContext(), item);
     }
 
-    /** 源站列表：菜单数据 + 元信息 */
+    /** 源站列表：菜单数据 + 元信息（接口：GET /api/v1/sources） */
     private void refreshSources() {
-        VodSyncApi.get().get("/source", map("only_ready", "true"), Models.SourceListResp.class,
-            new VodSyncApi.ApiCb<Models.SourceListResp>() {
-                @Override public void onOk(Models.SourceListResp r) {
+        VodSyncApi.get().get("/api/v1/sources", null, Models.SyncSourcesResp.class,
+            new VodSyncApi.ApiCb<Models.SyncSourcesResp>() {
+                @Override public void onOk(Models.SyncSourcesResp r) {
                     if (!isAdded()) return;
                     sources.clear();
-                    if (r.list != null) sources.addAll(r.list);
-                    com.lateshow.app.util.SourceCache.putAll(sources);
+                    if (r.list != null) {
+                        for (Models.SyncSource s : r.list) {
+                            if (s.enabled) sources.add(s);
+                        }
+                    }
+                    com.lateshow.app.util.SourceCache.putSync(sources);
                     long total = 0;
-                    for (Models.Source s : sources) total += s.videoCount;
-                    metaCount.setText("已收录 " + TimeUtil.compact((int) total) + " 部");
+                    for (Models.SyncSource s : sources) total += s.totalVideos;
+                    metaCount.setText("已收录 " + TimeUtil.compact((int) total) + " 部 · " + sources.size() + " 源");
                     metaSync.setText("● " + TimeUtil.nowHm() + " 同步");
+                    if (pendingMenu) {
+                        pendingMenu = false;
+                        showSourceMenu();
+                    }
                 }
                 @Override public void onErr(String m) {
                     if (!isAdded()) return;
                     metaCount.setText("源站加载失败");
+                    if (pendingMenu) {
+                        pendingMenu = false;
+                        showSourceMenu();
+                    }
                 }
             });
     }
 
     private void showSourceMenu() {
         if (!isAdded() || getView() == null) return;
-        View content = LayoutInflater.from(getContext()).inflate(R.layout.item_source_menu, null, false);
-        // 用 LinearLayout 容器装多行
+        if (sources.isEmpty()) {
+            // 源站列表尚未就绪：先拉一次，回来后再弹菜单
+            pendingMenu = true;
+            refreshSources();
+            return;
+        }
+
         LinearLayout box = new LinearLayout(getContext());
         box.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (6 * getResources().getDisplayMetrics().density);
+        int pad = dp(6);
         box.setPadding(0, pad, 0, pad);
 
         // 「全部源站」固定项
-        addMenuRow(box, "全部源站", "", curSlug.isEmpty());
-        for (Models.Source s : sources) {
-            addMenuRow(box, s.name, TimeUtil.compact(s.videoCount), s.slug.equals(curSlug));
+        addMenuRow(box, "全部源站", "", curSlug.isEmpty(), "");
+        int rows = 1;
+
+        // 按影片数降序（数据多的源站排前面）
+        List<Models.SyncSource> sorted = new ArrayList<>(sources);
+        java.util.Collections.sort(sorted, (a, b) -> Integer.compare(b.totalVideos, a.totalVideos));
+        for (Models.SyncSource s : sorted) {
+            addMenuRow(box, s.name, TimeUtil.compact(s.totalVideos), s.slug != null && s.slug.equals(curSlug), s.slug);
+            rows++;
         }
 
-        PopupWindow pw = new PopupWindow(box,
-                (int) (280 * getResources().getDisplayMetrics().density),
+        androidx.core.widget.NestedScrollView sv = new androidx.core.widget.NestedScrollView(getContext());
+        sv.setVerticalScrollBarEnabled(true);
+        sv.addView(box, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        int want = dp(12) + dp(38) * rows;
+        int maxH = (int) (getResources().getDisplayMetrics().heightPixels * 0.55f);
+        sv.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(want, maxH)));
+
+        PopupWindow pw = new PopupWindow(sv, dp(250),
                 ViewGroup.LayoutParams.WRAP_CONTENT, true);
         pw.setBackgroundDrawable(getResources().getDrawable(R.drawable.bg_card_lg));
         pw.setOutsideTouchable(true);
-        pw.showAsDropDown(btnSource, 0, (int) (6 * getResources().getDisplayMetrics().density));
+        pw.setElevation(dp(8));
+        pw.showAsDropDown(btnSource, 0, dp(6));
         box.setTag(pw);
     }
 
-    private void addMenuRow(LinearLayout box, String name, String count, boolean sel) {
+    private boolean pendingMenu = false;
+
+    private void addMenuRow(LinearLayout box, String name, String count, boolean sel, String slug) {
         View row = LayoutInflater.from(getContext()).inflate(R.layout.item_source_menu, box, false);
         ((TextView) row.findViewById(R.id.name)).setText(name);
         TextView cnt = row.findViewById(R.id.count);
@@ -166,23 +199,18 @@ public class HomeFragment extends Fragment {
         row.setOnClickListener(v -> {
             PopupWindow pw = (PopupWindow) box.getTag();
             if (pw != null) pw.dismiss();
-            if ("全部源站".equals(name)) {
-                curSlug = "";
-                curName = "全部源站";
-            } else {
-                for (Models.Source s : sources) {
-                    if (s.name.equals(name)) {
-                        curSlug = s.slug;
-                        curName = s.name;
-                    }
-                }
-            }
+            curSlug = slug != null ? slug : "";
+            curName = name;
             PrefStore.get().setCurrentSource(curSlug, curName);
             btnSource.setText(curName);
             refreshCategories();
             reload();
         });
         box.addView(row);
+    }
+
+    private int dp(float v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
     private void refreshCategories() {

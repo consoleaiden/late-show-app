@@ -5,7 +5,7 @@ import com.lateshow.app.model.Models;
 import java.util.HashMap;
 import java.util.Map;
 
-/** slug → 源站展示名 内存缓存（由首页 /source 响应填充） */
+/** slug → 源站展示名 内存缓存（由首页 /api/v1/sources 响应填充） */
 public final class SourceCache {
     private static final Map<String, String> MAP = new HashMap<>();
 
@@ -15,6 +15,16 @@ public final class SourceCache {
         if (sources == null) return;
         synchronized (MAP) {
             for (Models.Source s : sources) MAP.put(s.slug, s.name);
+        }
+    }
+
+    /** 由 /api/v1/sources 的 SyncSource 列表填充 */
+    public static void putSync(java.util.List<Models.SyncSource> sources) {
+        if (sources == null) return;
+        synchronized (MAP) {
+            for (Models.SyncSource s : sources) {
+                if (s.slug != null && s.name != null) MAP.put(s.slug, s.name);
+            }
         }
     }
 

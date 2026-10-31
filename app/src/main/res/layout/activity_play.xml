@@ -16,19 +16,14 @@
         android:paddingTop="10dp"
         android:paddingBottom="6dp">
 
-        <TextView
+        <ImageButton
             android:id="@+id/btnBack"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:gravity="center_vertical"
-            android:paddingLeft="10dp"
-            android:paddingRight="12dp"
-            android:background="@drawable/bg_capsule"
-            android:drawableStart="@drawable/ic_back"
-            android:drawablePadding="2dp"
-            android:text="返回"
-            android:textSize="12sp"
-            android:textColor="@color/t1" />
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="6dp"
+            android:background="@null"
+            android:src="@drawable/ic_back"
+            android:contentDescription="返回" />
 
         <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
