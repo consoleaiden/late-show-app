@@ -31,6 +31,8 @@ public final class VodSyncApi {
 
     private static final Gson GSON = new Gson();
     private static final MediaType FORM = MediaType.parse("application/x-www-form-urlencoded");
+    /** 所有回调统一切回主线程（UI 只能在主线程更新） */
+    private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
     private static volatile VodSyncApi sInstance;
     private final OkHttpClient client;
 
@@ -70,7 +72,8 @@ public final class VodSyncApi {
         Request req = new Request.Builder().url(b.build()).get().build();
         client.newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
-                cb.onErr("网络异常：" + e.getMessage());
+                String msg = "网络异常：" + e.getMessage();
+                MAIN.post(() -> cb.onErr(msg));
             }
             @Override public void onResponse(Call call, Response resp) throws IOException {
                 deliver(resp, clazz, cb);
@@ -95,7 +98,8 @@ public final class VodSyncApi {
                 .post(RequestBody.create("", FORM)).build();
         client.newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
-                cb.onErr("网络异常：" + e.getMessage());
+                String msg = "网络异常：" + e.getMessage();
+                MAIN.post(() -> cb.onErr(msg));
             }
             @Override public void onResponse(Call call, Response resp) throws IOException {
                 deliver(resp, clazz, cb);
@@ -107,17 +111,19 @@ public final class VodSyncApi {
         try (Response r = resp) {
             String body = r.body() != null ? r.body().string() : "";
             if (!r.isSuccessful()) {
-                cb.onErr(extractError(r.code(), body));
+                String err = extractError(r.code(), body);
+                MAIN.post(() -> cb.onErr(err));
                 return;
             }
             T out = GSON.fromJson(body, clazz);
             if (out == null) {
-                cb.onErr("响应为空");
+                MAIN.post(() -> cb.onErr("响应为空"));
                 return;
             }
-            cb.onOk(out);
+            MAIN.post(() -> cb.onOk(out));
         } catch (Exception e) {
-            cb.onErr("解析失败：" + e.getMessage());
+            String msg = "解析失败：" + e.getMessage();
+            MAIN.post(() -> cb.onErr(msg));
         }
     }
 
