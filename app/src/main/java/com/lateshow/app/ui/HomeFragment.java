@@ -170,6 +170,11 @@ public class HomeFragment extends Fragment {
                 @Override public void onErr(String m) {
                     if (!isAdded()) return;
                     setSourceHealth(false);
+                    // 401：服务端开启了访问控制，引导填写 API Token
+                    if (com.lateshow.app.util.AuthGate.handleApiError(getActivity(), m, HomeFragment.this::reload)) {
+                        metaCount.setText("需要 API Token · 请在设置页填写");
+                        return;
+                    }
                     // 不再自动弹菜单（避免 失败→弹菜单→再请求 死循环），显示错误详情便于排查
                     metaCount.setText("源站加载失败：" + m);
                     if (pendingMenu) {
@@ -349,6 +354,11 @@ public class HomeFragment extends Fragment {
                     if (!isAdded()) return;
                     loading = false;
                     if (reqPage == 1 && videoAdapter.getItemCount() == 0) {
+                        if (com.lateshow.app.util.AuthGate.handleApiError(getActivity(), m, HomeFragment.this::reload)) {
+                            emptyView.setVisibility(View.VISIBLE);
+                            emptyView.setText("需要 API Token\n请到「设置」填写后点击重试");
+                            return;
+                        }
                         emptyView.setVisibility(View.VISIBLE);
                         emptyView.setText("加载失败：" + m + "\n请在设置页检查播放源地址");
                     }

@@ -40,8 +40,8 @@ import java.util.Map;
 /** 设置页：播放源 + 同步控制台 + 主题 */
 public class SettingsFragment extends Fragment {
 
-    private EditText inputBaseUrl;
-    private TextView srcStatus, btnSave, pauseWarn, autoCount, selCount, tvVersion, btnCheckUpdate;
+    private EditText inputBaseUrl, inputToken;
+    private TextView srcStatus, btnSave, btnTest, pauseWarn, autoCount, selCount, tvVersion, btnCheckUpdate;
     private LinearLayout statsGrid;
     private LinearLayout pauseRows;
     private CheckBox chkAll;
@@ -70,8 +70,10 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
         inputBaseUrl = v.findViewById(R.id.inputBaseUrl);
+        inputToken = v.findViewById(R.id.inputToken);
         srcStatus = v.findViewById(R.id.srcStatus);
         btnSave = v.findViewById(R.id.btnSave);
+        btnTest = v.findViewById(R.id.btnTest);
         statsGrid = v.findViewById(R.id.statsGrid);
         pauseWarn = v.findViewById(R.id.pauseWarn);
         pauseRows = v.findViewById(R.id.pauseRows);
@@ -82,6 +84,7 @@ public class SettingsFragment extends Fragment {
         logList = v.findViewById(R.id.logList);
 
         inputBaseUrl.setText(PrefStore.get().baseUrl());
+        inputToken.setText(PrefStore.get().apiToken());
 
         // 版本与更新
         tvVersion = v.findViewById(R.id.tvVersion);
@@ -94,40 +97,9 @@ public class SettingsFragment extends Fragment {
             } catch (Exception ignored) { }
         });
 
-        // 播放源保存
-        btnSave.setOnClickListener(vv -> {
-            String url = inputBaseUrl.getText().toString().trim();
-            if (url.isEmpty()) {
-                toast("请输入后端地址");
-                return;
-            }
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                toast("地址需以 http:// 或 https:// 开头");
-                return;
-            }
-            PrefStore.get().setBaseUrl(url);
-            btnSave.setText("检测中…");
-            VodSyncApi.get().healthz(new VodSyncApi.ApiCb<Long>() {
-                @Override public void onOk(Long ms) {
-                    if (!isAdded()) return;
-                    PrefStore.get().setBaseUrl(url);
-                    srcStatus.setText("● 当前生效 · 延迟 " + ms + "ms");
-                    srcStatus.setTextColor(getColor(R.color.ok));
-                    btnSave.setText("已保存");
-                    btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_ok));
-                    toast("播放源已保存");
-                    postResetSave();
-                    refreshConsole(true);
-                }
-                @Override public void onErr(String m) {
-                    if (!isAdded()) return;
-                    srcStatus.setText("● 连接失败 · " + m);
-                    srcStatus.setTextColor(getColor(R.color.bad));
-                    btnSave.setText("保存");
-                    toast("地址不可用：" + m);
-                }
-            });
-        });
+        // 播放源 + API Token：保存 / 测试连接（先探 auth/state，再用受保护接口验证 Token）
+        btnSave.setOnClickListener(vv -> verifySource(true));
+        btnTest.setOnClickListener(vv -> verifySource(false));
 
         // 同步操作
         v.findViewById(R.id.btnSyncAll).setOnClickListener(vv -> post("/api/v1/sync-all?mode=auto", "全站同步已受理"));
@@ -172,6 +144,32 @@ public class SettingsFragment extends Fragment {
         });
 
         refreshConsole(true);
+        refreshAuthBadge();
+    }
+
+    /** 顶部状态条：显示服务端是否开启鉴权、Token 是否已配置 */
+    private void refreshAuthBadge() {
+        VodSyncApi.get().authState(new VodSyncApi.ApiCb<Models.AuthState>() {
+            @Override public void onOk(Models.AuthState s) {
+                if (!isAdded() || s == null) return;
+                if (!s.enabled) {
+                    srcStatus.setTextColor(getColor(R.color.ok));
+                    srcStatus.setText("● 服务端未开启鉴权 · 可直连");
+                } else if (PrefStore.get().apiToken().isEmpty()) {
+                    srcStatus.setTextColor(getColor(R.color.warn));
+                    srcStatus.setText("● 已开启鉴权 · 尚未填写 API Token");
+                } else {
+                    srcStatus.setTextColor(getColor(R.color.t2));
+                    srcStatus.setText("● 已开启鉴权 · Token 已配置"
+                            + (s.tokenHint != null && !s.tokenHint.isEmpty() ? "（" + s.tokenHint + "）" : ""));
+                }
+            }
+            @Override public void onErr(String m) {
+                if (!isAdded()) return;
+                srcStatus.setTextColor(getColor(R.color.bad));
+                srcStatus.setText("● 未连接 · " + m);
+            }
+        });
     }
 
     private String pickedSlugs() {
@@ -258,6 +256,98 @@ public class SettingsFragment extends Fragment {
         if ("global".equals(scope)) return pauseState.global;
         if ("full".equals(scope)) return pauseState.full;
         return pauseState.incremental;
+    }
+
+    /** 保存/测试：先探 /api/v1/auth/state 判断是否开启鉴权，再用 /api/v1/stats 验证 Token */
+    private void verifySource(final boolean save) {
+        if (!isAdded()) return;
+        final String url = inputBaseUrl.getText().toString().trim();
+        final String token = inputToken.getText().toString().trim();
+        if (url.isEmpty()) {
+            toast("请输入后端地址");
+            return;
+        }
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            toast("地址需以 http:// 或 https:// 开头");
+            return;
+        }
+
+        PrefStore.get().setBaseUrl(url);
+        btnSave.setText("检测中…");
+        srcStatus.setTextColor(getColor(R.color.t2));
+        srcStatus.setText("● 正在探测服务器…");
+        final long t0 = System.currentTimeMillis();
+
+        VodSyncApi.get().authState(new VodSyncApi.ApiCb<Models.AuthState>() {
+            @Override public void onOk(final Models.AuthState s) {
+                if (!isAdded()) return;
+                if (s == null) {
+                    failStatus("● 响应异常，无法判断鉴权状态");
+                    return;
+                }
+                if (!s.enabled) {
+                    // 服务端未开启访问控制：带不带 Token 都能用
+                    if (save) PrefStore.get().setApiToken(token);
+                    okStatus("● 该服务器未开启鉴权 · 可不填 Token · " + (System.currentTimeMillis() - t0) + "ms");
+                    return;
+                }
+                if (token.isEmpty()) {
+                    srcStatus.setTextColor(getColor(R.color.warn));
+                    srcStatus.setText("● 该服务器已开启鉴权 · 请填写 API Token");
+                    resetSave("保存");
+                    toast("服务端已开启访问控制，需要 API Token");
+                    return;
+                }
+                // 用受保护接口验证 Token
+                VodSyncApi.get().get("/api/v1/stats", null, Models.StatsResp.class,
+                        new VodSyncApi.ApiCb<Models.StatsResp>() {
+                            @Override public void onOk(Models.StatsResp r) {
+                                if (!isAdded()) return;
+                                PrefStore.get().setApiToken(token);
+                                okStatus("● 已授权 · Token 有效 · 延迟 " + (System.currentTimeMillis() - t0) + "ms");
+                                refreshConsole(true);
+                            }
+                            @Override public void onErr(String m) {
+                                if (!isAdded()) return;
+                                if (VodSyncApi.isTokenError(m)) {
+                                    failStatus("● Token 无效 · 请到服务面板重新复制");
+                                    toast("API Token 无效");
+                                } else {
+                                    failStatus("● 连接失败 · " + m);
+                                }
+                            }
+                        });
+            }
+            @Override public void onErr(String m) {
+                if (!isAdded()) return;
+                failStatus("● 无法连接 · " + m);
+                toast("地址不可用，请检查地址与端口");
+            }
+        });
+    }
+
+    private void okStatus(String text) {
+        if (!isAdded()) return;
+        srcStatus.setText(text);
+        srcStatus.setTextColor(getColor(R.color.ok));
+        btnSave.setText("已保存");
+        btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_ok));
+        toast("配置已保存");
+        postResetSave();
+    }
+
+    private void failStatus(String text) {
+        if (!isAdded()) return;
+        srcStatus.setText(text);
+        srcStatus.setTextColor(getColor(R.color.bad));
+        resetSave("保存");
+    }
+
+    private void resetSave(String label) {
+        btnSave.setText(label);
+        if (isAdded()) {
+            btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_main));
+        }
     }
 
     /** 检查 GitHub Release 是否有新版本，有则提示更新 */

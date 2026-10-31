@@ -84,6 +84,22 @@ public final class PrefStore {
         return s;
     }
 
+    // ---------- API Token（服务端 v1.5.0+ 访问控制） ----------
+
+    /** API Token：Keystore 加密后存本地；空串表示未填写 */
+    public String apiToken() {
+        String t = com.lateshow.app.util.SecureStore.get(sp, "api_token");
+        return t == null ? "" : t.trim();
+    }
+
+    public void setApiToken(String token) {
+        com.lateshow.app.util.SecureStore.put(sp, "api_token", token == null ? "" : token.trim());
+    }
+
+    public boolean hasToken() {
+        return !apiToken().isEmpty();
+    }
+
     // ---------- 主题 ----------
 
     public int theme() {

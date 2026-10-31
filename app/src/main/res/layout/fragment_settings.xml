@@ -94,6 +94,47 @@
                 android:inputType="textUri"
                 android:maxLines="1" />
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="API Token" />
+
+                <TextView
+                    style="@style/MetaLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:text="鉴权" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="服务端 v1.5.0+ 默认开启访问控制。在浏览器打开服务面板 → 登录 → 右上角「⚙ 设置」→ 复制 API Token 粘贴到这里。服务器未开启鉴权时可留空。"
+                android:textSize="10.5sp"
+                android:textColor="@color/t2"
+                android:lineSpacingMultiplier="1.6" />
+
+            <EditText
+                android:id="@+id/inputToken"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:background="@drawable/bg_field"
+                android:hint="vs_xxxxxxxxxxxx"
+                android:textSize="12sp"
+                android:textColor="@color/t1"
+                android:textColorHint="@color/t3"
+                android:inputType="textVisiblePassword"
+                android:maxLines="1" />
+
             <TextView
                 android:id="@+id/srcStatus"
                 style="@style/MetaLabel"
@@ -102,18 +143,37 @@
                 android:layout_marginTop="8dp"
                 android:text="● 未检测" />
 
-            <TextView
-                android:id="@+id/btnSave"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:gravity="center"
-                android:background="@drawable/bg_btn_main"
-                android:text="保存"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="@color/accInk"
-                android:letterSpacing="0.08" />
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnSave"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="46dp"
+                    android:gravity="center"
+                    android:background="@drawable/bg_btn_main"
+                    android:text="保存"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accInk"
+                    android:letterSpacing="0.08" />
+
+                <TextView
+                    android:id="@+id/btnTest"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="46dp"
+                    android:layout_marginLeft="10dp"
+                    android:gravity="center"
+                    android:background="@drawable/bg_smbtn"
+                    android:text="测试连接"
+                    android:textSize="13sp"
+                    android:textColor="@color/t1" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- ② 运行概览 -->

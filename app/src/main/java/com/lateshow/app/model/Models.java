@@ -153,4 +153,14 @@ public final class Models {
         public int code;
         public String msg;
     }
+
+    /** GET /api/v1/auth/state（免鉴权）：服务端访问控制状态 */
+    public static class AuthState {
+        public boolean enabled;
+        @SerializedName("logged_in") public boolean loggedIn;
+        @SerializedName("has_token") public boolean hasToken;
+        @SerializedName("token_hint") public String tokenHint;
+        @SerializedName("password_changed_at") public String passwordChangedAt;
+        @SerializedName("token_created_at") public String tokenCreatedAt;
+    }
 }

@@ -92,6 +92,14 @@ public class MainActivity extends AppCompatActivity {
             sUpdateChecked = true;
             maybeCheckUpdate();
         }
+
+        // 服务端开启访问控制且本地没有 API Token 时，引导填写（不阻塞进入 App）
+        com.lateshow.app.util.AuthGate.checkStartup(this);
+    }
+
+    /** 跳转到设置页（401 引导用） */
+    public void openSettings() {
+        switchTab(settingsFragment, 2);
     }
 
     private Fragment fragmentAt(int tab) {

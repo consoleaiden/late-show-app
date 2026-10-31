@@ -170,6 +170,10 @@ public class PlayActivity extends AppCompatActivity {
                 }
                 @Override public void onErr(String m) {
                     if (isDestroyed()) return;
+                    if (com.lateshow.app.util.AuthGate.handleApiError(PlayActivity.this, m, PlayActivity.this::loadDetail)) {
+                        toast("需要 API Token，请在设置页填写后重试");
+                        return;
+                    }
                     toast("详情加载失败：" + m);
                 }
             });
@@ -367,7 +371,9 @@ public class PlayActivity extends AppCompatActivity {
             attachSeekGesture();
             saveHandler.postDelayed(saveTick, 5000);
         }
-        player.setMediaItem(MediaItem.fromUri(url), Math.max(0, startMs));
+        // 若播放地址由本服务代理转发，补上 token 参数（第三方 CDN 直链原样播放）
+        String playUrl = VodSyncApi.get().decorate(url);
+        player.setMediaItem(MediaItem.fromUri(playUrl), Math.max(0, startMs));
         player.prepare();
         player.play();
     }

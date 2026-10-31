@@ -84,7 +84,7 @@ public class PlayerActivity extends AppCompatActivity {
             }
         });
 
-        MediaItem mi = MediaItem.fromUri(url);
+        MediaItem mi = MediaItem.fromUri(com.lateshow.app.api.VodSyncApi.get().decorate(url));
         player.setMediaItem(mi, Math.max(0, startMs));
         player.prepare();
         player.play();
