@@ -37,29 +37,8 @@ public final class VodSyncApi {
     private final OkHttpClient client;
 
     private VodSyncApi() {
-        // DNS 兜底：系统解析失败时走阿里 DoH（解决手机 DNS 故障/污染导致的加载失败）
-        okhttp3.HttpUrl dohUrl = okhttp3.HttpUrl.parse("https://dns.alidns.com/dns-query");
-        okhttp3.Dns dns = okhttp3.Dns.SYSTEM;
-        if (dohUrl != null) {
-            try {
-                okhttp3.dnsoverhttps.DnsOverHttps doh = new okhttp3.dnsoverhttps.DnsOverHttps.Builder()
-                        .client(new OkHttpClient.Builder().build())
-                        .url(dohUrl)
-                        .bootstrapDnsHosts(
-                                java.net.InetAddress.getByName("223.5.5.5"),
-                                java.net.InetAddress.getByName("223.6.6.6"))
-                        .build();
-                dns = hostname -> {
-                    try {
-                        return okhttp3.Dns.SYSTEM.lookup(hostname);
-                    } catch (java.net.UnknownHostException e) {
-                        return doh.lookup(hostname);
-                    }
-                };
-            } catch (Exception ignored) { }
-        }
         client = new OkHttpClient.Builder()
-                .dns(dns)
+                .dns(SmartDns.INSTANCE)
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(60, TimeUnit.SECONDS)
                 .build();

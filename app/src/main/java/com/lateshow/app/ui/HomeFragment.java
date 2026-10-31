@@ -136,10 +136,11 @@ public class HomeFragment extends Fragment {
                 }
                 @Override public void onErr(String m) {
                     if (!isAdded()) return;
-                    metaCount.setText("源站加载失败");
+                    // 不再自动弹菜单（避免 失败→弹菜单→再请求 死循环），显示错误详情便于排查
+                    metaCount.setText("源站加载失败：" + m);
                     if (pendingMenu) {
                         pendingMenu = false;
-                        showSourceMenu();
+                        android.widget.Toast.makeText(getContext(), "源站列表加载失败：" + m, android.widget.Toast.LENGTH_SHORT).show();
                     }
                 }
             });
@@ -147,28 +148,28 @@ public class HomeFragment extends Fragment {
 
     private void showSourceMenu() {
         if (!isAdded() || getView() == null) return;
-        if (sources.isEmpty()) {
-            // 源站列表尚未就绪：先拉一次，回来后再弹菜单
-            pendingMenu = true;
-            refreshSources();
-            return;
-        }
 
         LinearLayout box = new LinearLayout(getContext());
         box.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(6);
         box.setPadding(0, pad, 0, pad);
 
-        // 「全部源站」固定项
-        addMenuRow(box, "全部源站", "", curSlug.isEmpty(), "");
         int rows = 1;
+        if (sources.isEmpty()) {
+            // 源站列表为空：显示「全部源站」+「重新加载」兜底行，保证点击始终有反馈
+            addMenuRow(box, "全部源站", "", curSlug.isEmpty(), "");
+            addMenuRow(box, "重新加载源站列表", "↻", false, null);
+        } else {
+            // 「全部源站」固定项
+            addMenuRow(box, "全部源站", "", curSlug.isEmpty(), "");
 
-        // 按影片数降序（数据多的源站排前面）
-        List<Models.SyncSource> sorted = new ArrayList<>(sources);
-        java.util.Collections.sort(sorted, (a, b) -> Integer.compare(b.totalVideos, a.totalVideos));
-        for (Models.SyncSource s : sorted) {
-            addMenuRow(box, s.name, TimeUtil.compact(s.totalVideos), s.slug != null && s.slug.equals(curSlug), s.slug);
-            rows++;
+            // 按影片数降序（数据多的源站排前面）
+            List<Models.SyncSource> sorted = new ArrayList<>(sources);
+            java.util.Collections.sort(sorted, (a, b) -> Integer.compare(b.totalVideos, a.totalVideos));
+            for (Models.SyncSource s : sorted) {
+                addMenuRow(box, s.name, TimeUtil.compact(s.totalVideos), s.slug != null && s.slug.equals(curSlug), s.slug);
+                rows++;
+            }
         }
 
         androidx.core.widget.NestedScrollView sv = new androidx.core.widget.NestedScrollView(getContext());
@@ -199,7 +200,13 @@ public class HomeFragment extends Fragment {
         row.setOnClickListener(v -> {
             PopupWindow pw = (PopupWindow) box.getTag();
             if (pw != null) pw.dismiss();
-            curSlug = slug != null ? slug : "";
+            if (slug == null) {
+                // 「重新加载源站列表」兜底行
+                android.widget.Toast.makeText(getContext(), "正在重新加载源站…", android.widget.Toast.LENGTH_SHORT).show();
+                refreshSources();
+                return;
+            }
+            curSlug = slug;
             curName = name;
             PrefStore.get().setCurrentSource(curSlug, curName);
             btnSource.setText(curName);
