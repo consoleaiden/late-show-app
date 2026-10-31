@@ -61,7 +61,7 @@ public final class VodSyncApi {
         client = new OkHttpClient.Builder()
                 .dns(dns)
                 .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
                 .build();
     }
 
