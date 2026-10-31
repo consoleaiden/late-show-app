@@ -60,9 +60,10 @@ public final class AuthGate {
         box.setPadding(pad, dp(act, 4), pad, 0);
 
         TextView tip = new TextView(act);
-        tip.setText("该服务器已开启访问控制，需要 API Token 才能读取数据。\n\n"
+        tip.setText("该服务器已开启访问控制，需要有效的 API Token 才能读取数据。\n\n"
                 + "获取方式：浏览器打开 " + PrefStore.get().baseUrl()
-                + " → 用管理密码登录 → 右上角「⚙ 设置」→ 复制 API Token，粘贴到下面。");
+                + " → 用管理密码登录 → 右上角「⚙ 设置」→ 复制 API Token，粘贴到下面。\n\n"
+                + "注意：面板里点过「重新生成」或重新开启访问控制后，旧 Token 会立即失效，需要重新复制。");
         tip.setTextSize(12f);
         tip.setTextColor(act.getColor(R.color.t2));
         tip.setLineSpacing(dp(act, 2), 1.45f);
