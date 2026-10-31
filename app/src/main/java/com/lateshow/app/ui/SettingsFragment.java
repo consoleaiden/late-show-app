@@ -273,6 +273,10 @@ public class SettingsFragment extends Fragment {
         }
 
         PrefStore.get().setBaseUrl(url);
+        // 拦截器读取的是已保存的 Token：验证前必须先让输入值生效，验证失败再回滚
+        final String oldToken = PrefStore.get().apiToken();
+        if (!token.equals(oldToken)) PrefStore.get().setApiToken(token);
+
         btnSave.setText("检测中…");
         srcStatus.setTextColor(getColor(R.color.t2));
         srcStatus.setText("● 正在探测服务器…");
@@ -287,7 +291,6 @@ public class SettingsFragment extends Fragment {
                 }
                 if (!s.enabled) {
                     // 服务端未开启访问控制：带不带 Token 都能用
-                    if (save) PrefStore.get().setApiToken(token);
                     okStatus("● 该服务器未开启鉴权 · 可不填 Token · " + (System.currentTimeMillis() - t0) + "ms");
                     return;
                 }
@@ -303,13 +306,14 @@ public class SettingsFragment extends Fragment {
                         new VodSyncApi.ApiCb<Models.StatsResp>() {
                             @Override public void onOk(Models.StatsResp r) {
                                 if (!isAdded()) return;
-                                PrefStore.get().setApiToken(token);
                                 okStatus("● 已授权 · Token 有效 · 延迟 " + (System.currentTimeMillis() - t0) + "ms");
                                 refreshConsole(true);
                             }
                             @Override public void onErr(String m) {
                                 if (!isAdded()) return;
                                 if (VodSyncApi.isTokenError(m)) {
+                                    // 验证不通过的 Token 不保留，回滚为之前的值
+                                    if (!token.equals(oldToken)) PrefStore.get().setApiToken(oldToken);
                                     failStatus("● Token 无效 · 请到服务面板重新复制");
                                     toast("API Token 无效");
                                 } else {
