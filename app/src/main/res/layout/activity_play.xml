@@ -97,14 +97,17 @@
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/posterBox"
                     android:layout_width="132dp"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_cover_round_lg"
+                    android:clipToOutline="true"
+                    android:outlineProvider="background">
 
-                    <ImageView
+                    <com.google.android.material.imageview.ShapeableImageView
                         android:id="@+id/cover"
                         android:layout_width="0dp"
                         android:layout_height="0dp"
                         android:scaleType="centerCrop"
-                        android:background="@color/ink700"
+                        app:shapeAppearanceOverlay="@style/ShapeAppearance.LateShow.CoverLg"
                         app:layout_constraintDimensionRatio="9:16"
                         app:layout_constraintTop_toTopOf="parent"
                         app:layout_constraintBottom_toBottomOf="parent"
@@ -114,7 +117,7 @@
                     <View
                         android:layout_width="0dp"
                         android:layout_height="46dp"
-                        android:background="@drawable/cover_fade"
+                        android:background="@drawable/cover_fade_round"
                         app:layout_constraintBottom_toBottomOf="@id/cover"
                         app:layout_constraintStart_toStartOf="@id/cover"
                         app:layout_constraintEnd_toEndOf="@id/cover" />

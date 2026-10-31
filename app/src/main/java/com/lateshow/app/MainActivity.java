@@ -8,6 +8,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
@@ -26,6 +27,13 @@ public class MainActivity extends AppCompatActivity {
     private static final int[] LABEL_IDS = {R.id.tab_home_label, R.id.tab_fav_label, R.id.tab_settings_label};
     private static final int[] GLOW_IDS = {R.id.tab_home_glow, R.id.tab_fav_glow, R.id.tab_settings_glow};
     private static final int[] IND_IDS = {R.id.tab_home_ind, R.id.tab_fav_ind, R.id.tab_settings_ind};
+
+    /** Fragment tags：重建（切主题等配置变更）后按 tag 取回，避免重复 add 与跳回首页 */
+    private static final String[] TAGS = {"tab_home", "tab_fav", "tab_settings"};
+    private static final String KEY_TAB = "cur_tab";
+
+    /** 进程内只自动检查一次更新（主题切换等重建不再弹窗） */
+    private static boolean sUpdateChecked = false;
 
     private HomeFragment homeFragment;
     private FavFragment favFragment;
@@ -63,16 +71,37 @@ public class MainActivity extends AppCompatActivity {
             inds[i].setScaleX(0.2f);
         }
 
-        homeFragment = new HomeFragment();
-        favFragment = new FavFragment();
-        settingsFragment = new SettingsFragment();
+        FragmentManager fm = getSupportFragmentManager();
+        homeFragment = (HomeFragment) fm.findFragmentByTag(TAGS[0]);
+        favFragment = (FavFragment) fm.findFragmentByTag(TAGS[1]);
+        settingsFragment = (SettingsFragment) fm.findFragmentByTag(TAGS[2]);
+        if (homeFragment == null) homeFragment = new HomeFragment();
+        if (favFragment == null) favFragment = new FavFragment();
+        if (settingsFragment == null) settingsFragment = new SettingsFragment();
 
         findViewById(TAB_IDS[0]).setOnClickListener(v -> switchTab(homeFragment, 0));
         findViewById(TAB_IDS[1]).setOnClickListener(v -> switchTab(favFragment, 1));
         findViewById(TAB_IDS[2]).setOnClickListener(v -> switchTab(settingsFragment, 2));
 
-        switchTab(homeFragment, 0);
-        maybeCheckUpdate();
+        // 配置变更（切明暗主题）重建后回到原来的 Tab，而不是强制跳回首页
+        int startTab = savedInstanceState != null ? savedInstanceState.getInt(KEY_TAB, 0) : 0;
+        if (startTab < 0 || startTab >= TAB_COUNT) startTab = 0;
+        switchTab(fragmentAt(startTab), startTab);
+
+        if (!sUpdateChecked) {
+            sUpdateChecked = true;
+            maybeCheckUpdate();
+        }
+    }
+
+    private Fragment fragmentAt(int tab) {
+        return tab == 1 ? favFragment : tab == 2 ? settingsFragment : homeFragment;
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(KEY_TAB, curTab < 0 ? 0 : curTab);
     }
 
     /** 启动时静默检查一次新版本（检查失败不打扰用户） */
@@ -104,7 +133,7 @@ public class MainActivity extends AppCompatActivity {
         FragmentTransaction tx = fm.beginTransaction();
         for (Fragment f : fm.getFragments()) tx.hide(f);
         if (target.isAdded()) tx.show(target);
-        else tx.add(R.id.container, target);
+        else tx.add(R.id.container, target, TAGS[tab]);
         tx.commit();
         active = target;
 

@@ -1,41 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- 顶栏：源站下拉 + 搜索框 -->
+    <!-- 顶栏：源站菜单（圆形按钮 + 圆环=后端连通状态） + 搜索框；左右外边距与下方海报列表对齐（5dp） -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingLeft="16dp"
-        android:paddingRight="16dp"
-        android:paddingTop="10dp"
+        android:paddingLeft="5dp"
+        android:paddingRight="5dp"
+        android:paddingTop="8dp"
         android:paddingBottom="8dp">
 
-        <TextView
+        <FrameLayout
             android:id="@+id/btnSource"
-            android:layout_width="84dp"
-            android:layout_height="36dp"
-            android:gravity="center_vertical"
-            android:paddingLeft="8dp"
-            android:paddingRight="4dp"
-            android:background="@drawable/bg_capsule"
-            android:drawableStart="@drawable/dot_acc"
-            android:drawableEnd="@drawable/ic_chevron_down"
-            android:drawablePadding="3dp"
-            android:text="全部源站"
-            android:textSize="10.5sp"
-            android:textColor="@color/t1"
-            android:ellipsize="end"
-            android:maxLines="1" />
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_ring_off"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="切换源站">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/btnSourceIcon"
+                android:layout_width="17dp"
+                android:layout_height="17dp"
+                android:layout_gravity="center"
+                app:srcCompat="@drawable/ic_menu_list"
+                app:tint="@color/t3"
+                android:contentDescription="源站菜单" />
+        </FrameLayout>
 
         <EditText
             android:id="@+id/inputSearch"
             android:layout_width="0dp"
-            android:layout_height="36dp"
+            android:layout_height="38dp"
             android:layout_weight="1"
             android:layout_marginLeft="8dp"
             android:paddingLeft="12dp"
@@ -57,8 +59,8 @@
         android:id="@+id/chips"
         android:layout_width="match_parent"
         android:layout_height="30dp"
-        android:paddingLeft="16dp"
-        android:paddingRight="16dp"
+        android:paddingLeft="5dp"
+        android:paddingRight="5dp"
         android:clipToPadding="false" />
 
     <!-- 元信息条 -->
@@ -66,8 +68,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingLeft="16dp"
-        android:paddingRight="16dp"
+        android:paddingLeft="5dp"
+        android:paddingRight="5dp"
         android:paddingTop="6dp"
         android:paddingBottom="6dp">
 

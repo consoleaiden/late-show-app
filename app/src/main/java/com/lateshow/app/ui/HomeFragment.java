@@ -7,6 +7,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
@@ -33,7 +34,9 @@ import java.util.Map;
 /** 首页：源站切换 + 搜索 + 分类筛选 + 3 列海报墙（无限加载） */
 public class HomeFragment extends Fragment {
 
-    private TextView btnSource, metaCount, metaSync, emptyView;
+    private View btnSource;
+    private ImageView btnSourceIcon;
+    private TextView metaCount, metaSync, emptyView;
     private EditText inputSearch;
     private RecyclerView chips, grid;
     private ChipAdapter chipAdapter;
@@ -59,6 +62,7 @@ public class HomeFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
         btnSource = v.findViewById(R.id.btnSource);
+        btnSourceIcon = v.findViewById(R.id.btnSourceIcon);
         inputSearch = v.findViewById(R.id.inputSearch);
         chips = v.findViewById(R.id.chips);
         grid = v.findViewById(R.id.grid);
@@ -68,7 +72,7 @@ public class HomeFragment extends Fragment {
 
         curSlug = PrefStore.get().currentSourceSlug();
         curName = PrefStore.get().currentSourceName();
-        btnSource.setText(curName);
+        setSourceHealth(false); // 默认灰色圆环，探测成功后转为橙色
 
         chipAdapter = new ChipAdapter(c -> {
             curCategory = c == null ? null : c.typeName;
@@ -112,6 +116,34 @@ public class HomeFragment extends Fragment {
         if (getContext() != null) PlayActivity.start(getContext(), item);
     }
 
+    /** 源站按钮圆环状态：true=后端通畅（橙色圆环），false=不通（灰色圆环） */
+    private void setSourceHealth(boolean ok) {
+        if (btnSource == null || btnSourceIcon == null) return;
+        btnSource.setBackgroundResource(ok ? R.drawable.bg_ring_on : R.drawable.bg_ring_off);
+        int tint = getResources().getColor(ok ? R.color.acc : R.color.t3, null);
+        btnSourceIcon.setColorFilter(tint);
+    }
+
+    /** 轻量健康探测（GET /healthz），决定顶部圆环颜色 */
+    private void pingHealth() {
+        VodSyncApi.get().healthz(new VodSyncApi.ApiCb<Long>() {
+            @Override public void onOk(Long ms) {
+                if (!isAdded()) return;
+                setSourceHealth(true);
+            }
+            @Override public void onErr(String m) {
+                if (!isAdded()) return;
+                setSourceHealth(false);
+            }
+        });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        pingHealth();
+    }
+
     /** 源站列表：菜单数据 + 元信息（接口：GET /api/v1/sources） */
     private void refreshSources() {
         VodSyncApi.get().get("/api/v1/sources", null, Models.SyncSourcesResp.class,
@@ -125,6 +157,7 @@ public class HomeFragment extends Fragment {
                         }
                     }
                     com.lateshow.app.util.SourceCache.putSync(sources);
+                    setSourceHealth(true);
                     long total = 0;
                     for (Models.SyncSource s : sources) total += s.totalVideos;
                     metaCount.setText("已收录 " + TimeUtil.compact((int) total) + " 部 · " + sources.size() + " 源");
@@ -136,6 +169,7 @@ public class HomeFragment extends Fragment {
                 }
                 @Override public void onErr(String m) {
                     if (!isAdded()) return;
+                    setSourceHealth(false);
                     // 不再自动弹菜单（避免 失败→弹菜单→再请求 死循环），显示错误详情便于排查
                     metaCount.setText("源站加载失败：" + m);
                     if (pendingMenu) {
@@ -209,7 +243,8 @@ public class HomeFragment extends Fragment {
             curSlug = slug;
             curName = name;
             PrefStore.get().setCurrentSource(curSlug, curName);
-            btnSource.setText(curName);
+            android.widget.Toast.makeText(getContext(), "源站：" + curName,
+                    android.widget.Toast.LENGTH_SHORT).show();
             refreshCategories();
             reload();
         });

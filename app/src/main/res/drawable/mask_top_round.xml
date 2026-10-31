@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 顶部遮罩（上圆角与海报圆角匹配） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="270" android:startColor="#EA080A0D" android:endColor="#00080A0D" />
+    <corners android:topLeftRadius="10dp" android:topRightRadius="10dp" />
+</shape>
