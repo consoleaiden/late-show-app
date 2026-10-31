@@ -314,7 +314,9 @@ public class SettingsFragment extends Fragment {
                                 if (VodSyncApi.isTokenError(m)) {
                                     // 验证不通过的 Token 不保留，回滚为之前的值
                                     if (!token.equals(oldToken)) PrefStore.get().setApiToken(oldToken);
-                                    failStatus("● Token 无效 · 请到服务面板重新复制");
+                                    String detail = VodSyncApi.tokenErrorDetail(m);
+                                    if (detail.length() > 70) detail = detail.substring(0, 70) + "…";
+                                    failStatus("● Token 无效 · " + detail);
                                     toast("API Token 无效");
                                 } else {
                                     failStatus("● 连接失败 · " + m);

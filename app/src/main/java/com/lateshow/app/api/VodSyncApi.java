@@ -37,6 +37,7 @@ public final class VodSyncApi {
 
     /** onErr 里 token 失效的统一前缀（UI 据此引导用户去设置页） */
     public static final String TOKEN_ERR = "[[token-invalid]]";
+    private static final String DBG = "LateShowApi";
 
     public static boolean isTokenError(String msg) {
         return msg != null && msg.startsWith(TOKEN_ERR);
@@ -64,9 +65,18 @@ public final class VodSyncApi {
             Request req = chain.request();
             String token = PrefStore.get().apiToken();
             // 只给「自己服务器」加头：封面/播放直链通常在第三方 CDN，带上就是泄漏
+            boolean authed = false;
             if (!token.isEmpty() && sameHost(req.url().host(), hostOf(baseUrl()))) {
-                req = req.newBuilder().header("Authorization", "Bearer " + token).build();
+                // 主用 Authorization，同时带兼容头 X-API-Key（个别中间层会剥离 Authorization）
+                req = req.newBuilder()
+                        .header("Authorization", "Bearer " + token)
+                        .header("X-API-Key", token)
+                        .build();
+                authed = true;
             }
+            android.util.Log.d(DBG, "→ " + req.method() + " " + req.url().encodedPath()
+                    + " host=" + req.url().host()
+                    + " auth=" + (authed ? com.lateshow.app.util.SecureStore.mask(token) : "NO"));
             return chain.proceed(req);
         };
         client = new OkHttpClient.Builder()
@@ -177,6 +187,8 @@ public final class VodSyncApi {
         try (Response r = resp) {
             String body = r.body() != null ? r.body().string() : "";
             if (!r.isSuccessful()) {
+                android.util.Log.d(DBG, "← " + r.code() + " " + r.request().url().encodedPath()
+                        + " body=" + (body.length() > 300 ? body.substring(0, 300) : body));
                 // 401：token 缺失/错误/被重置 —— 不重试，交给 UI 引导填写
                 String err = r.code() == 401
                         ? tokenErrMsg(extractError(r.code(), body))
