@@ -13,26 +13,45 @@
 
     <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/line" />
 
+    <!-- 底部导航：44dp 紧凑高度，选中项带光斑 / 指示条 / 图标弹跳动效 -->
     <LinearLayout
         android:id="@+id/tabbar"
         android:layout_width="match_parent"
-        android:layout_height="66dp"
+        android:layout_height="44dp"
         android:orientation="horizontal"
         android:background="@color/barBg">
 
-        <LinearLayout android:id="@+id/tab_home" style="@style/TabItem">
-            <ImageView android:id="@+id/tab_home_icon" android:src="@drawable/ic_home" style="@style/TabIcon" />
-            <TextView android:id="@+id/tab_home_label" android:text="首页" style="@style/TabLabel" />
-        </LinearLayout>
+        <FrameLayout android:id="@+id/tab_home" style="@style/TabItem">
+            <LinearLayout style="@style/TabInner">
+                <FrameLayout style="@style/TabIconBox">
+                    <View android:id="@+id/tab_home_glow" style="@style/TabGlow" />
+                    <ImageView android:id="@+id/tab_home_icon" android:src="@drawable/ic_home" style="@style/TabIcon" />
+                </FrameLayout>
+                <TextView android:id="@+id/tab_home_label" android:text="首页" style="@style/TabLabel" />
+            </LinearLayout>
+            <View android:id="@+id/tab_home_ind" style="@style/TabIndicator" />
+        </FrameLayout>
 
-        <LinearLayout android:id="@+id/tab_fav" style="@style/TabItem">
-            <ImageView android:id="@+id/tab_fav_icon" android:src="@drawable/ic_bookmark" style="@style/TabIcon" />
-            <TextView android:id="@+id/tab_fav_label" android:text="收藏" style="@style/TabLabel" />
-        </LinearLayout>
+        <FrameLayout android:id="@+id/tab_fav" style="@style/TabItem">
+            <LinearLayout style="@style/TabInner">
+                <FrameLayout style="@style/TabIconBox">
+                    <View android:id="@+id/tab_fav_glow" style="@style/TabGlow" />
+                    <ImageView android:id="@+id/tab_fav_icon" android:src="@drawable/ic_bookmark" style="@style/TabIcon" />
+                </FrameLayout>
+                <TextView android:id="@+id/tab_fav_label" android:text="收藏" style="@style/TabLabel" />
+            </LinearLayout>
+            <View android:id="@+id/tab_fav_ind" style="@style/TabIndicator" />
+        </FrameLayout>
 
-        <LinearLayout android:id="@+id/tab_settings" style="@style/TabItem">
-            <ImageView android:id="@+id/tab_settings_icon" android:src="@drawable/ic_settings" style="@style/TabIcon" />
-            <TextView android:id="@+id/tab_settings_label" android:text="设置" style="@style/TabLabel" />
-        </LinearLayout>
+        <FrameLayout android:id="@+id/tab_settings" style="@style/TabItem">
+            <LinearLayout style="@style/TabInner">
+                <FrameLayout style="@style/TabIconBox">
+                    <View android:id="@+id/tab_settings_glow" style="@style/TabGlow" />
+                    <ImageView android:id="@+id/tab_settings_icon" android:src="@drawable/ic_settings" style="@style/TabIcon" />
+                </FrameLayout>
+                <TextView android:id="@+id/tab_settings_label" android:text="设置" style="@style/TabLabel" />
+            </LinearLayout>
+            <View android:id="@+id/tab_settings_ind" style="@style/TabIndicator" />
+        </FrameLayout>
     </LinearLayout>
 </LinearLayout>
