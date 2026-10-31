@@ -94,6 +94,8 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
         Context ctx = h.itemView.getContext();
         String pill;
         int dotRes, colorRes;
+        int lp = s.lastPage == null ? 0 : (int) Math.round(s.lastPage);
+        int tp = s.totalPages == null ? 0 : (int) Math.round(s.totalPages);
         if (s.running) {
             pill = s.paused ? "已暂停" : ("正在同步 · " + ("full".equals(s.runningMode) ? "全量" : "增量"));
             dotRes = s.paused ? R.drawable.dot_warn : R.drawable.dot_acc;
@@ -102,8 +104,8 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
             pill = "本站暂停";
             dotRes = R.drawable.dot_warn;
             colorRes = R.color.warn;
-        } else if (s.totalPages > 0 && s.lastPage < s.totalPages) {
-            pill = "断点 " + s.lastPage + "/" + s.totalPages + " 页";
+        } else if (tp > 0 && lp < tp) {
+            pill = "断点 " + lp + "/" + tp + " 页";
             dotRes = R.drawable.dot_warn;
             colorRes = R.color.warn;
         } else {
@@ -120,7 +122,7 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
 
         int pct = (int) Math.max(0, Math.min(100, s.progress));
         h.pbar.setProgress(pct);
-        String info = pct + "%" + (s.running && s.totalPages > 0 ? " · " + s.lastPage + "/" + s.totalPages : "");
+        String info = pct + "%" + (s.running && tp > 0 ? " · " + lp + "/" + tp : "");
         h.pct.setText(info);
 
         h.btnSync.setOnClickListener(v -> {

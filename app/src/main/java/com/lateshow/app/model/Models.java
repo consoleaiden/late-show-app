@@ -89,10 +89,10 @@ public final class Models {
         @SerializedName("total_videos") public int totalVideos;
         public boolean running;
         @SerializedName("running_mode") public String runningMode;
-        @SerializedName("running_seconds") public Long runningSeconds;
+        @SerializedName("running_seconds") public Double runningSeconds; // 后端可能返回小数（如 1938.9），用 Double 容错
         public double progress;
-        @SerializedName("last_page") public int lastPage;
-        @SerializedName("total_pages") public int totalPages;
+        @SerializedName("last_page") public Double lastPage;
+        @SerializedName("total_pages") public Double totalPages;
         @SerializedName("last_sync_at") public String lastSyncAt;
         public boolean paused;
         @SerializedName("auto_sync") public boolean autoSync;
