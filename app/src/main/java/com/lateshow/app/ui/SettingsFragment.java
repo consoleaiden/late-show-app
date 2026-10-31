@@ -1,5 +1,8 @@
 package com.lateshow.app.ui;
 
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -28,6 +31,7 @@ import com.lateshow.app.model.Models;
 import com.lateshow.app.store.PrefStore;
 import com.lateshow.app.ui.HomeFragment;
 import com.lateshow.app.util.TimeUtil;
+import com.lateshow.app.util.UpdateChecker;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +41,7 @@ import java.util.Map;
 public class SettingsFragment extends Fragment {
 
     private EditText inputBaseUrl;
-    private TextView srcStatus, btnSave, pauseWarn, autoCount, selCount;
+    private TextView srcStatus, btnSave, pauseWarn, autoCount, selCount, tvVersion, btnCheckUpdate;
     private LinearLayout statsGrid;
     private LinearLayout pauseRows;
     private CheckBox chkAll;
@@ -78,6 +82,17 @@ public class SettingsFragment extends Fragment {
         logList = v.findViewById(R.id.logList);
 
         inputBaseUrl.setText(PrefStore.get().baseUrl());
+
+        // 版本与更新
+        tvVersion = v.findViewById(R.id.tvVersion);
+        btnCheckUpdate = v.findViewById(R.id.btnCheckUpdate);
+        tvVersion.setText("v" + UpdateChecker.currentVersion());
+        btnCheckUpdate.setOnClickListener(x -> doCheckUpdate());
+        v.findViewById(R.id.btnReleasePage).setOnClickListener(x -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UpdateChecker.RELEASES_PAGE)));
+            } catch (Exception ignored) { }
+        });
 
         // 播放源保存
         btnSave.setOnClickListener(vv -> {
@@ -243,6 +258,40 @@ public class SettingsFragment extends Fragment {
         if ("global".equals(scope)) return pauseState.global;
         if ("full".equals(scope)) return pauseState.full;
         return pauseState.incremental;
+    }
+
+    /** 检查 GitHub Release 是否有新版本，有则提示更新 */
+    private void doCheckUpdate() {
+        if (!isAdded() || getContext() == null) return;
+        btnCheckUpdate.setEnabled(false);
+        btnCheckUpdate.setText("检查中…");
+        UpdateChecker.check((info, error) -> {
+            if (!isAdded() || getContext() == null) return;
+            btnCheckUpdate.setEnabled(true);
+            btnCheckUpdate.setText("检查更新");
+            if (error != null) {
+                Toast.makeText(getContext(), error, Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (info == null) {
+                new AlertDialog.Builder(getContext())
+                        .setTitle("已是最新版本")
+                        .setMessage("当前版本 v" + UpdateChecker.currentVersion())
+                        .setPositiveButton("好", null)
+                        .show();
+                return;
+            }
+            String notes = info.notes == null ? "" : info.notes.trim();
+            if (notes.length() > 500) notes = notes.substring(0, 500) + "…";
+            new AlertDialog.Builder(getContext())
+                    .setTitle("发现新版本 v" + info.version)
+                    .setMessage("当前 v" + UpdateChecker.currentVersion() + "\n\n" + notes)
+                    .setPositiveButton("立即更新", (d, w) -> {
+                        if (getActivity() != null) UpdateChecker.downloadAndInstall(getActivity(), info);
+                    })
+                    .setNegativeButton("稍后", null)
+                    .show();
+        });
     }
 
     private void updatePauseWarn() {

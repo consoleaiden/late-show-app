@@ -1,9 +1,13 @@
-name: Build APK
+name: Build & Publish APK
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+# 需要写权限来创建 Release
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -26,8 +30,37 @@ jobs:
       - name: Build Debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 
+      # 版本号规则与 app/build.gradle 一致：1.5.<GITHUB_RUN_NUMBER>
+      - name: Rename APK with version
+        run: |
+          VER="1.5.${GITHUB_RUN_NUMBER}"
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          cp app/build/outputs/apk/debug/app-debug.apk "late-show-v${VER}.apk"
+          ls -lh "late-show-v${VER}.apk"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: late-show-apk
           path: app/build/outputs/apk/debug/*.apk
+
+      # 每次 push 自动创建 Release，App 内「检查更新」读取该 Release
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VER }}
+          name: 夜场 LATE SHOW v${{ env.VER }}
+          make_latest: true
+          body: |
+            ## 夜场 LATE SHOW v${{ env.VER }}
+
+            由 GitHub Actions 自动构建发布。
+
+            - 提交：`${{ github.sha }}`
+            - 分支：`${{ github.ref_name }}`
+            - 构建时间：${{ github.event.repository.updated_at }}
+
+            安装方式：下载 `late-show-v${{ env.VER }}.apk` 直接安装，或在 App 内「设置 → 应用更新 → 检查更新」一键升级。
+          files: late-show-v${{ env.VER }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

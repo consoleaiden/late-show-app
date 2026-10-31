@@ -295,12 +295,69 @@
                 android:layout_marginTop="6dp" />
         </LinearLayout>
 
+        <!-- ⑦ 应用更新 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView style="@style/SectionTitle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="应用更新" />
+
+                <TextView
+                    android:id="@+id/tvVersion"
+                    style="@style/MetaLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="v--" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvUpdateHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="读取 GitHub Release 最新版本，可直接下载安装。"
+                android:textSize="10.5sp"
+                android:textColor="@color/t2"
+                android:lineSpacingMultiplier="1.6" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnCheckUpdate"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:background="@drawable/bg_btn_main"
+                    android:text="检查更新"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accInk" />
+
+                <TextView
+                    android:id="@+id/btnReleasePage"
+                    style="@style/OpBtn"
+                    android:layout_marginLeft="8dp"
+                    android:text="发布历史" />
+            </LinearLayout>
+        </LinearLayout>
+
         <TextView
             style="@style/MetaLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
             android:layout_marginTop="16dp"
-            android:text="夜场 LATE SHOW · 1.4.0 (2026.10)" />
+            android:text="夜场 LATE SHOW · 开源影视聚合客户端" />
     </LinearLayout>
 </ScrollView>

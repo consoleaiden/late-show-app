@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+// 版本号由 CI 运行号生成：GITHUB_RUN_NUMBER 存在时 versionName=1.5.<run>，保证每次发布都能被 App 识别为新版本
+def ghRun = System.getenv("GITHUB_RUN_NUMBER")
+def buildNo = (ghRun != null && ghRun.isNumber()) ? ghRun.toInteger() : 0
+
 android {
     namespace 'com.lateshow.app'
     compileSdk 34
@@ -10,8 +14,12 @@ android {
         applicationId "com.lateshow.app"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.4.0"
+        versionCode buildNo > 0 ? (1000 + buildNo) : 1
+        versionName buildNo > 0 ? "1.5.${buildNo}" : "1.5.0"
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     signingConfigs {

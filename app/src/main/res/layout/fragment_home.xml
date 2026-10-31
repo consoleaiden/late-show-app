@@ -87,14 +87,13 @@
             android:text="● -- 同步" />
     </LinearLayout>
 
-    <!-- 卡片墙 -->
+    <!-- 卡片墙：两边不留白，卡片自带左右间距 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/grid"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:paddingLeft="16dp"
-        android:paddingRight="16dp"
+        android:paddingTop="2dp"
         android:clipToPadding="false" />
 
     <TextView
