@@ -9,7 +9,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -319,23 +318,33 @@ public class SettingsFragment extends Fragment {
 
     private void renderStats(Models.StatsResp s) {
         statsGrid.removeAllViews();
-        addStat(TimeUtil.thousands(s.sourcesTotal), "源站总数 " + s.sourcesTotal + " · 已启用 " + s.sourcesEnabled);
-        addStat(TimeUtil.thousands(s.videosTotal), "已入库视频");
-        addStat(String.valueOf(s.sourcesSyncing), "正在同步");
-        addStat(TimeUtil.thousands(s.todayInserted), "今日新增 " + s.todayInserted);
+        addStatRow(new String[][]{
+                {TimeUtil.thousands(s.sourcesTotal), "源站总数 · 已启用 " + s.sourcesEnabled},
+                {TimeUtil.thousands(s.videosTotal), "已入库视频"}});
+        addStatRow(new String[][]{
+                {String.valueOf(s.sourcesSyncing), "正在同步"},
+                {TimeUtil.thousands(s.todayInserted), "今日新增 " + s.todayInserted}});
     }
 
-    private void addStat(String value, String label) {
-        View card = getLayoutInflater().inflate(R.layout.item_stat, statsGrid, false);
-        GridLayout.LayoutParams lp = new GridLayout.LayoutParams(
-                GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED));
-        lp.width = 0;
-        lp.setMargins((int) (4 * getResources().getDisplayMetrics().density), 0, 0,
-                (int) (8 * getResources().getDisplayMetrics().density));
-        card.setLayoutParams(lp);
-        ((TextView) card.findViewById(R.id.statValue)).setText(value);
-        ((TextView) card.findViewById(R.id.statLabel)).setText(label);
-        statsGrid.addView(card);
+    private void addStatRow(String[][] cells) {
+        android.content.Context ctx = requireContext();
+        int dp8 = (int) (8 * getResources().getDisplayMetrics().density);
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowLp.bottomMargin = dp8;
+        row.setLayoutParams(rowLp);
+        for (int i = 0; i < cells.length; i++) {
+            View card = getLayoutInflater().inflate(R.layout.item_stat, row, false);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            if (i > 0) lp.leftMargin = dp8;
+            card.setLayoutParams(lp);
+            ((TextView) card.findViewById(R.id.statValue)).setText(cells[i][0]);
+            ((TextView) card.findViewById(R.id.statLabel)).setText(cells[i][1]);
+            row.addView(card);
+        }
+        statsGrid.addView(row);
     }
 
     private void post(String pathAndQuery, String okMsg) {

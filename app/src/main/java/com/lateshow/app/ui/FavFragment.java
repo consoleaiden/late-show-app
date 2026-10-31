@@ -65,8 +65,8 @@ public class FavFragment extends Fragment {
     private void switchSeg(boolean hist) {
         if (showHist == hist) return;
         showHist = hist;
-        segFav.setBackgroundColor(showHist ? 0 : getColor(R.color.acc));
-        segHist.setBackgroundColor(showHist ? getColor(R.color.acc) : 0);
+        segFav.setBackgroundResource(showHist ? R.drawable.bg_seg_off : R.drawable.bg_seg_on);
+        segHist.setBackgroundResource(showHist ? R.drawable.bg_seg_on : R.drawable.bg_seg_off);
         segFav.setTextColor(getColor(showHist ? R.color.t2 : R.color.accInk));
         segHist.setTextColor(getColor(showHist ? R.color.accInk : R.color.t2));
         render();

@@ -16,7 +16,7 @@
     <LinearLayout
         android:id="@+id/tabbar"
         android:layout_width="match_parent"
-        android:layout_height="62dp"
+        android:layout_height="66dp"
         android:orientation="horizontal"
         android:background="@color/barBg">
 
@@ -35,16 +35,4 @@
             <TextView android:id="@+id/tab_settings_label" android:text="设置" style="@style/TabLabel" />
         </LinearLayout>
     </LinearLayout>
-
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="18dp"
-        android:background="@color/barBg">
-        <View
-            android:layout_width="120dp"
-            android:layout_height="4dp"
-            android:layout_gravity="center_horizontal|top"
-            android:layout_marginTop="7dp"
-            android:background="@drawable/home_indicator" />
-    </FrameLayout>
 </LinearLayout>

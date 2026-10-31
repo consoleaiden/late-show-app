@@ -69,10 +69,11 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         boolean fav = it.kind == CardItem.KIND_FAV;
         h.topMask.setVisibility(hist ? View.VISIBLE : View.GONE);
         h.bottomMask.setVisibility(hist || fav || (it.kind == CardItem.KIND_HOME && it.timeStr != null) ? View.VISIBLE : View.GONE);
-        h.badgeFav.setVisibility(it.fav || fav ? View.VISIBLE : View.GONE);
+        // 书签角标仅收藏 Tab 显示（历史/首页书签会与遮罩内容重叠）
+        h.badgeFav.setVisibility(fav ? View.VISIBLE : View.GONE);
 
         if (hist) {
-            h.tvSrc.setText(it.sourceName != null ? it.sourceName : it.slug);
+            h.tvSrc.setText(com.lateshow.app.util.SourceCache.nameOf(it.slug));
             h.tvTopTime.setText(it.topTimeStr != null ? it.topTimeStr : "");
             // 进度：已播时长(朱橙) / 总时长(白)
             String played = TimeUtil.dur(it.playedSec);
@@ -83,14 +84,14 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             sb.append(" / ").append(total);
             h.bottomMask.setText(sb);
         } else if (fav) {
-            String src = it.sourceName != null ? it.sourceName : it.slug;
+            String src = com.lateshow.app.util.SourceCache.nameOf(it.slug);
             h.bottomMask.setText(src + " · " + (it.timeStr != null ? it.timeStr : ""));
         } else {
             h.bottomMask.setText(it.timeStr != null ? it.timeStr : "");
         }
 
-        // 备注角标
-        if (it.remark != null && !it.remark.isEmpty()) {
+        // 备注角标仅首页卡片显示（收藏/历史顶部已有遮罩信息，避免重叠）
+        if (it.kind == CardItem.KIND_HOME && it.remark != null && !it.remark.isEmpty()) {
             h.tvRemark.setVisibility(View.VISIBLE);
             h.tvRemark.setText(it.remark);
         } else {

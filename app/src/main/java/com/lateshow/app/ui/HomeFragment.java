@@ -47,6 +47,8 @@ public class HomeFragment extends Fragment {
 
     private int page = 1, pagecount = 1;
     private boolean loading = false;
+    private boolean catFailed = false; // 分类接口失败时用列表数据兜底
+    private List<Models.VideoSummary> lastRawList = new ArrayList<>();
 
     @Nullable
     @Override
@@ -118,6 +120,7 @@ public class HomeFragment extends Fragment {
                     if (!isAdded()) return;
                     sources.clear();
                     if (r.list != null) sources.addAll(r.list);
+                    com.lateshow.app.util.SourceCache.putAll(sources);
                     long total = 0;
                     for (Models.Source s : sources) total += s.videoCount;
                     metaCount.setText("已收录 " + TimeUtil.compact((int) total) + " 部");
@@ -183,16 +186,47 @@ public class HomeFragment extends Fragment {
     }
 
     private void refreshCategories() {
+        catFailed = false;
         Map<String, String> p = new HashMap<>();
         if (!curSlug.isEmpty()) p.put("source", curSlug);
         VodSyncApi.get().get("/api/v1/categories", p, Models.CategoryResp.class,
             new VodSyncApi.ApiCb<Models.CategoryResp>() {
                 @Override public void onOk(Models.CategoryResp r) {
                     if (!isAdded()) return;
-                    chipAdapter.setCategories(r.list);
+                    if (r.list != null && !r.list.isEmpty()) {
+                        chipAdapter.setCategories(r.list);
+                        chipAdapter.selectByName(curCategory);
+                    } else {
+                        // 接口无数据：从已加载影片兜底
+                        catFailed = true;
+                        buildCatsFromItems();
+                    }
                 }
-                @Override public void onErr(String m) { /* 分类加载失败不阻塞列表 */ }
+                @Override public void onErr(String m) {
+                    if (!isAdded()) return;
+                    // 分类接口失败（超时/400）：从已加载影片的 type_name 生成分类
+                    catFailed = true;
+                    buildCatsFromItems();
+                }
             });
+    }
+
+    /** 用已加载影片的分类名去重生成分类芯片（兜底，保证分类始终可见） */
+    private void buildCatsFromItems() {
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+        for (Models.VideoSummary v : lastRawList) {
+            if (v.typeName != null && !v.typeName.isEmpty()) set.add(v.typeName);
+        }
+        if (set.isEmpty()) return;
+        List<Models.Category> cats = new ArrayList<>();
+        for (String n : set) {
+            Models.Category c = new Models.Category();
+            c.typeName = n;
+            c.count = 0;
+            cats.add(c);
+        }
+        chipAdapter.setCategories(cats);
+        chipAdapter.selectByName(curCategory);
     }
 
     private void reload() {
@@ -227,6 +261,7 @@ public class HomeFragment extends Fragment {
                     loading = false;
                     page = reqPage;
                     pagecount = Math.max(1, r.pagecount);
+                    if (r.list != null) lastRawList = r.list;
                     List<CardItem> cards = new ArrayList<>();
                     if (r.list != null) {
                         for (Models.VideoSummary v : r.list) cards.add(toCard(v));
@@ -236,6 +271,8 @@ public class HomeFragment extends Fragment {
                     } else {
                         videoAdapter.addItems(cards);
                     }
+                    // 分类接口失败时，用首页数据兜底生成分类
+                    if (catFailed && reqPage == 1) buildCatsFromItems();
                     emptyView.setVisibility(videoAdapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
                 }
                 @Override public void onErr(String m) {
@@ -253,7 +290,8 @@ public class HomeFragment extends Fragment {
         CardItem c = new CardItem();
         c.kind = CardItem.KIND_HOME;
         c.slug = v.source;
-        c.sourceName = v.sourceName != null && !v.sourceName.isEmpty() ? v.sourceName : v.source;
+        String name = v.sourceName != null && !v.sourceName.isEmpty() ? v.sourceName : null;
+        c.sourceName = name != null ? name : com.lateshow.app.util.SourceCache.nameOf(v.source);
         c.vodId = v.vodId;
         c.title = v.vodName;
         c.pic = v.vodPic;

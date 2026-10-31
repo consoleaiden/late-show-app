@@ -47,7 +47,7 @@
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:background="@drawable/bg_circle"
-                android:src="@drawable/ic_settings"
+                android:src="@drawable/ic_theme"
                 android:contentDescription="主题" />
         </LinearLayout>
 
@@ -123,12 +123,12 @@
 
             <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="运行概览" />
 
-            <GridLayout
+            <LinearLayout
                 android:id="@+id/statsGrid"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:columnCount="2" />
+                android:orientation="vertical" />
         </LinearLayout>
 
         <!-- ③ 同步操作 -->

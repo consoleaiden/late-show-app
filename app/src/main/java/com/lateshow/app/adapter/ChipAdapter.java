@@ -39,6 +39,21 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
         notifyDataSetChanged();
     }
 
+    /** 按分类名恢复选中态（找不到则保持「全部」） */
+    public void selectByName(String name) {
+        if (name == null) return;
+        for (int i = 1; i < items.size(); i++) {
+            Models.Category c = items.get(i);
+            if (c != null && name.equals(c.typeName)) {
+                int old = selected;
+                selected = i;
+                notifyItemChanged(old);
+                notifyItemChanged(selected);
+                return;
+            }
+        }
+    }
+
     @NonNull
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
