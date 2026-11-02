@@ -1,7 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-fullscreen-expand -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="1024" android:viewportHeight="1024">
-    <path android:fillColor="#FF000000" android:pathData="M94.1 317.8Q109 317.8 119.8 306.4Q130.7 295 130.7 281.2V124.6L345.6 339.5Q355.9 348.7 372.5 348.7Q389.1 348.7 399.9 338.4Q410.8 328.1 410.8 313.8Q410.8 299.5 399.4 288.1L184.4 73.2H338.8Q352.5 73.2 363.9 62.3Q375.3 51.4 375.3 37.2Q375.3 22.9 363.9 11.4Q352.5 0 338.8 0H94.1Q85 0 82.7 2.3Q69 9.1 59.8 22.9Q57.5 27.4 57.5 36.6V281.2Q57.5 295 69 306.4Q80.4 317.8 94.1 317.8ZM924.1 585.3Q909.2 585.3 898.4 596.8Q887.5 608.2 887.5 621.9V778.5L657.7 548.7Q647.4 538.5 632.6 538.5Q617.7 538.5 606.8 549.3Q596 560.2 596 575Q596 589.9 606.3 600.2L836.1 830H679.4Q665.7 830 654.3 840.8Q642.9 851.7 642.9 866Q642.9 880.3 654.3 891.7Q665.7 903.1 679.4 903.1H924.1Q933.2 903.1 935.5 900.9Q952.7 891.7 955 880.3Q958.4 875.7 958.4 868.8V621.9Q959.5 608.2 949.2 596.8Q939 585.3 924.1 585.3ZM360.5 546.5 130.7 776.2V621.9Q130.7 608.2 119.8 596.8Q109 585.3 94.7 585.3Q80.4 585.3 69 596.8Q57.5 608.2 57.5 621.9V866.6Q57.5 875.7 59.8 878Q69 895.1 80.4 897.4Q85 900.9 91.8 900.9H336.5Q350.2 900.9 361.6 889.4Q373.1 878 373.1 863.7Q373.1 849.4 361.6 838.6Q350.2 827.7 336.5 827.7H179.9L409.6 597.9Q419.9 586.5 419.9 572.2Q419.9 557.9 409.1 547Q398.2 536.2 385.1 536.7Q371.9 537.3 360.5 546.5ZM958.4 25.2Q958.4 24 958.4 22.9V25.2Q950.4 9.1 937.8 5.7Q933.2 2.3 926.4 2.3H679.4Q665.7 2.3 654.3 13.7Q642.9 25.2 642.9 39.4Q642.9 53.7 654.3 64.6Q665.7 75.5 679.4 75.5H836.1L621.1 290.4Q610.8 301.8 610.8 316.1Q610.8 330.4 621.1 341.3Q631.4 352.1 648.6 352.1Q665.7 352.1 674.9 341.8L889.8 126.9V281.2Q889.8 295 900.7 306.4Q911.5 317.8 926.4 317.8Q941.2 317.8 952.1 306.4Q963 295 963 281.2V36.6L960.7 30.9Q959.5 26.3 958.4 25.2Z"/>
-</vector>
+<!-- PotLab 风格动态图标：全屏四角外扩（库内无 Fullscreen，按同风格补齐） -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="24dp"
+            android:height="24dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <group
+                android:name="gScale"
+                android:pivotX="12"
+                android:pivotY="12">
+                <path
+                    android:strokeColor="@color/t1"
+                    android:strokeWidth="1.5"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round"
+                    android:pathData="M9,4.75H6A1.25,1.25 0 0 0 4.75,6v3M15,19.25h3A1.25,1.25 0 0 0 19.25,18v-3" />
+                <path
+                    android:strokeColor="@color/acc"
+                    android:strokeWidth="1.5"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round"
+                    android:pathData="M15,4.75h3A1.25,1.25 0 0 1 19.25,6v3M9,19.25H6A1.25,1.25 0 0 1 4.75,18v-3" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="gScale">
+        <aapt:attr name="android:animation">
+            <set xmlns:android="http://schemas.android.com/apk/res/android">
+                <objectAnimator
+                    android:duration="900"
+                    android:interpolator="@android:interpolator/accelerate_decelerate"
+                    android:propertyName="scaleX"
+                    android:repeatCount="infinite"
+                    android:repeatMode="reverse"
+                    android:valueFrom="1"
+                    android:valueTo="1.08" />
+                <objectAnimator
+                    android:duration="900"
+                    android:interpolator="@android:interpolator/accelerate_decelerate"
+                    android:propertyName="scaleY"
+                    android:repeatCount="infinite"
+                    android:repeatMode="reverse"
+                    android:valueFrom="1"
+                    android:valueTo="1.08" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>

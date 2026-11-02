@@ -104,6 +104,7 @@ public class SettingsFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
+        com.lateshow.app.util.Avd.startTree(v);
         setupAccordion(v);
 
         inputBaseUrl = v.findViewById(R.id.inputBaseUrl);

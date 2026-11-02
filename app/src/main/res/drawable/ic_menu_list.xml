@@ -1,7 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-menu -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="1024" android:viewportHeight="1024">
-    <path android:fillColor="#FF000000" android:pathData="M119.3 73.2ZM46.1 73.2Q46.1 104 67.2 125.2Q88.4 146.3 118.7 146.3Q149 146.3 170.7 125.2Q192.4 104 192.4 73.7Q192.4 43.4 170.7 21.7Q149 0 118.7 0Q88.4 0 67.2 21.7Q46.1 43.4 46.1 73.2ZM119.3 415ZM46.1 415Q46.1 445.9 67.2 467Q88.4 488.2 118.7 488.2Q149 488.2 170.7 467Q192.4 445.9 192.4 415Q192.4 384.1 170.7 363Q149 341.8 118.7 341.8Q88.4 341.8 67.2 363Q46.1 384.1 46.1 415ZM119.3 756.8ZM46.1 756.8Q46.1 786.5 67.2 808.3Q88.4 830 118.7 830Q149 830 170.7 808.3Q192.4 786.5 192.4 756.2Q192.4 725.9 170.7 704.8Q149 683.6 118.7 683.6Q88.4 683.6 67.2 704.8Q46.1 725.9 46.1 756.8ZM948.1 720.2H338.8Q323.9 720.2 313 731.1Q302.2 742 302.2 756.2Q302.2 770.5 313 782Q323.9 793.4 338.8 793.4H948.1Q963 793.4 973.8 782Q984.7 770.5 984.7 756.2Q984.7 742 973.8 731.1Q963 720.2 948.1 720.2ZM338.8 109.7H948.1Q963 109.7 973.8 98.9Q984.7 88 984.7 73.7Q984.7 59.4 973.8 48Q963 36.6 948.1 36.6H338.8Q323.9 36.6 313 48Q302.2 59.4 302.2 73.7Q302.2 88 313 98.9Q323.9 109.7 338.8 109.7ZM948.1 378.4H338.8Q323.9 378.4 313 389.3Q302.2 400.1 302.2 415Q302.2 429.9 313 440.7Q323.9 451.6 338.8 451.6H948.1Q963 451.6 973.8 440.7Q984.7 429.9 984.7 415Q984.7 400.1 973.8 389.3Q963 378.4 948.1 378.4Z"/>
-</vector>
+<!-- PotLab 风格动态图标：源站菜单，中线左右轻移（库内无 Menu，按同风格补齐） -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="24dp"
+            android:height="24dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <path
+                android:strokeColor="@color/t1"
+                android:strokeWidth="1.8"
+                android:strokeLineCap="round"
+                android:pathData="M4.75,7.1H19.25" />
+            <group android:name="gMid">
+                <path
+                    android:strokeColor="@color/acc"
+                    android:strokeWidth="1.8"
+                    android:strokeLineCap="round"
+                    android:pathData="M4.75,12H13.75" />
+            </group>
+            <path
+                android:strokeColor="@color/t1"
+                android:strokeWidth="1.8"
+                android:strokeLineCap="round"
+                android:pathData="M4.75,16.9H19.25" />
+        </vector>
+    </aapt:attr>
+    <target android:name="gMid">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="1000"
+                android:interpolator="@android:interpolator/decelerate_quad"
+                android:propertyName="translationX"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:valueFrom="0"
+                android:valueTo="2.6" />
+        </aapt:attr>
+    </target>
+</animated-vector>

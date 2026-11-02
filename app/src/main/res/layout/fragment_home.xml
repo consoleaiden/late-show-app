@@ -29,7 +29,6 @@
                 android:layout_height="17dp"
                 android:layout_gravity="center"
                 app:srcCompat="@drawable/ic_menu_list"
-                app:tint="@color/t3"
                 android:contentDescription="源站菜单" />
         </FrameLayout>
 

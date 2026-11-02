@@ -81,6 +81,7 @@ public class PlayActivity extends AppCompatActivity {
         applyTheme();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_play);
+        com.lateshow.app.util.Avd.startTree(findViewById(android.R.id.content));
 
         Intent it = getIntent();
         slug = it.getStringExtra("slug");
@@ -405,6 +406,13 @@ public class PlayActivity extends AppCompatActivity {
         curUrl = url;
         posterBox.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
+        // 海报隐藏后，徽章/标题/元信息列与下方简介左对齐（去掉原有 14dp 间距）
+        View infoCol = findViewById(R.id.infoCol);
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) infoCol.getLayoutParams();
+        if (lp.leftMargin != 0) {
+            lp.leftMargin = 0;
+            infoCol.requestLayout();
+        }
         if (player == null) {
             DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                     .setAllowCrossProtocolRedirects(true)

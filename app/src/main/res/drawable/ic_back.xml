@@ -1,7 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-arrow-left-bold -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="1024" android:viewportHeight="1024">
-    <path android:fillColor="#FF000000" android:pathData="M362.8 438.6 760.6 85.4Q775.5 71.6 776.6 51.6Q777.8 31.6 765.2 16.8Q752.6 1.9 732 0.2Q711.5 -1.5 696.6 12.2L257.6 402Q240.4 415.8 240.4 438.6Q240.4 461.5 257.6 475.2L696.6 865Q712.6 877.6 728.6 877.6Q751.5 877.6 765.2 861.6Q778.9 845.6 777.8 825Q776.6 804.4 760.6 791.9Z"/>
-</vector>
+<!-- PotLab Icons（potlabicons.com）风格动态图标：返回箭头左右轻滑 -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="24dp"
+            android:height="24dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <group android:name="gSlide">
+                <path
+                    android:fillColor="@color/t1"
+                    android:fillType="evenOdd"
+                    android:pathData="M11.891,7.166a0.714,0.714 0 0 0-1.006,0.091l-3.564,4.277a0.71,0.71 0 0 0-0.102,0.777a0.71,0.71 0 0 0 0.102,0.155l3.564,4.277a0.714,0.714 0 0 0 1.098-0.915L9.417,12.75h7.731a0.75,0.75 0 1 0 0-1.5h-7.73l2.565,-3.078a0.714,0.714 0 0 0-0.092,-1.006z" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="gSlide">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="1000"
+                android:interpolator="@android:interpolator/decelerate_quad"
+                android:propertyName="translationX"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:valueFrom="0"
+                android:valueTo="2" />
+        </aapt:attr>
+    </target>
+</animated-vector>

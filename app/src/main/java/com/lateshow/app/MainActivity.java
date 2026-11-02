@@ -73,6 +73,9 @@ public class MainActivity extends AppCompatActivity {
             inds[i].setScaleX(0.2f);
         }
 
+        // 底部导航动态图标（AVD 不自动播放，需手动启动）
+        com.lateshow.app.util.Avd.startTree(findViewById(R.id.tabbar));
+
         FragmentManager fm = getSupportFragmentManager();
         homeFragment = (HomeFragment) fm.findFragmentByTag(TAGS[0]);
         favFragment = (FavFragment) fm.findFragmentByTag(TAGS[1]);

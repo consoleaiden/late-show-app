@@ -1,7 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-favorite-filling -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="1024" android:viewportHeight="1024">
-    <path android:fillColor="#FF000000" android:pathData="M455.4 36.3 336.5 279.8 67.8 318.6Q46.1 323.2 33.5 335.8L31.2 338.1Q16.4 357.5 16.9 381.5Q17.5 405.5 35.8 421.5L231.3 611.3L184.4 880Q181 899.4 192.4 918.8L194.7 921.1Q207.3 941.7 230.2 948Q253 954.3 274.7 942.8L516 815.9L758.3 942.8Q766.3 948.5 776.6 949.7Q782.3 950.8 797.2 950.8H801.8Q825.8 945.1 838.9 925.1Q852.1 905.1 848.6 880L801.8 611.3L997.3 421.5Q1009.8 407.8 1014.4 387.2V382.7Q1015.5 358.6 1000.7 339.2Q985.8 319.8 963 316.3L694.3 277.5L575.4 32.8Q565.1 28.3 551.4 16.8Q541.1 10 535.4 6.5Q513.7 -4.9 490.2 3.7Q466.8 12.2 455.4 36.3Z"/>
-</vector>
+<!-- PotLab Icons Bookmark：书签 + 加号闪烁（accent 竖线呼吸） -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="24dp"
+            android:height="24dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <path
+                android:strokeColor="@color/t1"
+                android:strokeWidth="1.5"
+                android:pathData="M7,5.61a1,1 0 0 1 1,-1h8a1,1 0 0 1 1,1v12.77a0.5,0.5 0 0 1-0.803,0.398l-3.603,-2.745a1,1 0 0 0-1.214,0.002l-3.576,2.739A0.5,0.5 0 0 1 7,18.377V5.61z" />
+            <path
+                android:strokeColor="@color/acc"
+                android:strokeWidth="1.5"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:pathData="M10.335,9h3.33" />
+            <group android:name="gAdd">
+                <path
+                    android:strokeColor="@color/acc"
+                    android:strokeWidth="1.5"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round"
+                    android:pathData="M12,7.335v3.33" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="gAdd">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="2000"
+                android:interpolator="@android:interpolator/accelerate_decelerate"
+                android:propertyName="alpha"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:valueFrom="1"
+                android:valueTo="0" />
+        </aapt:attr>
+    </target>
+</animated-vector>

@@ -56,6 +56,7 @@ public class PlayerActivity extends AppCompatActivity {
                 : AppCompatDelegate.MODE_NIGHT_YES);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_player);
+        com.lateshow.app.util.Avd.startTree(findViewById(android.R.id.content));
 
         Intent it = getIntent();
         String url = it.getStringExtra("url");

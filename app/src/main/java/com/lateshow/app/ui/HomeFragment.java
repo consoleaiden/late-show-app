@@ -68,6 +68,7 @@ public class HomeFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
+        com.lateshow.app.util.Avd.startTree(v);
         btnSource = v.findViewById(R.id.btnSource);
         btnSourceIcon = v.findViewById(R.id.btnSourceIcon);
         inputSearch = v.findViewById(R.id.inputSearch);

@@ -37,6 +37,7 @@ public class FavFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
+        com.lateshow.app.util.Avd.startTree(v);
         subTitle = v.findViewById(R.id.subTitle);
         metaInfo = v.findViewById(R.id.metaInfo);
         btnClear = v.findViewById(R.id.btnClear);

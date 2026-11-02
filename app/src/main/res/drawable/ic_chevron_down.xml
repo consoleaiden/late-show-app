@@ -1,7 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-arrow-down-bold -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="1024" android:viewportHeight="1024">
-    <path android:fillColor="#FF000000" android:pathData="M958.4 13.7Q943.5 0 924.1 0Q904.7 0 889.8 13.7L509.1 394.4L128.4 13.7Q113.5 0 94.1 0Q74.7 0 60.4 14.3Q46.1 28.6 46.1 48Q46.1 67.5 59.8 82.3L474.8 497.3Q489.7 512.2 509.1 512.2Q528.5 512.2 543.4 497.3L958.4 82.3Q972.1 67.5 972.1 48Q972.1 28.6 958.4 13.7Z"/>
-</vector>
+<!-- PotLab 风格动态图标：下拉箭头上下轻滑 -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="24dp"
+            android:height="24dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <group android:name="gSlide">
+                <path
+                    android:fillColor="@color/t1"
+                    android:pathData="M6.832,10.516a0.857,0.857 0 1 1 1.097-1.317l4.594,3.828L17.117,9.2a0.857,0.857 0 0 1 1.098,1.317l-5.132,4.276a0.853,0.853 0 0 1-0.933,0.123a0.85,0.85 0 0 1-0.187-0.123z" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="gSlide">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="1000"
+                android:interpolator="@android:interpolator/decelerate_quad"
+                android:propertyName="translationY"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:valueFrom="0"
+                android:valueTo="2" />
+        </aapt:attr>
+    </target>
+</animated-vector>

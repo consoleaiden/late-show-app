@@ -64,6 +64,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
     @Override
     public void onBindViewHolder(@NonNull VH h, int pos) {
         final CardItem it = items.get(pos);
+        com.lateshow.app.util.Avd.startTree(h.itemView);
         h.title.setText(it.title);
 
         // 遮罩显隐

@@ -1,7 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-search -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="1024" android:viewportHeight="1024">
-    <path android:fillColor="#FF000000" android:pathData="M1004.1 919.2 786.9 701.9Q834.9 647.1 861.2 575.6Q887.5 504.2 887.5 426.4Q887.5 312.1 828.1 211.5Q772 115.5 674.9 58.3Q575.4 0 460.5 0Q345.6 0 246.2 59.4Q149 116.6 91.8 213.8Q33.5 314.4 33.5 429.3Q33.5 544.2 91.8 643.6Q149 740.8 246.2 796.8Q345.6 856.3 459.9 856.3Q536.5 856.3 608.6 828.8Q677.2 803.7 735.5 755.7L952.7 972.9Q963 983.2 980.1 983.2Q997.3 983.2 1006.4 972.9Q1014.4 961.4 1013.8 946Q1013.3 930.6 1004.1 919.2ZM459.9 783.1Q363.9 783.1 281.6 733.9Q201.6 687.1 154.7 607.1Q106.7 524.7 106.7 428.7Q106.7 332.7 154.7 250.4Q201.6 170.3 281.6 123.5Q363.9 75.5 459.9 75.5Q556 75.5 638.3 123.5Q718.3 170.3 765.2 250.4Q814.3 332.7 814.3 428.7Q814.3 524.7 765.2 607.1Q718.3 687.1 638.3 733.9Q556 783.1 459.9 783.1Z"/>
-</vector>
+<!-- PotLab Icons Search：放大镜左右摇摆 -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="20dp"
+            android:height="20dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <group
+                android:name="gFlip"
+                android:pivotX="12"
+                android:pivotY="12">
+                <path
+                    android:fillColor="@color/t1"
+                    android:fillType="evenOdd"
+                    android:pathData="M5.71,11.025a5.25,5.25 0 1 0 10.5,0a5.25,5.25 0 1 0-10.5,0zM10.96,4.025a7,7 0 1 0 0,14a7,7 0 1 0 0,-14z" />
+                <path
+                    android:strokeColor="@color/acc"
+                    android:strokeWidth="1.839"
+                    android:pathData="M16.79,16.73L19.39,19.33" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="gFlip">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="1500"
+                android:interpolator="@android:interpolator/anticipate_overshoot"
+                android:propertyName="rotation"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:valueFrom="-16"
+                android:valueTo="16" />
+        </aapt:attr>
+    </target>
+</animated-vector>
