@@ -192,7 +192,7 @@ public class PlayActivity extends AppCompatActivity {
     }
 
     private void loadDetail() {
-        VodSyncApi.get().get("/api/v1/videos/" + slug + "/" + vodId, null, Models.DetailResp.class,
+        com.lateshow.app.api.Catalogs.get().detail(slug, vodId,
             new VodSyncApi.ApiCb<Models.DetailResp>() {
                 @Override public void onOk(Models.DetailResp r) {
                     if (isDestroyed()) return;

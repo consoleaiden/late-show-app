@@ -91,6 +91,17 @@ public final class PrefStore {
         return s;
     }
 
+    // ---------- 数据源模式 ----------
+
+    /** 数据源模式：0=NAS 同步库（默认），1=资源站直连（NAS 关机时的兜底） */
+    public int dataMode() {
+        return sp.getInt("data_mode", 0) == 1 ? 1 : 0;
+    }
+
+    public void setDataMode(int mode) {
+        sp.edit().putInt("data_mode", mode == 1 ? 1 : 0).apply();
+    }
+
     // ---------- API Token（服务端 v1.5.0+ 访问控制） ----------
 
     /** API Token：Keystore 加密后存本地；空串表示未填写 */

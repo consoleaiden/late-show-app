@@ -237,4 +237,9 @@ public class MainActivity extends AppCompatActivity {
     public void goHome() {
         switchTab(homeFragment, 0);
     }
+
+    /** 设置页切换数据源后调用：首页清空筛选并重新加载 */
+    public void notifyDataSourceChanged() {
+        if (homeFragment != null) homeFragment.onDataSourceChanged();
+    }
 }

@@ -53,7 +53,73 @@
                 android:contentDescription="主题" />
         </LinearLayout>
 
-        <!-- ① 播放源与鉴权（手风琴面板） -->
+        <!-- ① 数据源模式：NAS 同步库 / 资源站直连（NAS 关机时的兜底） -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="数据源模式" />
+
+                <TextView style="@style/MetaLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="8dp" android:text="MODE" />
+
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/tvModeState"
+                    style="@style/MetaLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal"
+                android:background="@drawable/bg_capsule"
+                android:padding="3dp">
+
+                <TextView
+                    android:id="@+id/segModeSync"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="30dp"
+                    android:gravity="center"
+                    android:text="NAS 同步库"
+                    android:textSize="12sp"
+                    android:textColor="@color/accInk"
+                    android:background="@drawable/bg_seg_on" />
+
+                <TextView
+                    android:id="@+id/segModeStatic"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="30dp"
+                    android:gravity="center"
+                    android:text="资源站直连"
+                    android:textSize="12sp"
+                    android:textColor="@color/t2" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvModeDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:textSize="10.5sp"
+                android:textColor="@color/t2"
+                android:lineSpacingMultiplier="1.6"
+                android:text="NAS 同步库：走自己的 VodSync 聚合库，速度快、数据全，需要 NAS 在线。\n资源站直连：从公开资源站目录直接取片，NAS 关机也能正常浏览与播放。" />
+        </LinearLayout>
+
+        <!-- ② 播放源与鉴权（手风琴面板） -->
         <LinearLayout
             style="@style/SettingsCard"
             android:orientation="vertical">
@@ -343,8 +409,9 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ④ 同步控制台（手风琴面板：运行概览 + 同步操作 + 暂停 + 源站状态 + 日志） -->
+        <!-- ④ 同步控制台（手风琴面板：运行概览 + 同步操作 + 暂停 + 源站状态 + 日志）——仅 NAS 模式可见 -->
         <LinearLayout
+            android:id="@+id/cardSync"
             style="@style/SettingsCard"
             android:orientation="vertical">
 

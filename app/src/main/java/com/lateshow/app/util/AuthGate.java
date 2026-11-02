@@ -28,9 +28,10 @@ public final class AuthGate {
 
     private AuthGate() { }
 
-    /** 启动时探测：服务端开了鉴权且本地没 Token → 引导填写（不阻塞进入 App） */
+    /** 启动时探测：服务端开了鉴权且本地没 Token → 引导填写（不阻塞进入 App；直连模式无鉴权，跳过） */
     public static void checkStartup(final Activity act) {
         if (act == null || act.isFinishing()) return;
+        if (com.lateshow.app.api.Catalogs.isStatic()) return;
         VodSyncApi.get().authState(new VodSyncApi.ApiCb<Models.AuthState>() {
             @Override public void onOk(Models.AuthState s) {
                 if (s == null || act.isFinishing()) return;

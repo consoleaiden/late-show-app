@@ -173,9 +173,9 @@ public class HomeFragment extends Fragment {
         com.lateshow.app.util.LottieIcon.tint(btnSourceIcon, tint);
     }
 
-    /** 轻量健康探测（GET /healthz），决定顶部圆环颜色 */
+    /** 轻量健康探测（NAS 模式探 /healthz，直连模式探资源站目录），决定顶部圆环颜色 */
     private void pingHealth() {
-        VodSyncApi.get().healthz(new VodSyncApi.ApiCb<Long>() {
+        com.lateshow.app.api.Catalogs.get().ping(new VodSyncApi.ApiCb<Long>() {
             @Override public void onOk(Long ms) {
                 if (!isAdded()) return;
                 setSourceHealth(true);
@@ -191,20 +191,41 @@ public class HomeFragment extends Fragment {
     public void onResume() {
         super.onResume();
         pingHealth();
+        // 设置页切换过数据源：重新拉源站与列表
+        if (com.lateshow.app.api.Catalogs.consumeDirty()) onDataSourceChanged();
     }
 
-    /** 源站列表：菜单数据 + 元信息（接口：GET /api/v1/sources）——优先用缓存，过期再拉 */
+    /** 数据源模式切换后调用：重置筛选条件并重载（由设置页 / MainActivity 触发） */
+    public void onDataSourceChanged() {
+        curSlug = PrefStore.get().currentSourceSlug();
+        curName = PrefStore.get().currentSourceName();
+        curCategory = null;
+        keyword = "";
+        if (inputSearch != null) inputSearch.setText("");
+        if (getView() == null) return;
+        setSourceHealth(false);
+        refreshSources();
+        reload();
+    }
+
+    /** 源站列表缓存 key：带模式前缀，两种模式不互相命中 */
+    private String ckSources() {
+        return CK_SOURCES + "|" + com.lateshow.app.api.Catalogs.cacheTag();
+    }
+
+    /** 源站列表：菜单数据 + 元信息——优先用缓存，过期再拉（数据源由 Catalog 决定） */
     private void refreshSources() {
-        Models.SyncSourcesResp cached = ApiCache.get(CK_SOURCES, Models.SyncSourcesResp.class, TTL_LIST);
+        final String ck = ckSources();
+        Models.SyncSourcesResp cached = ApiCache.get(ck, Models.SyncSourcesResp.class, TTL_LIST);
         if (cached != null && cached.list != null && !cached.list.isEmpty()) {
             applySources(cached, true);
             return; // 缓存新鲜，不再发请求
         }
-        VodSyncApi.get().get("/api/v1/sources", null, Models.SyncSourcesResp.class,
+        com.lateshow.app.api.Catalogs.get().sources(
             new VodSyncApi.ApiCb<Models.SyncSourcesResp>() {
                 @Override public void onOk(Models.SyncSourcesResp r) {
                     if (!isAdded()) return;
-                    ApiCache.put(CK_SOURCES, r);
+                    ApiCache.put(ck, r);
                     applySources(r, false);
                 }
                 @Override public void onErr(String m) {
@@ -216,18 +237,24 @@ public class HomeFragment extends Fragment {
                         return;
                     }
                     // 网络失败：退回本地缓存的源站列表，菜单仍可用
-                    Models.SyncSourcesResp stale = ApiCache.getStale(CK_SOURCES, Models.SyncSourcesResp.class);
+                    Models.SyncSourcesResp stale = ApiCache.getStale(ck, Models.SyncSourcesResp.class);
                     if (stale != null && stale.list != null && !stale.list.isEmpty()) {
                         applySources(stale, true);
                         return;
                     }
-                    metaCount.setText("源站加载失败：" + m);
+                    metaCount.setText(nasDownHint("源站加载失败：" + m));
                     if (pendingMenu) {
                         pendingMenu = false;
                         android.widget.Toast.makeText(getContext(), "源站列表加载失败：" + m, android.widget.Toast.LENGTH_SHORT).show();
                     }
                 }
             });
+    }
+
+    /** NAS 模式失败时提示可以切到直连模式；直连模式失败则原样返回 */
+    private static String nasDownHint(String msg) {
+        if (com.lateshow.app.api.Catalogs.isStatic()) return msg;
+        return msg + "\n可在设置页切换到「资源站直连」";
     }
 
     /** 渲染源站列表与统计信息；fromCache=true 表示数据来自本地缓存 */
@@ -244,7 +271,7 @@ public class HomeFragment extends Fragment {
         for (Models.SyncSource s : sources) total += s.totalVideos;
         metaCount.setText("已收录 " + TimeUtil.compact((int) total) + " 部 · " + sources.size() + " 源");
         if (fromCache) {
-            long age = ApiCache.ageMs(CK_SOURCES);
+            long age = ApiCache.ageMs(ckSources());
             metaSync.setText("● 缓存数据" + (age >= 0 ? " · " + ageText(age) : ""));
         } else {
             metaSync.setText("● " + TimeUtil.nowHm() + " 同步");
@@ -342,15 +369,13 @@ public class HomeFragment extends Fragment {
 
     private void refreshCategories() {
         catFailed = false;
-        final String ck = "cats|" + curSlug;
+        final String ck = "cats|" + com.lateshow.app.api.Catalogs.cacheTag() + "|" + curSlug;
         Models.CategoryResp cached = ApiCache.get(ck, Models.CategoryResp.class, TTL_CAT);
         if (cached != null && cached.list != null && !cached.list.isEmpty()) {
             applyCategories(cached.list);
             return; // 6 小时内分类直接复用缓存，不发请求
         }
-        Map<String, String> p = new HashMap<>();
-        if (!curSlug.isEmpty()) p.put("source", curSlug);
-        VodSyncApi.get().get("/api/v1/categories", p, Models.CategoryResp.class,
+        com.lateshow.app.api.Catalogs.get().categories(curSlug,
             new VodSyncApi.ApiCb<Models.CategoryResp>() {
                 @Override public void onOk(Models.CategoryResp r) {
                     if (!isAdded()) return;
@@ -418,22 +443,10 @@ public class HomeFragment extends Fragment {
 
     private void loadPage(int p) {
         loading = true;
-        final boolean searching = !keyword.isEmpty();
-        Map<String, String> params = new HashMap<>();
-        params.put("page", String.valueOf(p));
-        params.put("page_size", "18");
-        if (!curSlug.isEmpty()) params.put("source", curSlug);
-        if (curCategory != null) params.put("type_name", curCategory);
-
-        String path;
-        if (searching) {
-            params.put("wd", keyword);
-            path = "/api/v1/search";
-        } else {
-            path = "/api/v1/videos";
-        }
         final int reqPage = p;
         final String ck = listCacheKey(p);
+        final String kw = keyword;
+        final String type = curCategory;
 
         // 第一页优先用缓存（TTL 内直接渲染，不发请求）
         if (reqPage == 1) {
@@ -445,7 +458,7 @@ public class HomeFragment extends Fragment {
             }
         }
 
-        VodSyncApi.get().get(path, params, Models.VideoListResp.class,
+        com.lateshow.app.api.Catalogs.get().videos(p, 18, curSlug, type, kw,
             new VodSyncApi.ApiCb<Models.VideoListResp>() {
                 @Override public void onOk(Models.VideoListResp r) {
                     if (!isAdded()) return;
@@ -469,15 +482,17 @@ public class HomeFragment extends Fragment {
                             return;
                         }
                         emptyView.setVisibility(View.VISIBLE);
-                        emptyView.setText("加载失败：" + m + "\n请在设置页检查播放源地址");
+                        emptyView.setText(nasDownHint("加载失败：" + m)
+                                + "\n直连模式不用 NAS，换源站可重试");
                     }
                 }
             });
     }
 
-    /** 列表缓存 key：源站 + 分类 + 关键词 + 页码（第 1 页才落盘） */
+    /** 列表缓存 key：模式 + 源站 + 分类 + 关键词 + 页码（第 1 页才落盘） */
     private String listCacheKey(int p) {
-        return "videos|" + curSlug + "|" + (curCategory == null ? "" : curCategory)
+        return "videos|" + com.lateshow.app.api.Catalogs.cacheTag() + "|" + curSlug
+                + "|" + (curCategory == null ? "" : curCategory)
                 + "|" + keyword + "|" + p;
     }
 

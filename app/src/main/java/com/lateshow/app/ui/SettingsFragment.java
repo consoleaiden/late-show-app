@@ -42,6 +42,7 @@ public class SettingsFragment extends Fragment {
 
     private EditText inputBaseUrl, inputToken;
     private TextView srcStatus, btnSave, btnTest, pauseWarn, autoCount, selCount, tvVersion, btnCheckUpdate, tvCacheInfo;
+    private TextView segModeSync, segModeStatic, tvModeState;
     private LinearLayout statsGrid;
     private LinearLayout pauseRows;
     private CheckBox chkAll;
@@ -130,6 +131,14 @@ public class SettingsFragment extends Fragment {
 
         inputBaseUrl.setText(PrefStore.get().baseUrl());
         inputToken.setText(PrefStore.get().apiToken());
+
+        // 数据源模式：NAS 同步库 / 资源站直连（NAS 关机时兜底）
+        segModeSync = v.findViewById(R.id.segModeSync);
+        segModeStatic = v.findViewById(R.id.segModeStatic);
+        tvModeState = v.findViewById(R.id.tvModeState);
+        segModeSync.setOnClickListener(x -> switchDataSource(com.lateshow.app.api.Catalog.MODE_SYNC));
+        segModeStatic.setOnClickListener(x -> switchDataSource(com.lateshow.app.api.Catalog.MODE_STATIC));
+        renderModeSwitch();
 
         // 播放偏好：跳过片头/片尾（输入即保存，0 = 不跳过）
         EditText inputSkipIntro = v.findViewById(R.id.inputSkipIntro);
@@ -504,9 +513,10 @@ public class SettingsFragment extends Fragment {
         }, 1800);
     }
 
-    /** 拉取 stats / sources / pause / logs */
+    /** 拉取 stats / sources / pause / logs（NAS 专属，直连模式跳过） */
     private void refreshConsole(boolean alsoStats) {
         if (!isAdded()) return;
+        if (com.lateshow.app.api.Catalogs.isStatic()) return;
         VodSyncApi.get().get("/api/v1/pause", null, Models.PauseResp.class,
             new VodSyncApi.ApiCb<Models.PauseResp>() {
                 @Override public void onOk(Models.PauseResp r) {
@@ -609,6 +619,39 @@ public class SettingsFragment extends Fragment {
         if (isAdded()) Toast.makeText(getContext(), s, Toast.LENGTH_SHORT).show();
     }
 
+    // ---------- 数据源模式 ----------
+
+    /** 渲染模式选中态；直连模式下隐藏 NAS 专属的同步控制台 */
+    private void renderModeSwitch() {
+        View root = getView();
+        if (root == null || segModeSync == null || !isAdded()) return;
+        boolean st = com.lateshow.app.api.Catalogs.isStatic();
+        segModeSync.setBackgroundResource(st ? R.drawable.bg_seg_off : R.drawable.bg_seg_on);
+        segModeStatic.setBackgroundResource(st ? R.drawable.bg_seg_on : R.drawable.bg_seg_off);
+        segModeSync.setTextColor(getColor(st ? R.color.t2 : R.color.accInk));
+        segModeStatic.setTextColor(getColor(st ? R.color.accInk : R.color.t2));
+        if (tvModeState != null) tvModeState.setText(st ? "直连 · 免 NAS" : "NAS · 需在线");
+        View syncCard = root.findViewById(R.id.cardSync);
+        if (syncCard != null) syncCard.setVisibility(st ? View.GONE : View.VISIBLE);
+    }
+
+    /** 切换数据源：清空接口缓存（两种模式数据不混用）→ 通知首页重载 */
+    private void switchDataSource(int mode) {
+        if (PrefStore.get().dataMode() == mode) return;
+        PrefStore.get().setDataMode(mode);
+        // 两种模式的 slug 体系不同（NAS slug vs 站点域名），切模式后回到「全部源站」
+        PrefStore.get().setCurrentSource("", "全部源站");
+        com.lateshow.app.api.Catalogs.markDirty();
+        com.lateshow.app.util.ApiCache.clear();
+        renderModeSwitch();
+        toast(mode == com.lateshow.app.api.Catalog.MODE_STATIC
+                ? "已切到资源站直连 · NAS 关机也能用"
+                : "已切回 NAS 同步库");
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).notifyDataSourceChanged();
+        }
+    }
+
     /** 跳过秒数输入框解析：空/非法按 0（不跳过），上限 600 由 PrefStore 兜底 */
     private static int parseIntSafe(String s) {
         try {
@@ -641,6 +684,7 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
+        renderModeSwitch();
         polling = true;
         handler.postDelayed(pollTask, 5000);
     }
