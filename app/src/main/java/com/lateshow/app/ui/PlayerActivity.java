@@ -129,6 +129,16 @@ public class PlayerActivity extends AppCompatActivity {
 
         player.addListener(new Player.Listener() {
             @Override
+            public void onVideoSizeChanged(androidx.media3.common.VideoSize vs) {
+                // 跟随视频本身方向：横屏视频→横屏，竖屏视频→竖屏（未知尺寸保持不变）
+                if (vs.width == 0 || vs.height == 0) return;
+                int want = vs.width >= vs.height
+                        ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT;
+                if (want != getRequestedOrientation()) setRequestedOrientation(want);
+            }
+
+            @Override
             public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_READY) {
                     long dur = player.getDuration() / 1000;
