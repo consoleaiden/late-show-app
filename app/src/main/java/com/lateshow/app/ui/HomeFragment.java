@@ -247,6 +247,8 @@ public class HomeFragment extends Fragment {
             }
             curSlug = slug;
             curName = name;
+            // 切换源站后原分类大概率不存在，重置为「全部」，避免加载失败
+            curCategory = null;
             PrefStore.get().setCurrentSource(curSlug, curName);
             android.widget.Toast.makeText(getContext(), "源站：" + curName,
                     android.widget.Toast.LENGTH_SHORT).show();
@@ -269,6 +271,14 @@ public class HomeFragment extends Fragment {
                 @Override public void onOk(Models.CategoryResp r) {
                     if (!isAdded()) return;
                     if (r.list != null && !r.list.isEmpty()) {
+                        // 当前分类在新源站的分类里不存在 → 自动回「全部」
+                        if (curCategory != null) {
+                            boolean found = false;
+                            for (Models.Category c : r.list) {
+                                if (c != null && curCategory.equals(c.typeName)) { found = true; break; }
+                            }
+                            if (!found) curCategory = null;
+                        }
                         chipAdapter.setCategories(r.list);
                         chipAdapter.selectByName(curCategory);
                     } else {

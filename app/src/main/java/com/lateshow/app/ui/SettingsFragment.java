@@ -86,6 +86,26 @@ public class SettingsFragment extends Fragment {
         inputBaseUrl.setText(PrefStore.get().baseUrl());
         inputToken.setText(PrefStore.get().apiToken());
 
+        // 播放偏好：跳过片头/片尾（输入即保存，0 = 不跳过）
+        EditText inputSkipIntro = v.findViewById(R.id.inputSkipIntro);
+        EditText inputSkipEnding = v.findViewById(R.id.inputSkipEnding);
+        inputSkipIntro.setText(String.valueOf(PrefStore.get().skipIntroSec()));
+        inputSkipEnding.setText(String.valueOf(PrefStore.get().skipEndingSec()));
+        inputSkipIntro.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(android.text.Editable s) {
+                PrefStore.get().setSkipIntroSec(parseIntSafe(s.toString()));
+            }
+        });
+        inputSkipEnding.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(android.text.Editable s) {
+                PrefStore.get().setSkipEndingSec(parseIntSafe(s.toString()));
+            }
+        });
+
         // 版本与更新
         tvVersion = v.findViewById(R.id.tvVersion);
         btnCheckUpdate = v.findViewById(R.id.btnCheckUpdate);
@@ -517,6 +537,15 @@ public class SettingsFragment extends Fragment {
 
     private void toast(String s) {
         if (isAdded()) Toast.makeText(getContext(), s, Toast.LENGTH_SHORT).show();
+    }
+
+    /** 跳过秒数输入框解析：空/非法按 0（不跳过），上限 600 由 PrefStore 兜底 */
+    private static int parseIntSafe(String s) {
+        try {
+            return Integer.parseInt(s == null ? "" : s.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private int getColor(int id) {

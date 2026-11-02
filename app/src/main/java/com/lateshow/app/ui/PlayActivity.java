@@ -329,6 +329,11 @@ public class PlayActivity extends AppCompatActivity {
         PrefStore.HistItem h = PrefStore.get().getHist(slug, vodId);
         long startMs = seekMs;
         if (startMs == 0 && h != null && h.epIndex == curEp) startMs = h.playedSec * 1000;
+        // 无历史进度（或换了选集）：应用「跳过片头」设置，从设定秒数开始播放
+        if (startMs == 0) {
+            int skip = PrefStore.get().skipIntroSec();
+            if (skip > 0) startMs = skip * 1000L;
+        }
 
         // 先写一条历史占位（播放器内会持续更新进度）
         saveProgress(startMs / 1000, h != null ? h.totalSec : 0);
@@ -378,9 +383,9 @@ public class PlayActivity extends AppCompatActivity {
         player.play();
     }
 
-    /** 横向滑动手势快进/快退（内嵌窗口） */
+    /** 横向滑动手势快进/快退（内嵌窗口）：划满全宽 = 总时长 1/2，半屏 = 1/4 */
     private void attachSeekGesture() {
-        GestureSeek.attach(playerView, 150_000L, new GestureSeek.Callback() {
+        GestureSeek.attach(playerView, 0.5f, new GestureSeek.Callback() {
             @Override public long durationMs() { return player != null ? player.getDuration() : 0; }
             @Override public long positionMs() { return player != null ? player.getCurrentPosition() : 0; }
             @Override public void onSeekStart() {
@@ -421,16 +426,28 @@ public class PlayActivity extends AppCompatActivity {
         fsLauncher.launch(it);
     }
 
-    /** 每 5 秒落一次播放进度（收藏/历史页可实时展示） */
+    /** 每 5 秒落一次播放进度（收藏/历史页可实时展示），顺带做「跳过片尾」检查 */
     private final Runnable saveTick = new Runnable() {
         @Override public void run() {
             if (player != null && player.isPlaying()) {
                 long d = player.getDuration() > 0 ? player.getDuration() / 1000 : 0;
                 saveProgress(player.getCurrentPosition() / 1000, d);
+                skipEndingIfNeeded();
             }
             saveHandler.postDelayed(this, 5000);
         }
     };
+
+    /** 播放位置进入「片尾区间」时直接跳到结尾结束播放 */
+    private void skipEndingIfNeeded() {
+        int skip = PrefStore.get().skipEndingSec();
+        if (skip <= 0 || player == null) return;
+        long dur = player.getDuration();
+        if (dur <= 0) return;
+        if (player.getCurrentPosition() >= dur - skip * 1000L) {
+            player.seekTo(dur); // 触发 STATE_ENDED，进度按播完保存
+        }
+    }
 
     private void saveProgress(long playedSec, long totalSec) {
         List<Models.Episode> eps = currentEpisodes();

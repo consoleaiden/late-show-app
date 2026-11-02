@@ -110,6 +110,31 @@ public final class PrefStore {
         sp.edit().putInt("theme", t).apply();
     }
 
+    // ---------- 播放偏好：跳过片头/片尾 ----------
+
+    /** 跳过片头秒数：新视频（无历史进度）从该秒开始播放；0 = 不跳过 */
+    public int skipIntroSec() {
+        return clampSkip(sp.getInt("skip_intro_sec", 0));
+    }
+
+    public void setSkipIntroSec(int sec) {
+        sp.edit().putInt("skip_intro_sec", clampSkip(sec)).apply();
+    }
+
+    /** 跳过片尾秒数：播放到「总时长 - 该秒数」时自动结束；0 = 不跳过 */
+    public int skipEndingSec() {
+        return clampSkip(sp.getInt("skip_ending_sec", 0));
+    }
+
+    public void setSkipEndingSec(int sec) {
+        sp.edit().putInt("skip_ending_sec", clampSkip(sec)).apply();
+    }
+
+    private static int clampSkip(int sec) {
+        if (sec < 0) return 0;
+        return Math.min(sec, 600); // 上限 10 分钟
+    }
+
     // ---------- 收藏 ----------
 
     public boolean isFav(String slug, long vodId) {

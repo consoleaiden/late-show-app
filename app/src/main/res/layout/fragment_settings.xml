@@ -176,7 +176,64 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ② 运行概览 -->
+        <!-- ② 播放偏好：跳过片头/片尾 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放偏好" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="跳过片头：新视频从设定的秒数开始播放（用于跳过片头广告）；跳过片尾：播放到结尾前设定的秒数时自动结束。填 0 表示不跳过，改动即时生效。"
+                android:textSize="10.5sp"
+                android:textColor="@color/t2"
+                android:lineSpacingMultiplier="1.6" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/inputSkipIntro"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="44dp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"
+                    android:background="@drawable/bg_field"
+                    android:hint="跳过片头（秒）"
+                    android:textSize="12sp"
+                    android:textColor="@color/t1"
+                    android:textColorHint="@color/t3"
+                    android:inputType="number"
+                    android:maxLength="3"
+                    android:maxLines="1" />
+
+                <EditText
+                    android:id="@+id/inputSkipEnding"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="44dp"
+                    android:layout_marginLeft="10dp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"
+                    android:background="@drawable/bg_field"
+                    android:hint="跳过片尾（秒）"
+                    android:textSize="12sp"
+                    android:textColor="@color/t1"
+                    android:textColorHint="@color/t3"
+                    android:inputType="number"
+                    android:maxLength="3"
+                    android:maxLines="1" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ③ 运行概览 -->
         <LinearLayout
             style="@style/SettingsCard"
             android:orientation="vertical">
@@ -191,7 +248,7 @@
                 android:orientation="vertical" />
         </LinearLayout>
 
-        <!-- ③ 同步操作 -->
+        <!-- ④ 同步操作 -->
         <LinearLayout
             style="@style/SettingsCard"
             android:orientation="vertical">

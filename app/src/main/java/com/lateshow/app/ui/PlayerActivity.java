@@ -2,6 +2,8 @@ package com.lateshow.app.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
@@ -24,6 +26,23 @@ public class PlayerActivity extends AppCompatActivity {
     private long vodId;
     private int epIndex, lineIndex;
     private long lastSavedSec = 0;
+
+    /** 周期检查「跳过片尾」 */
+    private final Handler tickHandler = new Handler(Looper.getMainLooper());
+    private final Runnable endingTick = new Runnable() {
+        @Override public void run() {
+            if (player != null && player.isPlaying()) {
+                int skip = PrefStore.get().skipEndingSec();
+                if (skip > 0) {
+                    long dur = player.getDuration();
+                    if (dur > 0 && player.getCurrentPosition() >= dur - skip * 1000L) {
+                        player.seekTo(dur); // 触发 STATE_ENDED，进度按播完保存
+                    }
+                }
+            }
+            tickHandler.postDelayed(this, 3000);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,6 +67,11 @@ public class PlayerActivity extends AppCompatActivity {
         remarks = it.getStringExtra("remarks");
         sourceName = it.getStringExtra("sourceName");
         long startMs = it.getLongExtra("startMs", 0);
+        // 直进全屏且无进度：应用「跳过片头」设置
+        if (startMs == 0) {
+            int skip = PrefStore.get().skipIntroSec();
+            if (skip > 0) startMs = skip * 1000L;
+        }
 
         PlayerView pv = findViewById(R.id.playerView);
 
@@ -62,9 +86,9 @@ public class PlayerActivity extends AppCompatActivity {
                 .build();
         pv.setPlayer(player);
 
-        // 横向滑动手势快进/快退（横屏全屏滑动全程更快）
+        // 横向滑动手势快进/快退：按总时长比例计算，划满全屏 = 总时长 1/2，半屏 = 1/4
         final TextView seekOverlay = findViewById(R.id.seekOverlay);
-        GestureSeek.attach(pv, 240_000L, new GestureSeek.Callback() {
+        GestureSeek.attach(pv, 0.5f, new GestureSeek.Callback() {
             @Override public long durationMs() { return player != null ? player.getDuration() : 0; }
             @Override public long positionMs() { return player != null ? player.getCurrentPosition() : 0; }
             @Override public void onSeekStart() {
@@ -88,6 +112,7 @@ public class PlayerActivity extends AppCompatActivity {
         player.setMediaItem(mi, Math.max(0, startMs));
         player.prepare();
         player.play();
+        tickHandler.postDelayed(endingTick, 3000);
 
         player.addListener(new Player.Listener() {
             @Override
@@ -141,6 +166,7 @@ public class PlayerActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        tickHandler.removeCallbacksAndMessages(null);
         if (player != null) {
             player.release();
             player = null;
