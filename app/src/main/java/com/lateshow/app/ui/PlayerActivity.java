@@ -47,6 +47,8 @@ public class PlayerActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         PrefStore.init(this);
+        com.lateshow.app.util.ApiCache.init(this);
+        com.lateshow.app.util.OfflineMedia.init(this);
         int t = PrefStore.get().theme();
         AppCompatDelegate.setDefaultNightMode(
                 t == PrefStore.THEME_LIGHT ? AppCompatDelegate.MODE_NIGHT_NO

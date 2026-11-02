@@ -33,7 +33,9 @@ import com.lateshow.app.api.VodSyncApi;
 import com.lateshow.app.model.CardItem;
 import com.lateshow.app.model.Models;
 import com.lateshow.app.store.PrefStore;
+import com.lateshow.app.util.ApiCache;
 import com.lateshow.app.util.GestureSeek;
+import com.lateshow.app.util.OfflineMedia;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +47,8 @@ public class PlayActivity extends AppCompatActivity {
     private long vodId;
     private Models.VideoDetail detail;
     private int curLine = 0, curEp = 0;
+    /** true = 详情来自本地缓存（服务器不可达），此时界面标注「离线」 */
+    private boolean offlineMode = false;
 
     private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount, badge, breadcrumb;
     private ImageButton btnFav;
@@ -72,6 +76,8 @@ public class PlayActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         PrefStore.init(this);
+        ApiCache.init(this);
+        OfflineMedia.init(this);
         applyTheme();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_play);
@@ -133,9 +139,24 @@ public class PlayActivity extends AppCompatActivity {
             f.pic = pic;
             f.remarks = remark;
             f.typeName = detail != null ? detail.typeName : null;
+            f.content = detail != null ? detail.vodContent : null;
+            f.epCount = epCountOf(detail);
             PrefStore.get().toggleFav(f);
+            boolean fav = PrefStore.get().isFav(slug, vodId);
+            // 收藏即把完整播放数据（线路 + 每集地址）落盘，离线也能播
+            if (fav && detail != null) {
+                OfflineMedia.saveDetail(detail);
+                PrefStore.get().fillOfflineMeta(slug, vodId,
+                        detail.typeName, detail.vodContent, epCountOf(detail), true);
+            } else if (!fav && PrefStore.get().getHist(slug, vodId) == null) {
+                // 取消收藏且没有播放历史：连带清掉离线播放数据
+                OfflineMedia.delete(slug, vodId);
+                PrefStore.get().setOfflineCached(slug, vodId, false);
+            }
+            // 详情尚未加载完就点了收藏：补一次加载，成功后会把播放数据缓存下来
+            if (fav && detail == null) loadDetail();
             syncFavState();
-            Toast.makeText(this, PrefStore.get().isFav(slug, vodId) ? "已加入收藏" : "已取消收藏", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, fav ? "已加入收藏 · 已缓存可离线播放" : "已取消收藏", Toast.LENGTH_SHORT).show();
         });
         syncFavState();
 
@@ -166,17 +187,43 @@ public class PlayActivity extends AppCompatActivity {
                         return;
                     }
                     detail = r.detail;
+                    offlineMode = false;
                     renderDetail();
+                    // 已收藏 / 有播放历史 → 刷新离线播放数据（覆盖旧线路与地址）
+                    if (PrefStore.get().isFav(slug, vodId) || PrefStore.get().getHist(slug, vodId) != null) {
+                        OfflineMedia.saveDetail(detail);
+                        PrefStore.get().fillOfflineMeta(slug, vodId,
+                                detail.typeName, detail.vodContent, epCountOf(detail), true);
+                    }
                 }
                 @Override public void onErr(String m) {
                     if (isDestroyed()) return;
+                    // 网络失败：优先用本地缓存的完整播放数据（收藏 / 历史里保存过的）
+                    Models.VideoDetail cached = OfflineMedia.loadDetail(slug, vodId);
+                    if (cached != null && cached.vodPlayList != null && !cached.vodPlayList.isEmpty()) {
+                        detail = cached;
+                        offlineMode = true;
+                        renderDetail();
+                        toast("离线模式：使用本地缓存的播放数据");
+                        return;
+                    }
                     if (com.lateshow.app.util.AuthGate.handleApiError(PlayActivity.this, m, PlayActivity.this::loadDetail)) {
                         toast("需要 API Token，请在设置页填写后重试");
                         return;
                     }
-                    toast("详情加载失败：" + m);
+                    toast("详情加载失败：" + m + (PrefStore.get().isFav(slug, vodId) ? "（该片未缓存播放数据）" : ""));
                 }
             });
+    }
+
+    /** 分集数：取各线路中最多的一路（不同线路集数可能不同） */
+    private static int epCountOf(Models.VideoDetail d) {
+        if (d == null || d.vodPlayList == null) return 0;
+        int max = 0;
+        for (Models.PlayLine l : d.vodPlayList) {
+            if (l != null && l.episodes != null) max = Math.max(max, l.episodes.size());
+        }
+        return max;
     }
 
     private void renderDetail() {
@@ -195,6 +242,10 @@ public class PlayActivity extends AppCompatActivity {
         if (detail.vodTime != null && !detail.vodTime.isEmpty()) {
             if (meta.length() > 0) meta.append(" · ");
             meta.append(com.lateshow.app.util.TimeUtil.stamp(detail.vodTime));
+        }
+        if (offlineMode) {
+            if (meta.length() > 0) meta.append(" · ");
+            meta.append("离线缓存");
         }
         tvMeta.setText(meta);
 
@@ -335,6 +386,13 @@ public class PlayActivity extends AppCompatActivity {
             if (skip > 0) startMs = skip * 1000L;
         }
 
+        // 播放即产生历史 → 同时把完整播放数据落盘，保证收藏/历史页离线可播
+        if (detail != null) {
+            OfflineMedia.saveDetail(detail);
+            PrefStore.get().fillOfflineMeta(slug, vodId,
+                    detail.typeName, detail.vodContent, epCountOf(detail), true);
+        }
+
         // 先写一条历史占位（播放器内会持续更新进度）
         saveProgress(startMs / 1000, h != null ? h.totalSec : 0);
         startInline(e.url, startMs);
@@ -459,6 +517,10 @@ public class PlayActivity extends AppCompatActivity {
         item.title = title;
         item.pic = pic != null ? pic : (detail != null ? detail.vodPic : null);
         item.remarks = remark;
+        item.typeName = detail != null ? detail.typeName : null;
+        item.content = detail != null ? detail.vodContent : null;
+        item.epCount = epCountOf(detail);
+        item.cached = detail != null; // 播放数据在 playCurrent 时已落盘
         item.lineIndex = curLine;
         item.epIndex = curEp;
         item.epName = e != null ? e.name : null;

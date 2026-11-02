@@ -233,7 +233,36 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ③ 运行概览 -->
+        <!-- ③ 离线与缓存 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="离线与缓存" />
+
+            <TextView
+                android:id="@+id/tvCacheInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="统计中…"
+                android:textSize="11sp"
+                android:textColor="@color/t2"
+                android:lineSpacingMultiplier="1.5" />
+
+            <TextView
+                android:id="@+id/btnClearCache"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:background="@drawable/bg_smbtn"
+                android:text="清除首页 / 分类 / 源站缓存"
+                android:textSize="12sp"
+                android:textColor="@color/t1" />
+        </LinearLayout>
+
+        <!-- ④ 运行概览 -->
         <LinearLayout
             style="@style/SettingsCard"
             android:orientation="vertical">
@@ -248,7 +277,7 @@
                 android:orientation="vertical" />
         </LinearLayout>
 
-        <!-- ④ 同步操作 -->
+        <!-- ⑤ 同步操作 -->
         <LinearLayout
             style="@style/SettingsCard"
             android:orientation="vertical">

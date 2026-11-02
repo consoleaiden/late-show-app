@@ -14,6 +14,7 @@ import com.lateshow.app.R;
 import com.lateshow.app.adapter.VideoAdapter;
 import com.lateshow.app.model.CardItem;
 import com.lateshow.app.store.PrefStore;
+import com.lateshow.app.util.OfflineMedia;
 import com.lateshow.app.util.TimeUtil;
 
 import java.util.ArrayList;
@@ -88,6 +89,7 @@ public class FavFragment extends Fragment {
 
     private void render() {
         List<CardItem> cards = new ArrayList<>();
+        int cachedCount = 0;
         if (showHist) {
             for (PrefStore.HistItem h : PrefStore.get().hists()) {
                 CardItem c = new CardItem();
@@ -100,6 +102,9 @@ public class FavFragment extends Fragment {
                 c.remark = h.remarks;
                 c.playedSec = h.playedSec;
                 c.totalSec = h.totalSec;
+                // 播放数据是否已落盘（老版本记录没有该标记时按文件存在性判断）
+                c.cached = h.cached || OfflineMedia.has(h.slug, h.vodId);
+                if (c.cached) cachedCount++;
                 c.topTimeStr = TimeUtil.stampOrEmpty(String.valueOf(h.lastPlayedAt)).isEmpty()
                         ? "" : topStamp(h.lastPlayedAt);
                 c.fav = PrefStore.get().isFav(h.slug, h.vodId);
@@ -120,6 +125,8 @@ public class FavFragment extends Fragment {
                 c.pic = f.pic;
                 c.remark = f.remarks;
                 c.timeStr = topStamp(f.savedAt);
+                c.cached = f.cached || OfflineMedia.has(f.slug, f.vodId);
+                if (c.cached) cachedCount++;
                 c.fav = true;
                 cards.add(c);
             }
@@ -130,7 +137,8 @@ public class FavFragment extends Fragment {
         }
         adapter.setItems(cards);
         emptyView.setVisibility(cards.isEmpty() ? View.VISIBLE : View.GONE);
-        metaInfo.setText(metaInfo.getText() + " · 共 " + cards.size() + " 部");
+        metaInfo.setText(metaInfo.getText() + " · 共 " + cards.size() + " 部"
+                + (cachedCount > 0 ? " · " + cachedCount + " 部可离线播放" : ""));
     }
 
     private String topStamp(long ts) {

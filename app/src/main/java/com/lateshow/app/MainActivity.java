@@ -50,6 +50,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         PrefStore.init(this);
+        com.lateshow.app.util.ApiCache.init(this);
+        com.lateshow.app.util.OfflineMedia.init(this);
         applyTheme();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);

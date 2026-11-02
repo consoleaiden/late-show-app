@@ -41,7 +41,7 @@ import java.util.Map;
 public class SettingsFragment extends Fragment {
 
     private EditText inputBaseUrl, inputToken;
-    private TextView srcStatus, btnSave, btnTest, pauseWarn, autoCount, selCount, tvVersion, btnCheckUpdate;
+    private TextView srcStatus, btnSave, btnTest, pauseWarn, autoCount, selCount, tvVersion, btnCheckUpdate, tvCacheInfo;
     private LinearLayout statsGrid;
     private LinearLayout pauseRows;
     private CheckBox chkAll;
@@ -105,6 +105,15 @@ public class SettingsFragment extends Fragment {
                 PrefStore.get().setSkipEndingSec(parseIntSafe(s.toString()));
             }
         });
+
+        // 离线与缓存：展示占用并提供清理入口（离线播放数据不随清缓存删除）
+        tvCacheInfo = v.findViewById(R.id.tvCacheInfo);
+        v.findViewById(R.id.btnClearCache).setOnClickListener(x -> {
+            com.lateshow.app.util.ApiCache.clear();
+            refreshCacheInfo();
+            toast("首页/分类/源站缓存已清除");
+        });
+        refreshCacheInfo();
 
         // 版本与更新
         tvVersion = v.findViewById(R.id.tvVersion);
@@ -546,6 +555,22 @@ public class SettingsFragment extends Fragment {
         } catch (NumberFormatException e) {
             return 0;
         }
+    }
+
+    /** 刷新缓存占用展示（接口缓存 + 离线播放数据） */
+    private void refreshCacheInfo() {
+        if (tvCacheInfo == null) return;
+        long apiBytes = com.lateshow.app.util.ApiCache.sizeBytes();
+        long mediaBytes = com.lateshow.app.util.OfflineMedia.sizeBytes();
+        int mediaCount = com.lateshow.app.util.OfflineMedia.count();
+        tvCacheInfo.setText("接口缓存（首页/分类/源站，10 分钟~6 小时自动过期）：" + fmtSize(apiBytes)
+                + "\n离线播放数据（收藏/历史，最多 80 部 / 40MB）：" + mediaCount + " 部 · " + fmtSize(mediaBytes));
+    }
+
+    private static String fmtSize(long b) {
+        if (b <= 0) return "0 KB";
+        if (b < 1024 * 1024) return Math.max(1, b / 1024) + " KB";
+        return String.format(java.util.Locale.US, "%.1f MB", b / 1024f / 1024f);
     }
 
     private int getColor(int id) {

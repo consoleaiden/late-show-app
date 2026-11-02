@@ -18,4 +18,6 @@ public class CardItem {
     public long playedSec;
     public long totalSec;
     public boolean fav;
+    /** 本地是否已缓存完整播放数据（离线可播） */
+    public boolean cached;
 }

@@ -18,7 +18,7 @@ public final class PrefStore {
     public static final int THEME_LIGHT = 1;
     public static final int THEME_AUTO = 2;
 
-    /** 收藏条目 */
+    /** 收藏条目（含离线播放所需的详情摘要；完整线路/选集见 OfflineMedia） */
     public static class FavItem {
         public String slug;
         public String sourceName;
@@ -27,10 +27,13 @@ public final class PrefStore {
         public String pic;
         public String remarks;
         public String typeName;
+        public String content;   // 简介（离线详情页展示）
+        public int epCount;      // 分集数（离线选集网格标题）
+        public boolean cached;   // 是否已缓存完整播放数据（线路 + 每集播放地址）
         public long savedAt;
     }
 
-    /** 播放历史条目（断点续播） */
+    /** 播放历史条目（断点续播 + 离线播放兜底） */
     public static class HistItem {
         public String slug;
         public String sourceName;
@@ -38,6 +41,10 @@ public final class PrefStore {
         public String title;
         public String pic;
         public String remarks;
+        public String typeName;
+        public String content;
+        public int epCount;
+        public boolean cached;
         public int lineIndex;
         public int epIndex;
         public String epName;
@@ -164,6 +171,40 @@ public final class PrefStore {
 
     private void saveFavs(List<FavItem> list) {
         sp.edit().putString("favs", gson.toJson(list)).apply();
+    }
+
+    /** 用详情响应补齐收藏/历史条目的缓存元信息（简介、分类、分集数、离线可播标记） */
+    public void fillOfflineMeta(String slug, long vodId, String typeName, String content, int epCount, boolean cached) {
+        List<FavItem> fs = favs();
+        boolean fChanged = false;
+        for (FavItem f : fs) {
+            if (f.slug != null && f.slug.equals(slug) && f.vodId == vodId) {
+                if (typeName != null) f.typeName = typeName;
+                if (content != null) f.content = content;
+                if (epCount > 0) f.epCount = epCount;
+                f.cached = cached;
+                fChanged = true;
+            }
+        }
+        if (fChanged) saveFavs(fs);
+
+        List<HistItem> hs = hists();
+        boolean hChanged = false;
+        for (HistItem h : hs) {
+            if (h.slug != null && h.slug.equals(slug) && h.vodId == vodId) {
+                if (typeName != null) h.typeName = typeName;
+                if (content != null) h.content = content;
+                if (epCount > 0) h.epCount = epCount;
+                h.cached = cached;
+                hChanged = true;
+            }
+        }
+        if (hChanged) sp.edit().putString("hists", gson.toJson(hs)).apply();
+    }
+
+    /** 仅更新离线可播标记（取消收藏且无历史时置 false） */
+    public void setOfflineCached(String slug, long vodId, boolean cached) {
+        fillOfflineMeta(slug, vodId, null, null, 0, cached);
     }
 
     // ---------- 播放历史 ----------
