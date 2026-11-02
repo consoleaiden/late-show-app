@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- 海报形状（ShapeableImageView）：顶部方角、底部圆角 -->
+    <!-- 海报形状（ShapeableImageView）：四角统一 7dp 圆角（原 10dp 缩小三分之一） -->
     <style name="ShapeAppearance.LateShow.Cover" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSizeTopLeft">0dp</item>
-        <item name="cornerSizeTopRight">0dp</item>
-        <item name="cornerSizeBottomLeft">10dp</item>
-        <item name="cornerSizeBottomRight">10dp</item>
+        <item name="cornerSizeTopLeft">7dp</item>
+        <item name="cornerSizeTopRight">7dp</item>
+        <item name="cornerSizeBottomLeft">7dp</item>
+        <item name="cornerSizeBottomRight">7dp</item>
     </style>
 
     <style name="ShapeAppearance.LateShow.CoverLg" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSizeTopLeft">0dp</item>
-        <item name="cornerSizeTopRight">0dp</item>
-        <item name="cornerSizeBottomLeft">12dp</item>
-        <item name="cornerSizeBottomRight">12dp</item>
+        <item name="cornerSizeTopLeft">8dp</item>
+        <item name="cornerSizeTopRight">8dp</item>
+        <item name="cornerSizeBottomLeft">8dp</item>
+        <item name="cornerSizeBottomRight">8dp</item>
     </style>
 
     <style name="TabItem">

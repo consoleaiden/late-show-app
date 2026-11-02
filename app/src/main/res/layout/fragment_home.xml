@@ -48,7 +48,7 @@
             android:maxLines="1"
             android:inputType="text"
             android:imeOptions="actionSearch"
-            android:drawableStart="@drawable/ic_search_inset"
+            android:drawableEnd="@drawable/ic_search_inset"
             android:drawablePadding="6dp" />
     </LinearLayout>
 
