@@ -58,6 +58,12 @@ public class PlayerActivity extends AppCompatActivity {
         setContentView(R.layout.activity_player);
         com.lateshow.app.util.LottieIcon.bindTree(findViewById(android.R.id.content));
 
+        // 沉浸式全屏：隐藏状态栏/导航栏，下滑临时呼出，刘海屏允许延伸进缺口
+        hideSystemBars();
+
+        // 左上角退出全屏返回按钮（进度已在 onPause 保存并回传详情页）
+        findViewById(R.id.btnBackFull).setOnClickListener(v -> finish());
+
         Intent it = getIntent();
         String url = it.getStringExtra("url");
         title = it.getStringExtra("title");
@@ -135,6 +141,28 @@ public class PlayerActivity extends AppCompatActivity {
                 }
             }
         });
+    }
+
+    /** 隐藏系统状态栏与导航栏（真全屏）；回到前台/焦点恢复时重新隐藏 */
+    private void hideSystemBars() {
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            android.view.WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.layoutInDisplayCutoutMode =
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(lp);
+        }
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        androidx.core.view.WindowInsetsControllerCompat c =
+                androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        c.setSystemBarsBehavior(
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        c.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemBars(); // 对话框/通知等抢焦点后恢复时补隐藏
     }
 
     private void saveProgress(long playedSec, long totalSec) {
