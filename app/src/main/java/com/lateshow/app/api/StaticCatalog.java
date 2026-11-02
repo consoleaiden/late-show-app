@@ -412,7 +412,8 @@ public final class StaticCatalog implements Catalog {
     /** 响应体解码：优先用头部 charset，无声明时按 UTF-8，出现替换符再试 GBK */
     private static String decode(Response r) throws IOException {
         if (r.body() == null) return "";
-        Charset cs = r.body().charset();
+        okhttp3.MediaType mt = r.body().contentType();
+        Charset cs = mt == null ? null : mt.charset(null);
         byte[] bytes = r.body().bytes();
         String s = new String(bytes, cs != null ? cs : UTF8);
         if (cs == null && s.indexOf('\uFFFD') >= 0) {
