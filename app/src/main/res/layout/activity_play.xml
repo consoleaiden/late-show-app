@@ -5,22 +5,22 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- 返回栏 -->
+    <!-- 返回栏：按钮自带的 16dp 内边距让箭头左缘与下方视频标题（16dp）对齐 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingLeft="16dp"
+        android:paddingLeft="0dp"
         android:paddingRight="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="6dp">
+        android:paddingTop="0dp"
+        android:paddingBottom="0dp">
 
         <com.airbnb.lottie.LottieAnimationView
             android:id="@+id/btnBack"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:padding="6dp"
+            android:layout_width="68dp"
+            android:layout_height="68dp"
+            android:padding="16dp"
             android:background="@null"
             android:tag="ic_back"
             android:contentDescription="返回" />
