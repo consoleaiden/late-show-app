@@ -69,6 +69,7 @@
         android:id="@+id/chips"
         android:layout_width="match_parent"
         android:layout_height="30dp"
+        android:overScrollMode="never"
         android:paddingLeft="5dp"
         android:paddingRight="5dp"
         android:clipToPadding="false" />
@@ -109,6 +110,7 @@
             android:id="@+id/grid"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:overScrollMode="never"
             android:paddingTop="2dp"
             android:clipToPadding="false" />
 
