@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 详情页大海报占位底色（12dp 圆角） -->
+<!-- 详情页大海报占位底色：顶部方角、底部 12dp 圆角 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="@color/ink700" />
-    <corners android:radius="12dp" />
+    <corners android:topLeftRadius="0dp" android:topRightRadius="0dp"
+        android:bottomLeftRadius="12dp" android:bottomRightRadius="12dp" />
 </shape>

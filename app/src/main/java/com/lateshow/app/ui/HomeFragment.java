@@ -88,21 +88,33 @@ public class HomeFragment extends Fragment {
         chips.setLayoutManager(new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false));
         chips.setAdapter(chipAdapter);
 
-        videoAdapter = new VideoAdapter(this::openDetail);
+        videoAdapter = new VideoAdapter(new VideoAdapter.OnClick() {
+            @Override public void onCard(CardItem item) { openDetail(item); }
+            @Override public void onDelete(CardItem item) { /* 首页卡片无删除 */ }
+        });
         GridLayoutManager glm = new GridLayoutManager(getContext(), 3);
         grid.setLayoutManager(glm);
         grid.setAdapter(videoAdapter);
 
-        // 无限加载
+        // 无限加载 + 回到顶部按钮显隐
+        View fabTop = v.findViewById(R.id.fabTop);
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
-                if (loading || page >= pagecount) return;
                 GridLayoutManager lm = (GridLayoutManager) rv.getLayoutManager();
+                if (lm != null) {
+                    boolean show = lm.findFirstVisibleItemPosition() > 8;
+                    fabTop.setVisibility(show ? View.VISIBLE : View.GONE);
+                }
+                if (loading || page >= pagecount) return;
                 if (lm == null) return;
                 int last = lm.findLastVisibleItemPosition();
                 int total = lm.getItemCount();
                 if (last >= total - 6) loadPage(page + 1);
             }
+        });
+        fabTop.setOnClickListener(vv -> {
+            grid.smoothScrollToPosition(0);
+            fabTop.setVisibility(View.GONE);
         });
 
         btnSource.setOnClickListener(vv -> showSourceMenu());

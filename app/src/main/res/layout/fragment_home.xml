@@ -88,14 +88,34 @@
             android:text="● -- 同步" />
     </LinearLayout>
 
-    <!-- 卡片墙：两边不留白，卡片自带左右间距 -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/grid"
+    <!-- 卡片墙：两边不留白，卡片自带左右间距；FrameLayout 容纳回到顶部浮动按钮 -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:paddingTop="2dp"
-        android:clipToPadding="false" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/grid"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingTop="2dp"
+            android:clipToPadding="false" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabTop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="12dp"
+            android:src="@drawable/ic_top"
+            app:fabCustomSize="40dp"
+            app:maxImageSize="18dp"
+            app:backgroundTint="@color/ink700"
+            app:tint="@color/t1"
+            app:elevation="6dp"
+            android:contentDescription="回到顶部"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/emptyView"

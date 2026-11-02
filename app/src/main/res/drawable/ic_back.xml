@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="@color/t1" android:pathData="M15.4,4.6L14,3.2 5.2,12l8.8,8.8 1.4,-1.4L8,12z"/>
+<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-arrow-left-bold -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="1024" android:viewportHeight="1024">
+    <path android:fillColor="#FF000000" android:pathData="M362.8 438.6 760.6 85.4Q775.5 71.6 776.6 51.6Q777.8 31.6 765.2 16.8Q752.6 1.9 732 0.2Q711.5 -1.5 696.6 12.2L257.6 402Q240.4 415.8 240.4 438.6Q240.4 461.5 257.6 475.2L696.6 865Q712.6 877.6 728.6 877.6Q751.5 877.6 765.2 861.6Q778.9 845.6 777.8 825Q776.6 804.4 760.6 791.9Z"/>
 </vector>

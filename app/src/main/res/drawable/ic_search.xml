@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="@color/t2" android:pathData="M15.5,14h-0.79l-0.28,-0.27C15.41,12.59 16,11.11 16,9.5 16,5.91 13.09,3 9.5,3S3,5.91 3,9.5 5.91,16 9.5,16c1.61,0 3.09,-0.59 4.23,-1.57l0.27,0.28v0.79l5,4.99L20.49,19l-4.99,-5zM9.5,14C7.01,14 5,11.99 5,9.5S7.01,5 9.5,5 14,7.01 14,9.5 11.99,14 9.5,14z"/>
+<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-search -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="1024" android:viewportHeight="1024">
+    <path android:fillColor="#FF000000" android:pathData="M1004.1 919.2 786.9 701.9Q834.9 647.1 861.2 575.6Q887.5 504.2 887.5 426.4Q887.5 312.1 828.1 211.5Q772 115.5 674.9 58.3Q575.4 0 460.5 0Q345.6 0 246.2 59.4Q149 116.6 91.8 213.8Q33.5 314.4 33.5 429.3Q33.5 544.2 91.8 643.6Q149 740.8 246.2 796.8Q345.6 856.3 459.9 856.3Q536.5 856.3 608.6 828.8Q677.2 803.7 735.5 755.7L952.7 972.9Q963 983.2 980.1 983.2Q997.3 983.2 1006.4 972.9Q1014.4 961.4 1013.8 946Q1013.3 930.6 1004.1 919.2ZM459.9 783.1Q363.9 783.1 281.6 733.9Q201.6 687.1 154.7 607.1Q106.7 524.7 106.7 428.7Q106.7 332.7 154.7 250.4Q201.6 170.3 281.6 123.5Q363.9 75.5 459.9 75.5Q556 75.5 638.3 123.5Q718.3 170.3 765.2 250.4Q814.3 332.7 814.3 428.7Q814.3 524.7 765.2 607.1Q718.3 687.1 638.3 733.9Q556 783.1 459.9 783.1Z"/>
 </vector>

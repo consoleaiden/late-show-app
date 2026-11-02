@@ -27,6 +27,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
 
     public interface OnClick {
         void onCard(CardItem item);
+        /** 收藏/历史卡片封面上的删除按钮 */
+        void onDelete(CardItem item);
     }
 
     private final List<CardItem> items = new ArrayList<>();
@@ -68,29 +70,34 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         boolean hist = it.kind == CardItem.KIND_HIST;
         boolean fav = it.kind == CardItem.KIND_FAV;
         h.topMask.setVisibility(hist ? View.VISIBLE : View.GONE);
-        h.bottomMask.setVisibility(hist || fav || (it.kind == CardItem.KIND_HOME && it.timeStr != null) ? View.VISIBLE : View.GONE);
+        h.maskBottom.setVisibility(hist || fav || (it.kind == CardItem.KIND_HOME && it.timeStr != null) ? View.VISIBLE : View.GONE);
+        // 删除角标仅收藏/历史卡片显示
+        h.btnDel.setVisibility(hist || fav ? View.VISIBLE : View.GONE);
         // 书签角标仅收藏 Tab 显示（历史/首页书签会与遮罩内容重叠）
         h.badgeFav.setVisibility(fav ? View.VISIBLE : View.GONE);
 
         if (hist) {
             h.tvSrc.setText(com.lateshow.app.util.SourceCache.nameOf(it.slug));
-            h.tvTopTime.setText(it.topTimeStr != null ? it.topTimeStr : "");
-            // 进度：已播时长(朱橙) / 总时长(白)
+            // 底部遮罩：左 = 播放时间，右 = 进度时长（已播朱橙 / 总时长白）
+            h.tvMaskLeft.setText(it.topTimeStr != null ? it.topTimeStr : "");
             String played = TimeUtil.dur(it.playedSec);
             String total = TimeUtil.dur(it.totalSec);
             SpannableStringBuilder sb = new SpannableStringBuilder(played);
             sb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(h.itemView.getContext(), R.color.acc)),
                     0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             sb.append(" / ").append(total);
-            h.bottomMask.setText(sb);
+            h.tvMaskRight.setText(sb);
         } else if (fav) {
-            String src = com.lateshow.app.util.SourceCache.nameOf(it.slug);
-            h.bottomMask.setText(src + " · " + (it.timeStr != null ? it.timeStr : ""));
+            // 底部遮罩：左 = 收藏时间，右 = 源站名
+            h.tvMaskLeft.setText(it.timeStr != null ? it.timeStr : "");
+            h.tvMaskRight.setText(com.lateshow.app.util.SourceCache.nameOf(it.slug));
         } else {
-            h.bottomMask.setText(it.timeStr != null ? it.timeStr : "");
+            // 底部遮罩：左 = 添加时间
+            h.tvMaskLeft.setText(it.timeStr != null ? it.timeStr : "");
+            h.tvMaskRight.setText("");
         }
 
-        // 备注角标仅首页卡片显示（收藏/历史顶部已有遮罩信息，避免重叠）
+        // 备注角标仅首页卡片显示（收藏/历史右上角是删除按钮，避免重叠）
         if (it.kind == CardItem.KIND_HOME && it.remark != null && !it.remark.isEmpty()) {
             h.tvRemark.setVisibility(View.VISIBLE);
             h.tvRemark.setText(it.remark);
@@ -107,6 +114,9 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         h.itemView.setOnClickListener(v -> {
             if (listener != null) listener.onCard(it);
         });
+        h.btnDel.setOnClickListener(v -> {
+            if (listener != null) listener.onDelete(it);
+        });
     }
 
     @Override
@@ -116,20 +126,22 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
 
     static class VH extends RecyclerView.ViewHolder {
         AppCompatImageView cover;
-        TextView title, tvSrc, tvTopTime, bottomMask, tvRemark;
-        LinearLayout topMask;
-        FrameLayout badgeFav;
+        TextView title, tvSrc, tvMaskLeft, tvMaskRight, tvRemark;
+        LinearLayout topMask, maskBottom;
+        FrameLayout badgeFav, btnDel;
 
         VH(@NonNull View v) {
             super(v);
             cover = v.findViewById(R.id.cover);
             title = v.findViewById(R.id.tvTitle);
             tvSrc = v.findViewById(R.id.tvSrc);
-            tvTopTime = v.findViewById(R.id.tvTopTime);
-            bottomMask = v.findViewById(R.id.tvBottomMask);
+            tvMaskLeft = v.findViewById(R.id.tvMaskLeft);
+            tvMaskRight = v.findViewById(R.id.tvMaskRight);
             tvRemark = v.findViewById(R.id.tvRemark);
             topMask = v.findViewById(R.id.topMask);
+            maskBottom = v.findViewById(R.id.maskBottom);
             badgeFav = v.findViewById(R.id.badgeFav);
+            btnDel = v.findViewById(R.id.btnDel);
         }
     }
 }

@@ -185,6 +185,13 @@ public final class PrefStore {
         return loadList("favs", new TypeToken<List<FavItem>>() {}.getType());
     }
 
+    /** 删除单条收藏（列表封面上的删除按钮） */
+    public void removeFav(String slug, long vodId) {
+        List<FavItem> list = favs();
+        boolean changed = list.removeIf(it -> it.slug != null && it.slug.equals(slug) && it.vodId == vodId);
+        if (changed) saveFavs(list);
+    }
+
     private void saveFavs(List<FavItem> list) {
         sp.edit().putString("favs", gson.toJson(list)).apply();
     }
@@ -249,6 +256,13 @@ public final class PrefStore {
 
     public void clearHist() {
         sp.edit().remove("hists").apply();
+    }
+
+    /** 删除单条播放历史（列表封面上的删除按钮） */
+    public void removeHist(String slug, long vodId) {
+        List<HistItem> list = hists();
+        boolean changed = list.removeIf(it -> it.slug != null && it.slug.equals(slug) && it.vodId == vodId);
+        if (changed) sp.edit().putString("hists", gson.toJson(list)).apply();
     }
 
     public List<HistItem> hists() {

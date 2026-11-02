@@ -9,6 +9,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.lateshow.app.R;
 import com.lateshow.app.adapter.VideoAdapter;
@@ -44,9 +45,26 @@ public class FavFragment extends Fragment {
         segHist = v.findViewById(R.id.segHist);
         grid = v.findViewById(R.id.grid);
 
-        adapter = new VideoAdapter(this::openDetail);
+        adapter = new VideoAdapter(new VideoAdapter.OnClick() {
+            @Override public void onCard(CardItem item) { openDetail(item); }
+            @Override public void onDelete(CardItem item) { confirmDelete(item); }
+        });
         grid.setLayoutManager(new GridLayoutManager(getContext(), 3));
         grid.setAdapter(adapter);
+
+        // 回到顶部浮动按钮
+        View fabTop = v.findViewById(R.id.fabTop);
+        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                LinearLayoutManager lm = (LinearLayoutManager) rv.getLayoutManager();
+                boolean show = lm != null && lm.findFirstVisibleItemPosition() > 8;
+                fabTop.setVisibility(show ? View.VISIBLE : View.GONE);
+            }
+        });
+        fabTop.setOnClickListener(vv -> {
+            grid.smoothScrollToPosition(0);
+            fabTop.setVisibility(View.GONE);
+        });
 
         segFav.setOnClickListener(vv -> switchSeg(false));
         segHist.setOnClickListener(vv -> switchSeg(true));
@@ -79,6 +97,32 @@ public class FavFragment extends Fragment {
 
     private void openDetail(CardItem item) {
         if (getContext() != null) PlayActivity.start(getContext(), item);
+    }
+
+    /** 封面右上角删除：确认后移除收藏/播放记录（收藏连带清理离线播放数据） */
+    private void confirmDelete(CardItem item) {
+        if (!isAdded() || getContext() == null) return;
+        boolean isFav = item.kind == CardItem.KIND_FAV;
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle(isFav ? "删除收藏" : "删除播放记录")
+                .setMessage(item.title)
+                .setPositiveButton("删除", (d, w) -> {
+                    if (isFav) {
+                        PrefStore.get().removeFav(item.slug, item.vodId);
+                        // 取消收藏且没有播放历史：连带清掉离线播放数据
+                        if (PrefStore.get().getHist(item.slug, item.vodId) == null) {
+                            OfflineMedia.delete(item.slug, item.vodId);
+                            PrefStore.get().setOfflineCached(item.slug, item.vodId, false);
+                        }
+                        toast("已删除收藏");
+                    } else {
+                        PrefStore.get().removeHist(item.slug, item.vodId);
+                        toast("已删除播放记录");
+                    }
+                    render();
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     @Override

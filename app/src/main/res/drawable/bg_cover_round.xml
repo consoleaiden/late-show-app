@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 海报占位底色（10dp 圆角，与封面 shape 保持一致） -->
+<!-- 海报占位底色：顶部方角、底部 10dp 圆角（与封面 shape 保持一致） -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="@color/ink700" />
-    <corners android:radius="10dp" />
+    <corners android:topLeftRadius="0dp" android:topRightRadius="0dp"
+        android:bottomLeftRadius="10dp" android:bottomRightRadius="10dp" />
 </shape>

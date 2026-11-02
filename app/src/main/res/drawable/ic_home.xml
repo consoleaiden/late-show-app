@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="@color/t2" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/>
+<!-- iconfont.cn 项目 5249433（Ant Design 风格集合 cid=22664）icon-home -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="1024" android:viewportHeight="1024">
+    <path android:fillColor="#FF000000" android:pathData="M980.1 373.8Q870.4 282.4 565.1 19.4Q541.1 0 509.1 0Q477.1 0 453.1 19.4Q147.8 282.4 38.1 373.8Q9.5 402.4 9.5 435Q9.5 467.6 32.9 491Q56.4 514.4 89.5 514.4H143.3V924.9Q143.3 950 161 967.7Q178.7 985.5 203.9 985.5H386.8Q413.1 985.5 430.8 967.7Q448.5 950 448.5 924.9V688.2H569.7V924.9Q569.7 950 587.4 967.7Q605.1 985.5 631.4 985.5H814.3Q839.5 985.5 857.2 967.7Q874.9 950 874.9 924.9V514.4H928.7Q961.8 514.4 985.3 491Q1008.7 467.6 1008.7 434.4Q1008.7 417.3 1000.7 401.3Q992.7 385.3 980.1 373.8ZM928.7 441.3H862.4Q837.2 441.3 819.5 459Q801.8 476.7 801.8 503V912.3H642.9V677.9Q642.9 652.8 625.1 635.1Q607.4 617.3 582.3 617.3H435.9Q410.8 617.3 393.1 635.1Q375.3 652.8 375.3 677.9V914.6H216.4V503Q216.4 476.7 198.7 459Q181 441.3 155.8 441.3H89.5Q82.7 441.3 82.7 434.4Q82.7 433.3 83.8 431Q85 428.7 85 427.6Q194.7 336.1 498.8 73.2Q503.4 69.7 508 69.7Q512.5 69.7 516 73.2Q821.2 336.1 930.9 427.6Q933.2 429.9 933.2 432.1Q935.5 436.7 933.2 439Q930.9 441.3 928.7 441.3Z"/>
 </vector>
