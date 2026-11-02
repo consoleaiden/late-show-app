@@ -147,8 +147,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
                         .centerCrop()
                         .transform(new RoundedCorners(r7))
                         .format(DecodeFormat.PREFER_RGB_565)
-                        .dontAnimate()
-                        .dontTransition())
+                        .dontAnimate())
                 .into(h.cover);
 
         h.itemView.setOnClickListener(v -> {
