@@ -116,7 +116,7 @@
                 android:textSize="10.5sp"
                 android:textColor="@color/t2"
                 android:lineSpacingMultiplier="1.6"
-                android:text="NAS 同步库：走自己的 VodSync 聚合库，速度快、数据全，需要 NAS 在线。\n资源站直连：从公开资源站目录直接取片，NAS 关机也能正常浏览与播放。" />
+                android:text="NAS 同步库：走自己的 VodSync 聚合库，速度快、数据全，需要 NAS 在线。\n资源站直连：从公开资源站目录直接取片，NAS 关机也能正常浏览与播放。\n部分源站较慢或连接失败时会自动经代理加速。" />
         </LinearLayout>
 
         <!-- ② 播放源与鉴权（手风琴面板） -->

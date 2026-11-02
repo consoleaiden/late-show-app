@@ -44,6 +44,14 @@ public final class StaticCatalog implements Catalog {
     /** 资源站目录（源站列表来源） */
     public static final String DIR_URL = "https://mylazily.github.io/ziyuanzhan/data/latest.json";
 
+    /** 备用代理：直连失败或过慢时，把目标地址作为 url 参数转发 */
+    public static final String PROXY = "https://pz.v88.qzz.io/?url=";
+
+    /** 直连超过该耗时视为「慢」，后续请求优先走代理 */
+    private static final long SLOW_DIRECT_MS = 3500;
+    /** 站点被判定为慢/不可用后的代理优先时长（10 分钟） */
+    private static final long SLOW_TTL_MS = 10 * 60 * 1000L;
+
     private static final String UA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
             + "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
     private static final Charset UTF8 = Charset.forName("UTF-8");
@@ -59,7 +67,10 @@ public final class StaticCatalog implements Catalog {
     /** 分类名 → type_id（苹果CMS 按 t 过滤需要 id，而上层只有分类名） */
     private final Map<String, Integer> typeIdByName = new ConcurrentHashMap<>();
 
-    private final OkHttpClient http;
+    private final OkHttpClient http;      // 直连：短超时，快速判定站点是否可用
+    private final OkHttpClient proxyHttp; // 代理：超时放宽，走 pz.v88.qzz.io 转发
+    /** host → 代理优先到期时间戳（该 host 直连失败/过慢过） */
+    private final Map<String, Long> slowUntil = new ConcurrentHashMap<>();
 
     private volatile boolean dirLoaded = false;
     private volatile boolean dirLoading = false;
@@ -67,9 +78,14 @@ public final class StaticCatalog implements Catalog {
 
     public StaticCatalog() {
         http = new OkHttpClient.Builder()
-                .connectTimeout(8, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .callTimeout(25, TimeUnit.SECONDS)
+                .connectTimeout(4, TimeUnit.SECONDS)
+                .readTimeout(8, TimeUnit.SECONDS)
+                .callTimeout(9, TimeUnit.SECONDS)
+                .build();
+        proxyHttp = new OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(25, TimeUnit.SECONDS)
+                .callTimeout(30, TimeUnit.SECONDS)
                 .build();
     }
 
@@ -354,7 +370,22 @@ public final class StaticCatalog implements Catalog {
         Request req = new Request.Builder().url(DIR_URL).head().header("User-Agent", UA).build();
         http.newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
-                MAIN.post(() -> cb.onErr("网络异常：" + e.getMessage()));
+                // 目录站点也可能被墙/超时：再走一次代理
+                Request pr = new Request.Builder()
+                        .url(proxyUrlOf(DIR_URL)).head().header("User-Agent", UA).build();
+                proxyHttp.newCall(pr).enqueue(new Callback() {
+                    @Override public void onFailure(Call c2, IOException e2) {
+                        MAIN.post(() -> cb.onErr("网络异常：" + e2.getMessage()));
+                    }
+                    @Override public void onResponse(Call c2, Response resp2) {
+                        try (Response r2 = resp2) {
+                            if (r2.isSuccessful()) MAIN.post(() -> cb.onOk(System.currentTimeMillis() - t0));
+                            else MAIN.post(() -> cb.onErr("HTTP " + r2.code()));
+                        } catch (Exception ex) {
+                            MAIN.post(() -> cb.onErr("网络异常：" + ex.getMessage()));
+                        }
+                    }
+                });
             }
             @Override public void onResponse(Call call, Response resp) {
                 try (Response r = resp) {
@@ -374,14 +405,41 @@ public final class StaticCatalog implements Catalog {
 
     // ---------------- 内部工具 ----------------
 
-    /** 统一 GET：带浏览器 UA，宽松解码（部分老站返回 GBK），回调切回主线程 */
+    /**
+     * 统一 GET：带浏览器 UA，宽松解码（部分老站返回 GBK），回调切回主线程。
+     *
+     * 站点可用性策略（直连失败或过慢自动走代理）：
+     *  - host 未被标记慢：先直连（9s 上限），失败自动改走代理 pz.v88.qzz.io
+     *  - host 已被标记慢：直接走代理（省掉一次等待），代理失败再退回直连
+     *  - 直连成功但耗时超过 3.5s，同样标记为慢，之后 10 分钟内优先代理
+     */
     private void get(HttpUrl url, final OnBody ok, final OnErr err) {
+        final String host = url.host();
+        if (isSlow(host)) {
+            Log.d(TAG, "慢站点走代理：" + host);
+            fetch(url, true, ok, e1 -> {
+                Log.d(TAG, "代理失败，回退直连 " + host + "：" + e1);
+                fetch(url, false, ok, e2 -> err.onErr(e2 + "（直连与代理均失败）"));
+            });
+        } else {
+            fetch(url, false, ok, e2 -> {
+                Log.d(TAG, "直连失败，改走代理 " + host + "：" + e2);
+                fetch(url, true, ok, e3 -> err.onErr(e3 + "（已尝试代理）"));
+            });
+        }
+    }
+
+    /** 单次请求：viaProxy=true 时把目标地址编码进代理 url 参数 */
+    private void fetch(final HttpUrl url, final boolean viaProxy, final OnBody ok, final OnErr err) {
+        final String host = url.host();
+        String target = viaProxy ? proxyUrlOf(url.toString()) : url.toString();
         Request req = new Request.Builder()
-                .url(url)
+                .url(target)
                 .header("User-Agent", UA)
                 .header("Accept", "application/json,text/plain,*/*")
                 .build();
-        http.newCall(req).enqueue(new Callback() {
+        final long t0 = System.currentTimeMillis();
+        (viaProxy ? proxyHttp : http).newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
                 MAIN.post(() -> err.onErr("网络异常：" + e.getMessage()));
             }
@@ -397,6 +455,8 @@ public final class StaticCatalog implements Catalog {
                     MAIN.post(() -> err.onErr("读取失败：" + e.getMessage()));
                     return;
                 }
+                long cost = System.currentTimeMillis() - t0;
+                if (viaProxy || cost > SLOW_DIRECT_MS) markSlow(host);
                 MAIN.post(() -> {
                     try {
                         ok.onBody(body);
@@ -407,6 +467,24 @@ public final class StaticCatalog implements Catalog {
                 });
             }
         });
+    }
+
+    /** 目标地址 → 代理 URL（整段地址做 URL 编码，目标自带的 ?ac=xx&pg=1 才能完整透传） */
+    static String proxyUrlOf(String raw) {
+        try {
+            return PROXY + java.net.URLEncoder.encode(raw, "UTF-8");
+        } catch (Exception e) {
+            return PROXY + raw;
+        }
+    }
+
+    private boolean isSlow(String host) {
+        Long until = slowUntil.get(host);
+        return until != null && until > System.currentTimeMillis();
+    }
+
+    private void markSlow(String host) {
+        slowUntil.put(host, System.currentTimeMillis() + SLOW_TTL_MS);
     }
 
     /** 响应体解码：优先用头部 charset，无声明时按 UTF-8，出现替换符再试 GBK */
