@@ -101,6 +101,7 @@ public class HomeFragment extends Fragment {
         grid.setLayoutManager(glm);
         grid.setAdapter(videoAdapter);
         grid.setHasFixedSize(true); // 条目尺寸固定，插入新页不触发整表重测量
+        grid.setItemAnimator(null); // 关闭条目动画：默认动画器的浮点平移会导致减速阶段文字亚像素抖动
 
         // 无限加载 + 回到顶部按钮显隐（FAB 用 LottieDrawable 注入图标）
         com.google.android.material.floatingactionbutton.FloatingActionButton fabTop =

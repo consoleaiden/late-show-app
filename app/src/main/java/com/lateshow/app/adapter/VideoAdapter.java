@@ -161,6 +161,13 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         });
     }
 
+    /** 条目附着时归位残留的浮点位移（被中断的动画可能留下非零 translation，导致文字亚像素抖动） */
+    @Override
+    public void onViewAttachedToWindow(@NonNull VH h) {
+        if (h.itemView.getTranslationY() != 0f) h.itemView.setTranslationY(0f);
+        if (h.itemView.getTranslationX() != 0f) h.itemView.setTranslationX(0f);
+    }
+
     @Override
     public int getItemCount() {
         return items.size();

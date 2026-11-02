@@ -53,6 +53,7 @@ public class FavFragment extends Fragment {
         grid.setLayoutManager(new GridLayoutManager(getContext(), 3));
         grid.setAdapter(adapter);
         grid.setHasFixedSize(true); // 条目尺寸固定，避免插入/删除时整表重测量
+        grid.setItemAnimator(null); // 关闭条目动画：默认动画器的浮点平移会导致减速阶段文字亚像素抖动
 
         // 回到顶部浮动按钮（FAB 用 LottieDrawable 注入图标）
         com.google.android.material.floatingactionbutton.FloatingActionButton fabTop =
