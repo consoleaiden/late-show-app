@@ -44,7 +44,8 @@ public final class Avd {
             return;
         }
         if (d instanceof AnimatedVectorDrawable) {
-            if (!d.isRunning()) d.start();
+            AnimatedVectorDrawable avd = (AnimatedVectorDrawable) d;
+            if (!avd.isRunning()) avd.start();
         } else if (d instanceof AnimatedVectorDrawableCompat) {
             AnimatedVectorDrawableCompat avd = (AnimatedVectorDrawableCompat) d;
             if (!avd.isRunning()) avd.start();
