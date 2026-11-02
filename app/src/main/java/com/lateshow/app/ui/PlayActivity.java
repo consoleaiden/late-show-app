@@ -168,11 +168,7 @@ public class PlayActivity extends AppCompatActivity {
     }
 
     private void applyTheme() {
-        int t = PrefStore.get().theme();
-        AppCompatDelegate.setDefaultNightMode(
-                t == PrefStore.THEME_LIGHT ? AppCompatDelegate.MODE_NIGHT_NO
-                : t == PrefStore.THEME_AUTO ? AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                : AppCompatDelegate.MODE_NIGHT_YES);
+        com.lateshow.app.util.ThemeManager.apply(this);
     }
 
     /** 收藏态：心形描边(未收藏) / 实心(已收藏)，animate=true 时播放描边→实心过渡 */

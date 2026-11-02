@@ -49,11 +49,7 @@ public class PlayerActivity extends AppCompatActivity {
         PrefStore.init(this);
         com.lateshow.app.util.ApiCache.init(this);
         com.lateshow.app.util.OfflineMedia.init(this);
-        int t = PrefStore.get().theme();
-        AppCompatDelegate.setDefaultNightMode(
-                t == PrefStore.THEME_LIGHT ? AppCompatDelegate.MODE_NIGHT_NO
-                : t == PrefStore.THEME_AUTO ? AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                : AppCompatDelegate.MODE_NIGHT_YES);
+        com.lateshow.app.util.ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_player);
         com.lateshow.app.util.LottieIcon.bindTree(findViewById(android.R.id.content));

@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
+        android:name=".LateShowApp"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher_legacy"
         android:label="@string/app_name"

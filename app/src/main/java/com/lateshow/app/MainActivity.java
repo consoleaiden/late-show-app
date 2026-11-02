@@ -126,12 +126,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void applyTheme() {
-        int t = PrefStore.get().theme();
-        AppCompatDelegate.setDefaultNightMode(
-                t == PrefStore.THEME_LIGHT ? AppCompatDelegate.MODE_NIGHT_NO
-                : t == PrefStore.THEME_AUTO ? AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                : AppCompatDelegate.MODE_NIGHT_YES);
+        com.lateshow.app.util.ThemeManager.apply(this);
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        healNightMode();
+    }
+
+    /** 主题自检：资源解析到的日夜与偏好不符（重启后偶发的混色）时，重新断言并重建 */
+    private void healNightMode() {
+        boolean mismatch = com.lateshow.app.util.ThemeManager.expectNight(this)
+                != com.lateshow.app.util.ThemeManager.actualNight(this);
+        if (!mismatch) return;
+        long now = System.currentTimeMillis();
+        if (now - sLastHealAt < 3000) return;   // 防抖：避免极端情况下循环重建
+        sLastHealAt = now;
+        com.lateshow.app.util.ThemeManager.apply(this);
+        recreate();
+    }
+
+    private static long sLastHealAt;
 
     private void switchTab(Fragment target, int tab) {
         if (curTab == tab && active != null) return;
