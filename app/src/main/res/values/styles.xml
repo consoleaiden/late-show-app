@@ -36,22 +36,22 @@
     </style>
 
     <style name="TabIconBox">
-        <item name="android:layout_width">24dp</item>
-        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_width">30dp</item>
+        <item name="android:layout_height">30dp</item>
         <item name="android:clipChildren">false</item>
     </style>
 
     <style name="TabGlow">
-        <item name="android:layout_width">30dp</item>
-        <item name="android:layout_height">30dp</item>
+        <item name="android:layout_width">36dp</item>
+        <item name="android:layout_height">36dp</item>
         <item name="android:layout_gravity">center</item>
         <item name="android:background">@drawable/bg_nav_glow</item>
         <item name="android:alpha">0</item>
     </style>
 
     <style name="TabIcon">
-        <item name="android:layout_width">21dp</item>
-        <item name="android:layout_height">21dp</item>
+        <item name="android:layout_width">26dp</item>
+        <item name="android:layout_height">26dp</item>
         <item name="android:layout_gravity">center</item>
     </style>
 

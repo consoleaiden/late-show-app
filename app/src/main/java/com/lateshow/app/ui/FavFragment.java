@@ -37,7 +37,7 @@ public class FavFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
-        com.lateshow.app.util.Avd.startTree(v);
+        com.lateshow.app.util.LottieIcon.bindTree(v);
         subTitle = v.findViewById(R.id.subTitle);
         metaInfo = v.findViewById(R.id.metaInfo);
         btnClear = v.findViewById(R.id.btnClear);
@@ -53,8 +53,11 @@ public class FavFragment extends Fragment {
         grid.setLayoutManager(new GridLayoutManager(getContext(), 3));
         grid.setAdapter(adapter);
 
-        // 回到顶部浮动按钮
-        View fabTop = v.findViewById(R.id.fabTop);
+        // 回到顶部浮动按钮（FAB 用 LottieDrawable 注入图标）
+        com.google.android.material.floatingactionbutton.FloatingActionButton fabTop =
+                v.findViewById(R.id.fabTop);
+        final com.airbnb.lottie.LottieDrawable fabIcon =
+                com.lateshow.app.util.LottieIcon.into(fabTop, "ic_top", false);
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 LinearLayoutManager lm = (LinearLayoutManager) rv.getLayoutManager();
@@ -63,6 +66,10 @@ public class FavFragment extends Fragment {
             }
         });
         fabTop.setOnClickListener(vv -> {
+            if (fabIcon != null) {
+                fabIcon.setProgress(0f);
+                fabIcon.playAnimation();
+            }
             grid.smoothScrollToPosition(0);
             fabTop.setVisibility(View.GONE);
         });

@@ -7,7 +7,6 @@ import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
-import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -24,7 +23,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int TAB_COUNT = 3;
     private static final int[] TAB_IDS = {R.id.tab_home, R.id.tab_fav, R.id.tab_settings};
     private static final int[] ICON_IDS = {R.id.tab_home_icon, R.id.tab_fav_icon, R.id.tab_settings_icon};
-    private static final int[] LABEL_IDS = {R.id.tab_home_label, R.id.tab_fav_label, R.id.tab_settings_label};
+    /** 三个底部图标的 Lottie 资产名 */
+    private static final String[] NAV_ICONS = {"ic_home", "ic_heart", "ic_settings"};
     private static final int[] GLOW_IDS = {R.id.tab_home_glow, R.id.tab_fav_glow, R.id.tab_settings_glow};
     private static final int[] IND_IDS = {R.id.tab_home_ind, R.id.tab_fav_ind, R.id.tab_settings_ind};
 
@@ -40,8 +40,7 @@ public class MainActivity extends AppCompatActivity {
     private SettingsFragment settingsFragment;
     private Fragment active;
 
-    private final ImageView[] icons = new ImageView[TAB_COUNT];
-    private final TextView[] labels = new TextView[TAB_COUNT];
+    private final com.airbnb.lottie.LottieAnimationView[] icons = new com.airbnb.lottie.LottieAnimationView[TAB_COUNT];
     private final View[] glows = new View[TAB_COUNT];
     private final View[] inds = new View[TAB_COUNT];
     private final int[] curTint = new int[TAB_COUNT];
@@ -57,24 +56,18 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         int off = getColor(R.color.t3);
-        int labelOff = getColor(R.color.t3);
         for (int i = 0; i < TAB_COUNT; i++) {
             icons[i] = findViewById(ICON_IDS[i]);
-            labels[i] = findViewById(LABEL_IDS[i]);
             glows[i] = findViewById(GLOW_IDS[i]);
             inds[i] = findViewById(IND_IDS[i]);
-            icons[i].setColorFilter(off);
+            // Lottie 图标：装载并停在起始帧，颜色由选中态统一着色
+            com.lateshow.app.util.LottieIcon.bind(icons[i], NAV_ICONS[i]);
+            com.lateshow.app.util.LottieIcon.tint(icons[i], off);
             curTint[i] = off;
-            labels[i].setTextColor(labelOff);
-            labels[i].setAlpha(0f);
-            labels[i].setTranslationY(dp(5));
             glows[i].setAlpha(0f);
             inds[i].setAlpha(0f);
             inds[i].setScaleX(0.2f);
         }
-
-        // 底部导航动态图标（AVD 不自动播放，需手动启动）
-        com.lateshow.app.util.Avd.startTree(findViewById(R.id.tabbar));
 
         FragmentManager fm = getSupportFragmentManager();
         homeFragment = (HomeFragment) fm.findFragmentByTag(TAGS[0]);
@@ -155,43 +148,43 @@ public class MainActivity extends AppCompatActivity {
         renderTabs(tab, animate);
     }
 
-    /** 渲染导航选中态：颜色渐变 + 图标弹跳 + 标签上浮 + 光斑/指示条展开 */
+    /** 渲染导航选中态：颜色渐变 + 图标播放一次 + 光斑/指示条展开（无文字标签） */
     private void renderTabs(int tab, boolean animate) {
         int acc = getColor(R.color.acc);
         int off = getColor(R.color.t3);
         for (int i = 0; i < TAB_COUNT; i++) {
             final boolean sel = i == tab;
-            final ImageView icon = icons[i];
-            final TextView label = labels[i];
+            final com.airbnb.lottie.LottieAnimationView icon = icons[i];
             View glow = glows[i];
             View ind = inds[i];
             int target = sel ? acc : off;
 
             if (animate) animateTint(icon, curTint[i], target);
-            else icon.setColorFilter(target);
+            else com.lateshow.app.util.LottieIcon.tint(icon, target);
             curTint[i] = target;
-            label.setTextColor(target);
 
             if (animate) {
-                label.animate().alpha(sel ? 1f : 0f).translationY(sel ? 0 : dp(5))
-                        .setDuration(sel ? 220 : 140).start();
                 glow.animate().alpha(sel ? 1f : 0f).setDuration(sel ? 280 : 160).start();
                 ind.animate().alpha(sel ? 1f : 0f).scaleX(sel ? 1f : 0.2f)
                         .setDuration(sel ? 240 : 120).start();
             } else {
-                label.setAlpha(sel ? 1f : 0f);
-                label.setTranslationY(sel ? 0 : dp(5));
                 glow.setAlpha(sel ? 1f : 0f);
                 ind.setAlpha(sel ? 1f : 0f);
                 ind.setScaleX(sel ? 1f : 0.2f);
             }
 
             if (sel && animate) {
+                // 点选：图标从头播放一次（描边心形 → 实心），播完静止
+                icon.setSpeed(1f);
+                icon.setProgress(0f);
+                icon.playAnimation();
                 bounce(icon);
             } else if (!sel) {
                 icon.animate().cancel();
                 icon.setScaleX(1f);
                 icon.setScaleY(1f);
+                icon.pauseAnimation();
+                icon.setProgress(0f);   // 取消选中回到起始帧（心形=描边态）
             }
         }
     }

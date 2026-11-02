@@ -23,33 +23,45 @@
             android:background="@drawable/bg_ring_off"
             android:contentDescription="切换源站">
 
-            <androidx.appcompat.widget.AppCompatImageView
+            <com.airbnb.lottie.LottieAnimationView
                 android:id="@+id/btnSourceIcon"
                 android:layout_width="17dp"
                 android:layout_height="17dp"
                 android:layout_gravity="center"
-                app:srcCompat="@drawable/ic_menu_list"
+                android:tag="ic_menu_list"
                 android:contentDescription="源站菜单" />
         </FrameLayout>
 
-        <EditText
-            android:id="@+id/inputSearch"
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="38dp"
             android:layout_weight="1"
             android:layout_marginLeft="8dp"
-            android:paddingLeft="12dp"
-            android:paddingRight="12dp"
-            android:background="@drawable/bg_capsule"
-            android:hint="搜片名 / 演员"
-            android:textSize="12.5sp"
-            android:textColor="@color/t1"
-            android:textColorHint="@color/t3"
-            android:maxLines="1"
-            android:inputType="text"
-            android:imeOptions="actionSearch"
-            android:drawableEnd="@drawable/ic_search_inset"
-            android:drawablePadding="6dp" />
+            android:background="@drawable/bg_capsule">
+
+            <EditText
+                android:id="@+id/inputSearch"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingLeft="12dp"
+                android:paddingRight="38dp"
+                android:background="@null"
+                android:hint="搜片名 / 演员"
+                android:textSize="12.5sp"
+                android:textColor="@color/t1"
+                android:textColorHint="@color/t3"
+                android:maxLines="1"
+                android:inputType="text"
+                android:imeOptions="actionSearch" />
+
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/imgSearch"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="10dp"
+                android:tag="ic_search" />
+        </FrameLayout>
     </LinearLayout>
 
     <!-- 分类横滑 -->
@@ -106,11 +118,9 @@
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|end"
             android:layout_margin="12dp"
-            android:src="@drawable/ic_top"
             app:fabCustomSize="40dp"
-            app:maxImageSize="18dp"
+            app:maxImageSize="20dp"
             app:backgroundTint="@color/ink700"
-            app:tint="@color/t1"
             app:elevation="6dp"
             android:contentDescription="回到顶部"
             android:visibility="gone" />

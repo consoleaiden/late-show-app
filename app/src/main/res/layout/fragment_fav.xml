@@ -116,11 +116,9 @@
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|end"
             android:layout_margin="12dp"
-            android:src="@drawable/ic_top"
             app:fabCustomSize="40dp"
-            app:maxImageSize="18dp"
+            app:maxImageSize="20dp"
             app:backgroundTint="@color/ink700"
-            app:tint="@color/t1"
             app:elevation="6dp"
             android:contentDescription="回到顶部"
             android:visibility="gone" />

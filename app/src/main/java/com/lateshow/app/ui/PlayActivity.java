@@ -8,7 +8,7 @@ import android.os.Looper;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageButton;
+
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
@@ -51,7 +51,7 @@ public class PlayActivity extends AppCompatActivity {
     private boolean offlineMode = false;
 
     private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount, badge, breadcrumb;
-    private ImageButton btnFav;
+    private com.airbnb.lottie.LottieAnimationView btnFav;
     private RecyclerView lines, epGrid;
 
     // 内嵌播放器
@@ -81,7 +81,10 @@ public class PlayActivity extends AppCompatActivity {
         applyTheme();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_play);
-        com.lateshow.app.util.Avd.startTree(findViewById(android.R.id.content));
+        com.lateshow.app.util.LottieIcon.bindTree(findViewById(android.R.id.content));
+        // 封面播放键在深色圆钮上，固定白色
+        android.view.View playCover = findViewById(R.id.imgPlayCover);
+        if (playCover != null) com.lateshow.app.util.LottieIcon.tint(playCover, 0xF2FFFFFF);
 
         Intent it = getIntent();
         slug = it.getStringExtra("slug");
@@ -156,10 +159,10 @@ public class PlayActivity extends AppCompatActivity {
             }
             // 详情尚未加载完就点了收藏：补一次加载，成功后会把播放数据缓存下来
             if (fav && detail == null) loadDetail();
-            syncFavState();
+            syncFavState(true);
             Toast.makeText(this, fav ? "已加入收藏 · 已缓存可离线播放" : "已取消收藏", Toast.LENGTH_SHORT).show();
         });
-        syncFavState();
+        syncFavState(false);
 
         loadDetail();
     }
@@ -172,10 +175,24 @@ public class PlayActivity extends AppCompatActivity {
                 : AppCompatDelegate.MODE_NIGHT_YES);
     }
 
-    private void syncFavState() {
+    /** 收藏态：心形描边(未收藏) / 实心(已收藏)，animate=true 时播放描边→实心过渡 */
+    private void syncFavState(boolean animate) {
         boolean fav = PrefStore.get().isFav(slug, vodId);
-        btnFav.setColorFilter(getColor(fav ? R.color.acc : R.color.t2));
-        btnFav.setImageResource(fav ? R.drawable.ic_bookmark : R.drawable.ic_bookmark);
+        com.lateshow.app.util.LottieIcon.tint(btnFav, getColor(fav ? R.color.acc : R.color.t2));
+        if (animate) {
+            if (fav) {
+                btnFav.setSpeed(1f);
+                btnFav.setProgress(0f);
+                btnFav.playAnimation();
+            } else {
+                btnFav.setSpeed(-1f);
+                btnFav.setProgress(1f);
+                btnFav.playAnimation();
+            }
+        } else {
+            btnFav.pauseAnimation();
+            btnFav.setProgress(fav ? 1f : 0f);
+        }
     }
 
     private void loadDetail() {

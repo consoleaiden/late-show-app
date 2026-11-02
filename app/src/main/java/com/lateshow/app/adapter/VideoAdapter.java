@@ -64,7 +64,11 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
     @Override
     public void onBindViewHolder(@NonNull VH h, int pos) {
         final CardItem it = items.get(pos);
-        com.lateshow.app.util.Avd.startTree(h.itemView);
+        // Lottie 图标：删除角标白色静止、收藏角标心形实心（橙色）
+        com.lateshow.app.util.LottieIcon.bind(h.imgDel, "ic_delete");
+        com.lateshow.app.util.LottieIcon.tint(h.imgDel, 0xCCFFFFFF);
+        com.lateshow.app.util.LottieIcon.bind(h.imgBadgeFav, "ic_heart");
+        com.lateshow.app.util.LottieIcon.tint(h.imgBadgeFav, h.itemView.getResources().getColor(R.color.acc));
         h.title.setText(it.title);
 
         // 遮罩显隐
@@ -116,6 +120,9 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             if (listener != null) listener.onCard(it);
         });
         h.btnDel.setOnClickListener(v -> {
+            // 点删除时播放一次垃圾桶盖摇摆
+            h.imgDel.setProgress(0f);
+            h.imgDel.playAnimation();
             if (listener != null) listener.onDelete(it);
         });
     }
@@ -130,6 +137,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         TextView title, tvSrc, tvMaskLeft, tvMaskRight, tvRemark;
         LinearLayout topMask, maskBottom;
         FrameLayout badgeFav, btnDel;
+        com.airbnb.lottie.LottieAnimationView imgDel, imgBadgeFav;
 
         VH(@NonNull View v) {
             super(v);
@@ -143,6 +151,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             maskBottom = v.findViewById(R.id.maskBottom);
             badgeFav = v.findViewById(R.id.badgeFav);
             btnDel = v.findViewById(R.id.btnDel);
+            imgDel = v.findViewById(R.id.imgDel);
+            imgBadgeFav = v.findViewById(R.id.imgBadgeFav);
         }
     }
 }

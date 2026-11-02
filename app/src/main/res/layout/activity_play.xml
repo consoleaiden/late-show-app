@@ -16,13 +16,13 @@
         android:paddingTop="10dp"
         android:paddingBottom="6dp">
 
-        <ImageButton
+        <com.airbnb.lottie.LottieAnimationView
             android:id="@+id/btnBack"
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:padding="6dp"
             android:background="@null"
-            android:src="@drawable/ic_back"
+            android:tag="ic_back"
             android:contentDescription="返回" />
 
         <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
@@ -172,11 +172,12 @@
                         app:layout_constraintStart_toStartOf="@id/cover"
                         app:layout_constraintEnd_toEndOf="@id/cover">
 
-                        <ImageView
-                            android:layout_width="20dp"
-                            android:layout_height="20dp"
+                        <com.airbnb.lottie.LottieAnimationView
+                            android:id="@+id/imgPlayCover"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
                             android:layout_gravity="center"
-                            android:src="@drawable/ic_play" />
+                            android:tag="ic_play" />
                     </FrameLayout>
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -270,13 +271,14 @@
                         android:textColor="@color/accInk"
                         android:letterSpacing="0.06" />
 
-                    <ImageButton
+                    <com.airbnb.lottie.LottieAnimationView
                         android:id="@+id/btnFav"
                         android:layout_width="46dp"
                         android:layout_height="46dp"
                         android:layout_marginLeft="10dp"
+                        android:padding="12dp"
                         android:background="@drawable/bg_smbtn"
-                        android:src="@drawable/ic_bookmark"
+                        android:tag="ic_heart"
                         android:contentDescription="收藏" />
                 </LinearLayout>
 
