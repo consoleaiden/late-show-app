@@ -26,4 +26,43 @@
         android:textColor="#FFFFFF"
         android:fontFamily="monospace"
         android:visibility="gone" />
+
+    <!-- 播放器工具：倍速 + 设置（右上角悬浮，兼顾状态栏下方空间） -->
+    <LinearLayout
+        android:id="@+id/playerTools"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="36dp"
+        android:layout_marginEnd="10dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/btnSpeed"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:gravity="center"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:background="@drawable/bg_chip_dark"
+            android:alpha="0.85"
+            android:text="1.0x"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:fontFamily="monospace"
+            android:contentDescription="倍速" />
+
+        <TextView
+            android:id="@+id/btnGear"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginLeft="6dp"
+            android:gravity="center"
+            android:background="@drawable/bg_chip_dark"
+            android:alpha="0.85"
+            android:text="⚙"
+            android:textSize="14sp"
+            android:textColor="#FFFFFF"
+            android:contentDescription="播放设置" />
+    </LinearLayout>
 </FrameLayout>

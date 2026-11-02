@@ -87,6 +87,10 @@ public class PlayerActivity extends AppCompatActivity {
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
                 .build();
         pv.setPlayer(player);
+        // 倍速 + 播放设置（悬浮工具，右上角），并把上次倍速立即应用
+        com.lateshow.app.util.PlayerPanel.attach(
+                findViewById(R.id.btnSpeed), findViewById(R.id.btnGear), player);
+        com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
 
         // 横向滑动手势快进/快退：按总时长比例计算，划满全屏 = 总时长 1/2，半屏 = 1/4
         final TextView seekOverlay = findViewById(R.id.seekOverlay);

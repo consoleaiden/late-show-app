@@ -417,6 +417,10 @@ public class PlayActivity extends AppCompatActivity {
             playerView.setControllerShowTimeoutMs(2500);
             // 点全屏按钮才进入横屏全屏
             playerView.setFullscreenButtonClickListener(v -> goFullscreen());
+            // 倍速 + 播放设置（悬浮工具，见布局右上角）
+            com.lateshow.app.util.PlayerPanel.attach(
+                    findViewById(R.id.btnSpeed), findViewById(R.id.btnGear), player);
+            com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
             player.addListener(new Player.Listener() {
                 @Override public void onPlaybackStateChanged(int state) {
                     if (state == Player.STATE_READY) {

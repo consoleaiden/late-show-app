@@ -142,6 +142,22 @@ public final class PrefStore {
         return Math.min(sec, 600); // 上限 10 分钟
     }
 
+    // ---------- 播放倍速 ----------
+
+    /** 上次使用的播放倍速（内嵌/全屏共用），默认 1.0 */
+    public float playSpeed() {
+        float v = sp.getFloat("play_speed", 1f);
+        for (float s : SPEEDS) if (s == v) return v;
+        return 1f;
+    }
+
+    public void setPlaySpeed(float v) {
+        sp.edit().putFloat("play_speed", v).apply();
+    }
+
+    /** 可选倍速档位 */
+    public static final float[] SPEEDS = {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+
     // ---------- 收藏 ----------
 
     public boolean isFav(String slug, long vodId) {

@@ -53,6 +53,41 @@ public class SettingsFragment extends Fragment {
     private boolean polling = false;
     private Models.PauseState pauseState = new Models.PauseState();
 
+    /** 手风琴面板：同一时间只展开一个 */
+    private static final int[] PANEL_HEADERS = {
+            R.id.hdrSource, R.id.hdrPlay, R.id.hdrCache, R.id.hdrSync, R.id.hdrApp};
+    private static final int[] PANEL_BODIES = {
+            R.id.panelSource, R.id.panelPlay, R.id.panelCache, R.id.panelSync, R.id.panelApp};
+    private static final int[] PANEL_ARROWS = {
+            R.id.arSource, R.id.arPlay, R.id.arCache, R.id.arSync, R.id.arApp};
+
+    /** 初始化手风琴：点头部切换，展开一个自动收起其他（默认展开第一个） */
+    private void setupAccordion(View root) {
+        for (int i = 0; i < PANEL_HEADERS.length; i++) {
+            final int idx = i;
+            root.findViewById(PANEL_HEADERS[i]).setOnClickListener(v -> togglePanel(root, idx, true));
+        }
+        // 默认展开第一个面板
+        applyPanels(root, 0);
+    }
+
+    private void togglePanel(View root, int idx, boolean user) {
+        View body = root.findViewById(PANEL_BODIES[idx]);
+        boolean wantOpen = body.getVisibility() != View.VISIBLE;
+        applyPanels(root, wantOpen ? idx : -1);
+    }
+
+    /** 只展开 target（-1 = 全部收起），其余收起，箭头旋转同步 */
+    private void applyPanels(View root, int target) {
+        for (int i = 0; i < PANEL_BODIES.length; i++) {
+            View body = root.findViewById(PANEL_BODIES[i]);
+            View arrow = root.findViewById(PANEL_ARROWS[i]);
+            boolean open = i == target;
+            body.setVisibility(open ? View.VISIBLE : View.GONE);
+            arrow.animate().rotation(open ? 180f : 0f).setDuration(180).start();
+        }
+    }
+
     private final Runnable pollTask = new Runnable() {
         @Override public void run() {
             if (!polling) return;
@@ -69,6 +104,8 @@ public class SettingsFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
+        setupAccordion(v);
+
         inputBaseUrl = v.findViewById(R.id.inputBaseUrl);
         inputToken = v.findViewById(R.id.inputToken);
         srcStatus = v.findViewById(R.id.srcStatus);
