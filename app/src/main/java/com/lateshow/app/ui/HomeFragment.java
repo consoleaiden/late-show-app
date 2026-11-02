@@ -71,6 +71,9 @@ public class HomeFragment extends Fragment {
         com.lateshow.app.util.LottieIcon.bindTree(v);
         btnSource = v.findViewById(R.id.btnSource);
         btnSourceIcon = v.findViewById(R.id.btnSourceIcon);
+        // 顶栏两个图标常驻循环播放（源站菜单中线滑动 / 放大镜摇摆）
+        com.lateshow.app.util.LottieIcon.loop(btnSourceIcon, "ic_menu_list");
+        com.lateshow.app.util.LottieIcon.loop(v.findViewById(R.id.imgSearch), "ic_search");
         inputSearch = v.findViewById(R.id.inputSearch);
         chips = v.findViewById(R.id.chips);
         grid = v.findViewById(R.id.grid);
@@ -148,7 +151,7 @@ public class HomeFragment extends Fragment {
         if (btnSource == null || btnSourceIcon == null) return;
         btnSource.setBackgroundResource(ok ? R.drawable.bg_ring_on : R.drawable.bg_ring_off);
         int tint = getResources().getColor(ok ? R.color.acc : R.color.t3, null);
-        btnSourceIcon.setColorFilter(tint);
+        com.lateshow.app.util.LottieIcon.tint(btnSourceIcon, tint);
     }
 
     /** 轻量健康探测（GET /healthz），决定顶部圆环颜色 */

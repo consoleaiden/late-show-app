@@ -206,11 +206,11 @@ public class MainActivity extends AppCompatActivity {
                 .start();
     }
 
-    /** 图标着色渐变 */
-    private void animateTint(final ImageView icon, int from, int to) {
+    /** 图标着色渐变（Lottie 值回调，填充/描边同一颜色，不经过 ColorFilter） */
+    private void animateTint(final com.airbnb.lottie.LottieAnimationView icon, int from, int to) {
         ValueAnimator va = ValueAnimator.ofObject(new ArgbEvaluator(), from, to);
         va.setDuration(260);
-        va.addUpdateListener(a -> icon.setColorFilter((Integer) a.getAnimatedValue()));
+        va.addUpdateListener(a -> com.lateshow.app.util.LottieIcon.tint(icon, (Integer) a.getAnimatedValue()));
         va.start();
     }
 

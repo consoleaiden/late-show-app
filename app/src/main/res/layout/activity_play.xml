@@ -166,7 +166,7 @@
                         android:id="@+id/btnPlayCover"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
-                        android:background="@drawable/bg_circle"
+                        android:background="@drawable/bg_play_cover"
                         app:layout_constraintTop_toTopOf="@id/cover"
                         app:layout_constraintBottom_toBottomOf="@id/cover"
                         app:layout_constraintStart_toStartOf="@id/cover"

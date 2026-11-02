@@ -55,6 +55,18 @@ public final class LottieIcon {
         if (v instanceof LottieAnimationView) ((LottieAnimationView) v).playAnimation();
     }
 
+    /** 常驻循环播放（顶栏呼吸类图标用） */
+    public static void loop(View v, String name) {
+        if (!(v instanceof LottieAnimationView)) return;
+        LottieAnimationView lav = (LottieAnimationView) v;
+        LottieComposition cp = comp(v.getContext(), name);
+        if (cp == null) return;
+        lav.setComposition(cp);
+        lav.setRepeatCount(LottieDrawable.INFINITE);
+        lav.setSpeed(1f);
+        lav.playAnimation();
+    }
+
     /** 反向播放一次（当前进度 → 0） */
     public static void playReverse(LottieAnimationView lav) {
         lav.setSpeed(-1f);
