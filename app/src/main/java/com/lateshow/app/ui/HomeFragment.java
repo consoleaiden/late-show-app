@@ -91,6 +91,7 @@ public class HomeFragment extends Fragment {
         });
         chips.setLayoutManager(new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false));
         chips.setAdapter(chipAdapter);
+        chips.setHasFixedSize(true);
 
         videoAdapter = new VideoAdapter(new VideoAdapter.OnClick() {
             @Override public void onCard(CardItem item) { openDetail(item); }
@@ -99,6 +100,7 @@ public class HomeFragment extends Fragment {
         GridLayoutManager glm = new GridLayoutManager(getContext(), 3);
         grid.setLayoutManager(glm);
         grid.setAdapter(videoAdapter);
+        grid.setHasFixedSize(true); // 条目尺寸固定，插入新页不触发整表重测量
 
         // 无限加载 + 回到顶部按钮显隐（FAB 用 LottieDrawable 注入图标）
         com.google.android.material.floatingactionbutton.FloatingActionButton fabTop =
@@ -117,6 +119,22 @@ public class HomeFragment extends Fragment {
                 int last = lm.findLastVisibleItemPosition();
                 int total = lm.getItemCount();
                 if (last >= total - 6) loadPage(page + 1);
+            }
+
+            /** 滚动期间暂停顶栏两个常驻循环动画，静止后恢复——消除每帧额外重绘 */
+            @Override public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
+                boolean scrolling = newState != RecyclerView.SCROLL_STATE_IDLE;
+                if (btnSourceIcon instanceof com.airbnb.lottie.LottieAnimationView) {
+                    com.airbnb.lottie.LottieAnimationView lv = (com.airbnb.lottie.LottieAnimationView) btnSourceIcon;
+                    if (scrolling) lv.pauseAnimation();
+                    else if (lv.getComposition() != null) lv.playAnimation();
+                }
+                View search = getView() != null ? getView().findViewById(R.id.imgSearch) : null;
+                if (search instanceof com.airbnb.lottie.LottieAnimationView) {
+                    com.airbnb.lottie.LottieAnimationView lv = (com.airbnb.lottie.LottieAnimationView) search;
+                    if (scrolling) lv.pauseAnimation();
+                    else if (lv.getComposition() != null) lv.playAnimation();
+                }
             }
         });
         fabTop.setOnClickListener(vv -> {

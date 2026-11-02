@@ -11,10 +11,16 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatImageView;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DecodeFormat;
+import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
+import com.bumptech.glide.request.RequestOptions;
+import com.bumptech.glide.request.transition.DrawableTransitionOptions;
 import com.lateshow.app.R;
 import com.lateshow.app.model.CardItem;
 import com.lateshow.app.util.TimeUtil;
@@ -39,9 +45,31 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
     }
 
     public void setItems(List<CardItem> list) {
+        // DiffUtil 增量刷新：只重绑有变化的条目，避免全量 notifyDataSetChanged 的整表重绘与封面闪烁
+        final List<CardItem> oldItems = new ArrayList<>(items);
+        final List<CardItem> newItems = new ArrayList<>(list);
+        DiffUtil.DiffResult r = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override public int getOldListSize() { return oldItems.size(); }
+            @Override public int getNewListSize() { return newItems.size(); }
+            @Override public boolean areItemsTheSame(int o, int n) {
+                CardItem a = oldItems.get(o), b = newItems.get(n);
+                return a.kind == b.kind && a.vodId == b.vodId
+                        && (a.slug == null ? b.slug == null : a.slug.equals(b.slug));
+            }
+            @Override public boolean areContentsTheSame(int o, int n) {
+                CardItem a = oldItems.get(o), b = newItems.get(n);
+                return same(a.title, b.title) && same(a.pic, b.pic) && same(a.remark, b.remark)
+                        && same(a.timeStr, b.timeStr) && same(a.topTimeStr, b.topTimeStr)
+                        && a.playedSec == b.playedSec && a.totalSec == b.totalSec && a.cached == b.cached;
+            }
+        }, false);
         items.clear();
-        items.addAll(list);
-        notifyDataSetChanged();
+        items.addAll(newItems);
+        r.dispatchUpdatesTo(this);
+    }
+
+    private static boolean same(@Nullable String a, @Nullable String b) {
+        return a == null ? b == null : a.equals(b);
     }
 
     public void addItems(List<CardItem> list) {
@@ -58,17 +86,18 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_card, parent, false);
-        return new VH(v);
+        VH h = new VH(v);
+        // Lottie 图标一次装载随 ViewHolder 复用：删除角标白色静止、收藏角标心形实心（橙色）
+        com.lateshow.app.util.LottieIcon.bind(h.imgDel, "ic_delete");
+        com.lateshow.app.util.LottieIcon.tint(h.imgDel, 0xCCFFFFFF);
+        com.lateshow.app.util.LottieIcon.bind(h.imgBadgeFav, "ic_heart");
+        com.lateshow.app.util.LottieIcon.tint(h.imgBadgeFav, h.itemView.getResources().getColor(R.color.acc));
+        return h;
     }
 
     @Override
     public void onBindViewHolder(@NonNull VH h, int pos) {
         final CardItem it = items.get(pos);
-        // Lottie 图标：删除角标白色静止、收藏角标心形实心（橙色）
-        com.lateshow.app.util.LottieIcon.bind(h.imgDel, "ic_delete");
-        com.lateshow.app.util.LottieIcon.tint(h.imgDel, 0xCCFFFFFF);
-        com.lateshow.app.util.LottieIcon.bind(h.imgBadgeFav, "ic_heart");
-        com.lateshow.app.util.LottieIcon.tint(h.imgBadgeFav, h.itemView.getResources().getColor(R.color.acc));
         h.title.setText(it.title);
 
         // 遮罩显隐
@@ -110,10 +139,17 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             h.tvRemark.setVisibility(View.GONE);
         }
 
+        // 封面加载：RGB_565 解码省一半内存、无淡入动画、圆角烘焙进位图（不再依赖 GPU 逐帧路径裁剪）
+        int r7 = Math.round(7f * h.itemView.getResources().getDisplayMetrics().density);
         Glide.with(h.cover).load(it.pic)
-                .placeholder(R.color.ink700)
-                .error(R.color.ink700)
-                .centerCrop()
+                .apply(new RequestOptions()
+                        .placeholder(R.color.ink700)
+                        .error(R.color.ink700)
+                        .centerCrop()
+                        .transform(new RoundedCorners(r7))
+                        .format(DecodeFormat.PREFER_RGB_565)
+                        .dontAnimate())
+                .transition(DrawableTransitionOptions.withNoTransition())
                 .into(h.cover);
 
         h.itemView.setOnClickListener(v -> {

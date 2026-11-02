@@ -57,7 +57,17 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
     @NonNull
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new VH(LayoutInflater.from(parent.getContext()).inflate(R.layout.item_chip, parent, false));
+        VH h = new VH(LayoutInflater.from(parent.getContext()).inflate(R.layout.item_chip, parent, false));
+        // 选中/未选中两套背景随 ViewHolder 缓存复用，避免每次 bind 新建 GradientDrawable
+        float radius = dp(h.itemView, 999);
+        h.bgSel = new GradientDrawable();
+        h.bgSel.setCornerRadius(radius);
+        h.bgSel.setColor(ContextCompat.getColor(h.itemView.getContext(), R.color.acc));
+        h.bgOff = new GradientDrawable();
+        h.bgOff.setCornerRadius(radius);
+        h.bgOff.setColor(Color.TRANSPARENT);
+        h.bgOff.setStroke(1, ContextCompat.getColor(h.itemView.getContext(), R.color.line));
+        return h;
     }
 
     @Override
@@ -65,17 +75,10 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
         Models.Category c = items.get(pos);
         h.chip.setText(c == null ? "全部" : c.typeName);
         boolean sel = pos == selected;
-        int acc = ContextCompat.getColor(h.itemView.getContext(), R.color.acc);
         int accInk = ContextCompat.getColor(h.itemView.getContext(), R.color.accInk);
         int t2 = ContextCompat.getColor(h.itemView.getContext(), R.color.t2);
 
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(h.itemView, 999));
-        bg.setColor(sel ? acc : Color.TRANSPARENT);
-        if (!sel) {
-            bg.setStroke(1, ContextCompat.getColor(h.itemView.getContext(), R.color.line));
-        }
-        h.chip.setBackground(bg);
+        h.chip.setBackground(sel ? h.bgSel : h.bgOff);
         h.chip.setTextColor(sel ? accInk : t2);
 
         h.chip.setOnClickListener(v -> {
@@ -99,6 +102,7 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
 
     static class VH extends RecyclerView.ViewHolder {
         TextView chip;
+        GradientDrawable bgSel, bgOff;
         VH(@NonNull View v) {
             super(v);
             chip = v.findViewById(R.id.chipText);

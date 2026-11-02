@@ -52,6 +52,7 @@ public class FavFragment extends Fragment {
         });
         grid.setLayoutManager(new GridLayoutManager(getContext(), 3));
         grid.setAdapter(adapter);
+        grid.setHasFixedSize(true); // 条目尺寸固定，避免插入/删除时整表重测量
 
         // 回到顶部浮动按钮（FAB 用 LottieDrawable 注入图标）
         com.google.android.material.floatingactionbutton.FloatingActionButton fabTop =
@@ -139,58 +140,75 @@ public class FavFragment extends Fragment {
         if (getView() != null) render();
     }
 
+    /** 卡片构建用后台线程：OfflineMedia.has 是磁盘 stat，历史记录上百条时不能放主线程 */
+    private static final java.util.concurrent.ExecutorService CARD_EXEC =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+
     private void render() {
-        List<CardItem> cards = new ArrayList<>();
-        int cachedCount = 0;
-        if (showHist) {
-            for (PrefStore.HistItem h : PrefStore.get().hists()) {
-                CardItem c = new CardItem();
-                c.kind = CardItem.KIND_HIST;
-                c.slug = h.slug;
-                c.sourceName = h.sourceName;
-                c.vodId = h.vodId;
-                c.title = h.title;
-                c.pic = h.pic;
-                c.remark = h.remarks;
-                c.playedSec = h.playedSec;
-                c.totalSec = h.totalSec;
-                // 播放数据是否已落盘（老版本记录没有该标记时按文件存在性判断）
-                c.cached = h.cached || OfflineMedia.has(h.slug, h.vodId);
-                if (c.cached) cachedCount++;
-                c.topTimeStr = TimeUtil.stampOrEmpty(String.valueOf(h.lastPlayedAt)).isEmpty()
-                        ? "" : topStamp(h.lastPlayedAt);
-                c.fav = PrefStore.get().isFav(h.slug, h.vodId);
-                cards.add(c);
+        final boolean hist = showHist;
+        if (!isAdded()) return;
+        CARD_EXEC.execute(() -> {
+            final List<CardItem> cards = new ArrayList<>();
+            final int[] cachedCount = {0};
+            if (hist) {
+                for (PrefStore.HistItem h : PrefStore.get().hists()) {
+                    CardItem c = new CardItem();
+                    c.kind = CardItem.KIND_HIST;
+                    c.slug = h.slug;
+                    c.sourceName = h.sourceName;
+                    c.vodId = h.vodId;
+                    c.title = h.title;
+                    c.pic = h.pic;
+                    c.remark = h.remarks;
+                    c.playedSec = h.playedSec;
+                    c.totalSec = h.totalSec;
+                    // 播放数据是否已落盘（老版本记录没有该标记时按文件存在性判断）
+                    c.cached = h.cached || OfflineMedia.has(h.slug, h.vodId);
+                    if (c.cached) cachedCount[0]++;
+                    c.topTimeStr = TimeUtil.stampOrEmpty(String.valueOf(h.lastPlayedAt)).isEmpty()
+                            ? "" : topStamp(h.lastPlayedAt);
+                    c.fav = PrefStore.get().isFav(h.slug, h.vodId);
+                    cards.add(c);
+                }
+            } else {
+                for (PrefStore.FavItem f : PrefStore.get().favs()) {
+                    CardItem c = new CardItem();
+                    c.kind = CardItem.KIND_FAV;
+                    c.slug = f.slug;
+                    c.sourceName = f.sourceName;
+                    c.vodId = f.vodId;
+                    c.title = f.title;
+                    c.pic = f.pic;
+                    c.remark = f.remarks;
+                    c.timeStr = topStamp(f.savedAt);
+                    c.cached = f.cached || OfflineMedia.has(f.slug, f.vodId);
+                    if (c.cached) cachedCount[0]++;
+                    c.fav = true;
+                    cards.add(c);
+                }
             }
-            subTitle.setText(cards.size() + " 条记录 · 支持断点续播");
-            metaInfo.setText("按最近播放排序");
-            btnClear.setVisibility(cards.isEmpty() ? View.GONE : View.VISIBLE);
-            emptyView.setText("还没有播放记录\n去首页挑一部，进度会自动记在这里");
-        } else {
-            for (PrefStore.FavItem f : PrefStore.get().favs()) {
-                CardItem c = new CardItem();
-                c.kind = CardItem.KIND_FAV;
-                c.slug = f.slug;
-                c.sourceName = f.sourceName;
-                c.vodId = f.vodId;
-                c.title = f.title;
-                c.pic = f.pic;
-                c.remark = f.remarks;
-                c.timeStr = topStamp(f.savedAt);
-                c.cached = f.cached || OfflineMedia.has(f.slug, f.vodId);
-                if (c.cached) cachedCount++;
-                c.fav = true;
-                cards.add(c);
-            }
-            subTitle.setText(cards.size() + " 部待看 · 按收藏时间排序");
-            metaInfo.setText("本地收藏");
-            btnClear.setVisibility(View.GONE);
-            emptyView.setText("还没有收藏\n播放页右上角书签即可收藏");
-        }
-        adapter.setItems(cards);
-        emptyView.setVisibility(cards.isEmpty() ? View.VISIBLE : View.GONE);
-        metaInfo.setText(metaInfo.getText() + " · 共 " + cards.size() + " 部"
-                + (cachedCount > 0 ? " · " + cachedCount + " 部可离线播放" : ""));
+            if (!isAdded()) return;
+            final int cc = cachedCount[0];
+            requireActivity().runOnUiThread(() -> {
+                // 期间用户已切换 Tab 或页面已销毁：丢弃这次结果
+                if (!isAdded() || hist != showHist || getView() == null) return;
+                adapter.setItems(cards);
+                if (hist) {
+                    subTitle.setText(cards.size() + " 条记录 · 支持断点续播");
+                    metaInfo.setText("按最近播放排序");
+                    btnClear.setVisibility(cards.isEmpty() ? View.GONE : View.VISIBLE);
+                    emptyView.setText("还没有播放记录\n去首页挑一部，进度会自动记在这里");
+                } else {
+                    subTitle.setText(cards.size() + " 部待看 · 按收藏时间排序");
+                    metaInfo.setText("本地收藏");
+                    btnClear.setVisibility(View.GONE);
+                    emptyView.setText("还没有收藏\n播放页右上角书签即可收藏");
+                }
+                emptyView.setVisibility(cards.isEmpty() ? View.VISIBLE : View.GONE);
+                metaInfo.setText(metaInfo.getText() + " · 共 " + cards.size() + " 部"
+                        + (cc > 0 ? " · " + cc + " 部可离线播放" : ""));
+            });
+        });
     }
 
     private String topStamp(long ts) {

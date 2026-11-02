@@ -7,27 +7,24 @@
     android:layout_marginRight="5dp"
     android:layout_marginBottom="14dp">
 
-    <!-- 封面容器：10dp 圆角并按轮廓裁剪，遮罩/角标随之一同裁圆 -->
+    <!-- 封面容器：占位底色；圆角改由 Glide RoundedCorners 烘焙进位图 + 遮罩自带圆角，滚动时零逐帧裁剪开销 -->
     <FrameLayout
         android:id="@+id/coverBox"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@drawable/bg_cover_round"
-        android:clipToOutline="true"
-        android:outlineProvider="background"
         app:layout_constraintDimensionRatio="9:16"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <!-- 封面：竖版海报（宽9:高16） -->
-        <com.google.android.material.imageview.ShapeableImageView
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/cover"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="centerCrop"
-            android:contentDescription="封面"
-            app:shapeAppearanceOverlay="@style/ShapeAppearance.LateShow.Cover" />
+            android:contentDescription="封面" />
 
         <!-- 顶部遮罩：源站名 + 时间（历史卡片） -->
         <LinearLayout
