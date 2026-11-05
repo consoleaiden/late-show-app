@@ -69,6 +69,7 @@
                 android:background="@null">
 
                 <ImageView
+                    android:id="@+id/icModeHeader"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:layout_marginRight="7dp"
@@ -188,8 +189,9 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ② 播放源与鉴权（手风琴面板） -->
+        <!-- ② 播放源与鉴权（手风琴面板）——仅 NAS 同步库模式可见 -->
         <LinearLayout
+            android:id="@+id/cardSource"
             style="@style/SettingsCard"
             android:orientation="vertical">
 
@@ -204,6 +206,7 @@
                 android:background="@null">
 
                 <ImageView
+                    android:id="@+id/icSourceHeader"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:layout_marginRight="7dp"
@@ -377,166 +380,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ② 播放偏好（手风琴面板） -->
-        <LinearLayout
-            style="@style/SettingsCard"
-            android:orientation="vertical">
-
-            <LinearLayout
-                android:id="@+id/hdrPlay"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingTop="2dp"
-                android:paddingBottom="2dp"
-                android:background="@null">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_marginRight="7dp"
-                    android:src="@drawable/ic_set_play"
-                    app:tint="@color/t3"
-                    android:contentDescription="播放偏好" />
-
-                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放偏好" />
-
-                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-
-                <com.airbnb.lottie.LottieAnimationView
-                    android:id="@+id/arPlay"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:tag="ic_chevron_down"
-                    app:tint="@color/t3"
-                    android:contentDescription="展开" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/panelPlay"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="跳过片头：新视频从设定的秒数开始播放（用于跳过片头广告）；跳过片尾：播放到结尾前设定的秒数时自动结束。填 0 表示不跳过，改动即时生效。"
-                    android:textSize="10.5sp"
-                    android:textColor="@color/t2"
-                    android:lineSpacingMultiplier="1.6" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal">
-
-                    <EditText
-                        android:id="@+id/inputSkipIntro"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:layout_height="44dp"
-                        android:paddingLeft="12dp"
-                        android:paddingRight="12dp"
-                        android:background="@drawable/bg_field"
-                        android:hint="跳过片头（秒）"
-                        android:textSize="12sp"
-                        android:textColor="@color/t1"
-                        android:textColorHint="@color/t3"
-                        android:inputType="number"
-                        android:maxLength="3"
-                        android:maxLines="1" />
-
-                    <EditText
-                        android:id="@+id/inputSkipEnding"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:layout_height="44dp"
-                        android:layout_marginLeft="10dp"
-                        android:paddingLeft="12dp"
-                        android:paddingRight="12dp"
-                        android:background="@drawable/bg_field"
-                        android:hint="跳过片尾（秒）"
-                        android:textSize="12sp"
-                        android:textColor="@color/t1"
-                        android:textColorHint="@color/t3"
-                        android:inputType="number"
-                        android:maxLength="3"
-                        android:maxLines="1" />
-                </LinearLayout>
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ③ 离线与缓存（手风琴面板） -->
-        <LinearLayout
-            style="@style/SettingsCard"
-            android:orientation="vertical">
-
-            <LinearLayout
-                android:id="@+id/hdrCache"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingTop="2dp"
-                android:paddingBottom="2dp"
-                android:background="@null">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_marginRight="7dp"
-                    android:src="@drawable/ic_set_cache"
-                    app:tint="@color/t3"
-                    android:contentDescription="离线与缓存" />
-
-                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="离线与缓存" />
-
-                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-
-                <com.airbnb.lottie.LottieAnimationView
-                    android:id="@+id/arCache"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:tag="ic_chevron_down"
-                    app:tint="@color/t3"
-                    android:contentDescription="展开" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/panelCache"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    android:id="@+id/tvCacheInfo"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="统计中…"
-                    android:textSize="11sp"
-                    android:textColor="@color/t2"
-                    android:lineSpacingMultiplier="1.5" />
-
-                <TextView
-                    android:id="@+id/btnClearCache"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
-                    android:layout_marginTop="10dp"
-                    android:gravity="center"
-                    android:background="@drawable/bg_smbtn"
-                    android:text="清除首页 / 分类 / 源站缓存"
-                    android:textSize="12sp"
-                    android:textColor="@color/t1" />
-            </LinearLayout>
-        </LinearLayout>
-
         <!-- ④ 同步控制台（手风琴面板：运行概览 + 同步操作 + 暂停 + 源站状态 + 日志）——仅 NAS 模式可见 -->
         <LinearLayout
             android:id="@+id/cardSync"
@@ -554,6 +397,7 @@
                 android:background="@null">
 
                 <ImageView
+                    android:id="@+id/icSyncHeader"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:layout_marginRight="7dp"
@@ -751,6 +595,166 @@
                     android:layout_height="wrap_content"
                     android:nestedScrollingEnabled="false"
                     android:layout_marginTop="6dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ② 播放偏好（手风琴面板） -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/hdrPlay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="@null">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_play"
+                    app:tint="@color/t3"
+                    android:contentDescription="播放偏好" />
+
+                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放偏好" />
+
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                <com.airbnb.lottie.LottieAnimationView
+                    android:id="@+id/arPlay"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:tag="ic_chevron_down"
+                    app:tint="@color/t3"
+                    android:contentDescription="展开" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/panelPlay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="跳过片头：新视频从设定的秒数开始播放（用于跳过片头广告）；跳过片尾：播放到结尾前设定的秒数时自动结束。填 0 表示不跳过，改动即时生效。"
+                    android:textSize="10.5sp"
+                    android:textColor="@color/t2"
+                    android:lineSpacingMultiplier="1.6" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/inputSkipIntro"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="44dp"
+                        android:paddingLeft="12dp"
+                        android:paddingRight="12dp"
+                        android:background="@drawable/bg_field"
+                        android:hint="跳过片头（秒）"
+                        android:textSize="12sp"
+                        android:textColor="@color/t1"
+                        android:textColorHint="@color/t3"
+                        android:inputType="number"
+                        android:maxLength="3"
+                        android:maxLines="1" />
+
+                    <EditText
+                        android:id="@+id/inputSkipEnding"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="44dp"
+                        android:layout_marginLeft="10dp"
+                        android:paddingLeft="12dp"
+                        android:paddingRight="12dp"
+                        android:background="@drawable/bg_field"
+                        android:hint="跳过片尾（秒）"
+                        android:textSize="12sp"
+                        android:textColor="@color/t1"
+                        android:textColorHint="@color/t3"
+                        android:inputType="number"
+                        android:maxLength="3"
+                        android:maxLines="1" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ③ 离线与缓存（手风琴面板） -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/hdrCache"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="@null">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_cache"
+                    app:tint="@color/t3"
+                    android:contentDescription="离线与缓存" />
+
+                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="离线与缓存" />
+
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                <com.airbnb.lottie.LottieAnimationView
+                    android:id="@+id/arCache"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:tag="ic_chevron_down"
+                    app:tint="@color/t3"
+                    android:contentDescription="展开" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/panelCache"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvCacheInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="统计中…"
+                    android:textSize="11sp"
+                    android:textColor="@color/t2"
+                    android:lineSpacingMultiplier="1.5" />
+
+                <TextView
+                    android:id="@+id/btnClearCache"
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center"
+                    android:background="@drawable/bg_smbtn"
+                    android:text="清除首页 / 分类 / 源站缓存"
+                    android:textSize="12sp"
+                    android:textColor="@color/t1" />
             </LinearLayout>
         </LinearLayout>
 

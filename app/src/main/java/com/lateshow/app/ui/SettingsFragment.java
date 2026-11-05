@@ -262,14 +262,14 @@ public class SettingsFragment extends Fragment {
         });
 
         refreshConsole(true);
-        refreshAuthBadge();
     }
 
-    /** 顶部状态条：显示服务端是否开启鉴权、Token 是否已配置 */
+    /** 顶部状态条：显示服务端是否开启鉴权、Token 是否已配置；连接结果同时驱动模块标题图标的绿/灰 */
     private void refreshAuthBadge() {
         VodSyncApi.get().authState(new VodSyncApi.ApiCb<Models.AuthState>() {
             @Override public void onOk(Models.AuthState s) {
                 if (!isAdded() || s == null) return;
+                setHeaderIconsConnected(true);
                 if (!s.enabled) {
                     srcStatus.setTextColor(getColor(R.color.ok));
                     srcStatus.setText("● 服务端未开启鉴权 · 可直连");
@@ -284,10 +284,22 @@ public class SettingsFragment extends Fragment {
             }
             @Override public void onErr(String m) {
                 if (!isAdded()) return;
+                setHeaderIconsConnected(false);
                 srcStatus.setTextColor(getColor(R.color.bad));
                 srcStatus.setText("● 未连接 · " + m);
             }
         });
+    }
+
+    /** 模块标题图标连通状态：能连上播放源 → 绿色（与「已授权 · Token 有效」一致），否则灰色 */
+    private void setHeaderIconsConnected(boolean ok) {
+        View root = getView();
+        if (root == null || !isAdded()) return;
+        int color = getColor(ok ? R.color.ok : R.color.t3);
+        android.widget.ImageView icS = root.findViewById(R.id.icSourceHeader);
+        android.widget.ImageView icY = root.findViewById(R.id.icSyncHeader);
+        if (icS != null) icS.setColorFilter(color);
+        if (icY != null) icY.setColorFilter(color);
     }
 
     private String pickedSlugs() {
@@ -452,6 +464,7 @@ public class SettingsFragment extends Fragment {
 
     private void okStatus(String text) {
         if (!isAdded()) return;
+        setHeaderIconsConnected(true);
         srcStatus.setText(text);
         srcStatus.setTextColor(getColor(R.color.ok));
         btnSave.setText("已保存");
@@ -467,6 +480,7 @@ public class SettingsFragment extends Fragment {
 
     private void failStatus(String text) {
         if (!isAdded()) return;
+        setHeaderIconsConnected(false);
         srcStatus.setText(text);
         srcStatus.setTextColor(getColor(R.color.bad));
         resetSave("保存");
@@ -1057,7 +1071,7 @@ public class SettingsFragment extends Fragment {
 
     // ---------- 数据源模式 ----------
 
-    /** 渲染模式选中态；直连模式显示代理管理、隐藏 NAS 同步控制台 */
+    /** 渲染模式选中态；直连模式显示代理管理、隐藏 NAS 专属模块（播放源与鉴权 / 同步控制台） */
     private void renderModeSwitch() {
         View root = getView();
         if (root == null || segModeSync == null || !isAdded()) return;
@@ -1067,8 +1081,17 @@ public class SettingsFragment extends Fragment {
         segModeSync.setTextColor(getColor(st ? R.color.t2 : R.color.accInk));
         segModeStatic.setTextColor(getColor(st ? R.color.accInk : R.color.t2));
         if (tvModeState != null) tvModeState.setText(st ? "直连 · 免 NAS" : "NAS · 需在线");
+        // 模块标题图标随模式切换，不展开也能一眼识别当前模式
+        android.widget.ImageView icMode = root.findViewById(R.id.icModeHeader);
+        if (icMode != null) icMode.setImageResource(st ? R.drawable.ic_set_static : R.drawable.ic_set_mode);
         View syncCard = root.findViewById(R.id.cardSync);
         if (syncCard != null) syncCard.setVisibility(st ? View.GONE : View.VISIBLE);
+        View srcCard = root.findViewById(R.id.cardSource);
+        if (srcCard != null) srcCard.setVisibility(st ? View.GONE : View.VISIBLE);
+        if (st) {
+            // 直连模式：两个 NAS 专属模块已隐藏，图标复位为灰色
+            setHeaderIconsConnected(false);
+        }
         if (proxySection != null) {
             proxySection.setVisibility(st ? View.VISIBLE : View.GONE);
             if (st) renderProxies(); // 回到直连模式时刷新代理列表
@@ -1087,6 +1110,8 @@ public class SettingsFragment extends Fragment {
         toast(mode == com.lateshow.app.api.Catalog.MODE_STATIC
                 ? "已切到资源站直连 · NAS 关机也能用"
                 : "已切回 NAS 同步库");
+        // 切回 NAS 模式：模块重新可见，立即自动测一次播放源连通性以点亮标题图标
+        if (mode == com.lateshow.app.api.Catalog.MODE_SYNC) refreshAuthBadge();
         if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).notifyDataSourceChanged();
         }
@@ -1125,6 +1150,8 @@ public class SettingsFragment extends Fragment {
     public void onResume() {
         super.onResume();
         renderModeSwitch();
+        // 每次进入设置页（首次 + 切回 tab）：NAS 模式自动测一次播放源连通性，驱动标题图标绿/灰
+        if (!com.lateshow.app.api.Catalogs.isStatic()) refreshAuthBadge();
         polling = true;
         handler.postDelayed(pollTask, 5000);
     }
