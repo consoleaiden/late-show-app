@@ -44,7 +44,7 @@
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:textSize="9sp"
+                android:textSize="10.5sp"
                 android:textColor="@color/maskText"
                 android:maxLines="1"
                 android:ellipsize="end"
@@ -55,7 +55,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="6dp"
-                android:textSize="9sp"
+                android:textSize="10.5sp"
                 android:textColor="@color/maskText"
                 android:fontFamily="monospace" />
         </LinearLayout>
@@ -78,7 +78,7 @@
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:textSize="9sp"
+                android:textSize="10.5sp"
                 android:textColor="@color/maskText"
                 android:fontFamily="monospace"
                 android:maxLines="1"
@@ -90,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="6dp"
                 android:gravity="end"
-                android:textSize="9sp"
+                android:textSize="10.5sp"
                 android:textColor="@color/maskText"
                 android:fontFamily="monospace"
                 android:maxLines="1" />
@@ -99,8 +99,8 @@
         <!-- 删除角标（仅收藏/历史卡片，右上角） -->
         <FrameLayout
             android:id="@+id/btnDel"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:layout_gravity="top|end"
             android:layout_marginTop="5dp"
             android:layout_marginEnd="5dp"
@@ -109,8 +109,8 @@
 
             <com.airbnb.lottie.LottieAnimationView
                 android:id="@+id/imgDel"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
                 android:layout_gravity="center"
                 android:tag="ic_delete"
                 android:contentDescription="删除" />
@@ -129,7 +129,7 @@
             android:paddingBottom="2dp"
             android:paddingRight="6dp"
             android:background="@drawable/bg_chip_dark"
-            android:textSize="8.5sp"
+            android:textSize="10.5sp"
             android:textColor="@color/maskText"
             android:fontFamily="monospace"
             android:maxLines="1"

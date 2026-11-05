@@ -66,6 +66,18 @@ public class HomeFragment extends Fragment {
     private TextView histCount, histEmpty, histPage, histPrev, histNext, btnClearHist;
     private int histPageNo = 0;
 
+    /** 首屏骨架屏：9 张占位卡 + 呼吸动画，避免首次加载白屏 */
+    private LinearLayout skeletonBox;
+    private android.animation.ObjectAnimator skelAnim;
+    private final android.os.Handler skelHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable skelShowTask = new Runnable() {
+        @Override public void run() {
+            if (skeletonBox == null || videoAdapter == null || videoAdapter.getItemCount() > 0) return;
+            skeletonBox.setVisibility(View.VISIBLE);
+            if (skelAnim != null) skelAnim.start();
+        }
+    };
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inf, @Nullable ViewGroup c, @Nullable Bundle b) {
@@ -82,6 +94,7 @@ public class HomeFragment extends Fragment {
         com.lateshow.app.util.LottieIcon.loop(v.findViewById(R.id.imgSearch), "ic_search");
         inputSearch = v.findViewById(R.id.inputSearch);
         setupSearchHistory(v);
+        setupSkeleton(v);
         chips = v.findViewById(R.id.chips);
         grid = v.findViewById(R.id.grid);
         metaCount = v.findViewById(R.id.metaCount);
@@ -174,6 +187,71 @@ public class HomeFragment extends Fragment {
         // 关键词检索后点开影片也算一次有效搜索：记录历史（覆盖「打字后直接点卡片」的场景）
         if (keyword != null && !keyword.isEmpty()) PrefStore.get().addSearchHistory(keyword);
         if (getContext() != null) PlayActivity.start(getContext(), item);
+    }
+
+    // ---------- 首屏骨架屏 ----------
+
+    /** 构建 3×3 占位卡：封面块沿用 8dp 圆角底色，标题两行灰条，整体做透明度呼吸 */
+    private void setupSkeleton(View root) {
+        skeletonBox = root.findViewById(R.id.skeletonBox);
+        if (skeletonBox == null || getContext() == null) return;
+        final int cols = 3, rows = 3;
+        int itemW = (getResources().getDisplayMetrics().widthPixels / cols) - dp(10);
+        int coverH = Math.round(itemW * 16f / 9f);
+        for (int r = 0; r < rows; r++) {
+            LinearLayout row = new LinearLayout(getContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (int c = 0; c < cols; c++) {
+                LinearLayout card = new LinearLayout(getContext());
+                card.setOrientation(LinearLayout.VERTICAL);
+                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                cp.leftMargin = dp(5);
+                cp.rightMargin = dp(5);
+                cp.bottomMargin = dp(14);
+
+                View cover = new View(getContext());
+                cover.setBackgroundResource(R.drawable.bg_cover_round);
+                card.addView(cover, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, coverH));
+
+                View line1 = new View(getContext());
+                line1.setBackgroundResource(R.drawable.bg_skel);
+                LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(9));
+                lp1.topMargin = dp(8);
+                card.addView(line1, lp1);
+
+                View line2 = new View(getContext());
+                line2.setBackgroundResource(R.drawable.bg_skel);
+                LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(
+                        Math.round(itemW * 0.6f), dp(9));
+                lp2.topMargin = dp(6);
+                card.addView(line2, lp2);
+
+                row.addView(card, cp);
+            }
+            skeletonBox.addView(row);
+        }
+        skelAnim = android.animation.ObjectAnimator.ofFloat(skeletonBox, "alpha", 1f, 0.45f);
+        skelAnim.setDuration(900);
+        skelAnim.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+        skelAnim.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        skelAnim.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+    }
+
+    /** 延迟 220ms 再显示：本地缓存命中或极快响应时不会闪一下骨架 */
+    private void showSkeletonDelayed() {
+        if (skeletonBox == null) return;
+        skelHandler.removeCallbacks(skelShowTask);
+        skelHandler.postDelayed(skelShowTask, 220);
+    }
+
+    private void hideSkeleton() {
+        skelHandler.removeCallbacks(skelShowTask);
+        if (skeletonBox == null) return;
+        if (skeletonBox.getVisibility() != View.GONE) skeletonBox.setVisibility(View.GONE);
+        if (skelAnim != null) skelAnim.cancel();
     }
 
     // ---------- 搜索历史 ----------
@@ -325,7 +403,8 @@ public class HomeFragment extends Fragment {
             rows++;
         }
 
-        histPage.setText((histPageNo + 1) + "/" + pages + " 页");
+        // 单页时不显示「1/1 页」，减掉一处无信息量的噪声
+        histPage.setText(pages > 1 ? (histPageNo + 1) + "/" + pages + " 页" : "");
         histPager.setVisibility(pages > 1 ? View.VISIBLE : View.GONE);
         histPrev.setAlpha(histPageNo > 0 ? 1f : 0.35f);
         histNext.setAlpha(histPageNo < pages - 1 ? 1f : 0.35f);
@@ -364,6 +443,7 @@ public class HomeFragment extends Fragment {
     @Override
     public void onPause() {
         hideHistory();
+        hideSkeleton();
         super.onPause();
     }
 
@@ -660,6 +740,9 @@ public class HomeFragment extends Fragment {
             }
         }
 
+        // 走网络且当前无数据：首屏显示骨架屏占位（延迟显示，避免快响应闪屏）
+        if (reqPage == 1 && videoAdapter.getItemCount() == 0) showSkeletonDelayed();
+
         com.lateshow.app.api.Catalogs.get().videos(p, 18, curSlug, type, kw,
             new VodSyncApi.ApiCb<Models.VideoListResp>() {
                 @Override public void onOk(Models.VideoListResp r) {
@@ -671,6 +754,7 @@ public class HomeFragment extends Fragment {
                 @Override public void onErr(String m) {
                     if (!isAdded()) return;
                     loading = false;
+                    hideSkeleton();
                     if (reqPage == 1 && videoAdapter.getItemCount() == 0) {
                         // 网络失败：退回本地缓存的第一页，离线也能浏览
                         Models.VideoListResp stale = ApiCache.getStale(ck, Models.VideoListResp.class);
@@ -700,6 +784,7 @@ public class HomeFragment extends Fragment {
 
     /** 渲染列表响应；fromCache=true 时给出离线提示 */
     private void applyList(Models.VideoListResp r, int reqPage, boolean fromCache) {
+        hideSkeleton();
         page = reqPage;
         pagecount = Math.max(1, r.pagecount);
         if (r.list != null) lastRawList = r.list;

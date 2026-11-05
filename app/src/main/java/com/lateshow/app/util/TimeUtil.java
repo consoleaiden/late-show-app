@@ -35,6 +35,14 @@ public final class TimeUtil {
         return raw == null || raw.isEmpty() ? "—" : stamp(raw);
     }
 
+    /** "2026-10-30 10:59" 或 "10.30 10:59" → "10.30"（窄卡片只放日期，避免被截断） */
+    public static String md(String raw) {
+        String v = stamp(raw);
+        if (v == null || v.isEmpty()) return "";
+        int sp = v.indexOf(' ');
+        return sp > 0 ? v.substring(0, sp) : v;
+    }
+
     /** 数字千分位 */
     public static String thousands(int n) {
         return String.format("%,d", n);

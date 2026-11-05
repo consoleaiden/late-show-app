@@ -2,12 +2,12 @@
 <!-- 搜索历史 tag：左侧关键词（点击回填并检索），右侧叉号单独删除该条记录 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="0dp"
-    android:layout_height="30dp"
+    android:layout_height="36dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/bg_capsule"
     android:paddingLeft="10dp"
-    android:paddingRight="3dp">
+    android:paddingRight="4dp">
 
     <TextView
         android:id="@+id/tagText"
@@ -16,14 +16,14 @@
         android:layout_weight="1"
         android:maxLines="1"
         android:ellipsize="end"
-        android:textSize="11.5sp"
+        android:textSize="12sp"
         android:textColor="@color/t2" />
 
     <ImageView
         android:id="@+id/tagDel"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:padding="6dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:padding="9dp"
         android:src="@drawable/ic_close"
         android:tint="@color/t3"
         android:background="?attr/selectableItemBackgroundBorderless"

@@ -121,8 +121,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             sb.append(" / ").append(total);
             h.tvMaskRight.setText(sb);
         } else if (fav) {
-            // 底部遮罩：左 = 收藏时间，右 = 源站名
-            h.tvMaskLeft.setText(it.timeStr != null ? it.timeStr : "");
+            // 底部遮罩：左 = 收藏日期（只到天，窄卡片放不下完整时间），右 = 源站名
+            h.tvMaskLeft.setText(TimeUtil.md(it.timeStr));
             h.tvMaskRight.setText(com.lateshow.app.util.SourceCache.nameOf(it.slug));
         } else {
             // 底部遮罩：左 = 添加时间
@@ -139,7 +139,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         }
 
         // 封面加载：RGB_565 解码省一半内存、无淡入动画、圆角烘焙进位图（不再依赖 GPU 逐帧路径裁剪）
-        int r7 = Math.round(7f * h.itemView.getResources().getDisplayMetrics().density);
+        int r7 = Math.round(8f * h.itemView.getResources().getDisplayMetrics().density);
         Glide.with(h.cover).load(it.pic)
                 .apply(new RequestOptions()
                         .placeholder(R.color.ink700)

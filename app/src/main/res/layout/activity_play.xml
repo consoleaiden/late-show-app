@@ -105,7 +105,7 @@
                         android:background="@drawable/bg_chip_dark"
                         android:alpha="0.85"
                         android:text="1.0x"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textColor="#FFFFFF"
                         android:fontFamily="monospace"
                         android:contentDescription="倍速" />
@@ -235,7 +235,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:textSize="12.5sp"
+                    android:textSize="13sp"
                     android:textColor="@color/t2"
                     android:lineSpacingMultiplier="1.78"
                     android:maxLines="3"
@@ -247,8 +247,8 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="展开简介"
-                    android:textSize="11sp"
-                    android:textColor="@color/acc" />
+                    android:textSize="12sp"
+                    android:textColor="@color/accText" />
 
                 <!-- 操作行 -->
                 <LinearLayout

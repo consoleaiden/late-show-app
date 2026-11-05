@@ -135,7 +135,8 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
 
         // v1.8.0：来源徽标（自定义源站附「自定义」标记）
         boolean custom = "custom".equals(s.origin);
-        String meta = s.slug + " · " + TimeUtil.thousands(s.totalVideos) + " 条 · 最后同步 " + TimeUtil.stampOrEmpty(s.lastSyncAt);
+        // 不放 slug（长随机串，列表里会挤掉同步时间）：条数 + 最后同步时间
+        String meta = TimeUtil.thousands(s.totalVideos) + " 条 · 最后同步 " + TimeUtil.stampOrEmpty(s.lastSyncAt);
         if (custom) meta = "自定义 · " + meta;
         h.meta.setText(meta);
 

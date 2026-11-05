@@ -264,7 +264,13 @@ public class PlayActivity extends AppCompatActivity {
         tvMeta.setText(meta);
 
         String desc = detail.vodContent;
-        if (desc != null) desc = desc.replaceAll("<[^>]+>", "").trim();
+        if (desc != null) {
+            // 先删标签再解码 HTML 实体：数据源简介里常见 &nbsp; &amp; &#39; 等，直接用会显示成字面量
+            desc = desc.replaceAll("<[^>]+>", "");
+            desc = android.text.Html.fromHtml(desc, android.text.Html.FROM_HTML_MODE_LEGACY).toString();
+            // 实体解码后会产生连续空白/不换行空格，压成单个空格
+            desc = desc.replaceAll("[\\s\\u00A0]{2,}", " ").trim();
+        }
         if (desc == null || desc.isEmpty()) desc = "暂无简介";
         tvDesc.setText(desc);
 
@@ -287,7 +293,7 @@ public class PlayActivity extends AppCompatActivity {
                     tv.setText(l.name != null ? l.name : "线路" + (pos + 1));
                     boolean sel = pos == curLine;
                     tv.setBackgroundResource(sel ? R.drawable.bg_episode_current : R.drawable.bg_smbtn);
-                    tv.setTextColor(getColor(sel ? R.color.acc : R.color.t2));
+                    tv.setTextColor(getColor(sel ? R.color.accText : R.color.t2));
                     tv.setOnClickListener(v -> {
                         curLine = pos;
                         curEp = 0;
@@ -318,7 +324,7 @@ public class PlayActivity extends AppCompatActivity {
                 boolean cur = pos == curEp;
                 boolean watched = h != null && pos < h.epIndex;
                 tv.setBackgroundResource(cur ? R.drawable.bg_episode_current : R.drawable.bg_episode);
-                tv.setTextColor(getColor(cur ? R.color.acc : (watched ? R.color.t3 : R.color.t2)));
+                tv.setTextColor(getColor(cur ? R.color.accText : (watched ? R.color.t3 : R.color.t2)));
                 tv.setOnClickListener(v -> {
                     curEp = pos;
                     notifyDataSetChanged();

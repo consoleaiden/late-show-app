@@ -9,7 +9,7 @@
     <color name="lineStrong">#29FFFFFF</color>
     <color name="t1">#ECEDEF</color>
     <color name="t2">#98A0AA</color>
-    <color name="t3">#727B88</color>
+    <color name="t3">#7C8593</color>
     <color name="acc">#FF5A36</color>
     <color name="accInk">#170A05</color>
     <color name="accSoft">#21FF5A36</color>
@@ -21,4 +21,7 @@
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F00A0C0F</color>
+    <color name="accText">#FF7A5C</color>
+    <color name="ripple">#33FFFFFF</color>
+    <color name="rippleOnAcc">#33000000</color>
 </resources>

@@ -4,10 +4,10 @@
     <!-- 海报形状（ShapeableImageView）：四角统一 7dp 圆角（原 10dp 缩小三分之一） -->
     <style name="ShapeAppearance.LateShow.Cover" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSizeTopLeft">7dp</item>
-        <item name="cornerSizeTopRight">7dp</item>
-        <item name="cornerSizeBottomLeft">7dp</item>
-        <item name="cornerSizeBottomRight">7dp</item>
+        <item name="cornerSizeTopLeft">8dp</item>
+        <item name="cornerSizeTopRight">8dp</item>
+        <item name="cornerSizeBottomLeft">8dp</item>
+        <item name="cornerSizeBottomRight">8dp</item>
     </style>
 
     <style name="ShapeAppearance.LateShow.CoverLg" parent="">
@@ -86,12 +86,12 @@
 
     <style name="Smbtn">
         <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">25dp</item>
-        <item name="android:paddingLeft">9dp</item>
-        <item name="android:paddingRight">9dp</item>
+        <item name="android:layout_height">30dp</item>
+        <item name="android:paddingLeft">10dp</item>
+        <item name="android:paddingRight">10dp</item>
         <item name="android:gravity">center</item>
         <item name="android:textSize">10.5sp</item>
-        <item name="android:textColor">@color/t2</item>
+        <item name="android:textColor">@color/t1</item>
         <item name="android:background">@drawable/bg_smbtn</item>
     </style>
 

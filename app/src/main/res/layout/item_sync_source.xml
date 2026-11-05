@@ -96,7 +96,7 @@
             android:id="@+id/btnSync"
             style="@style/Smbtn"
             android:text="同步"
-            android:textColor="@color/acc" />
+            android:textColor="@color/accText" />
 
         <TextView
             android:id="@+id/btnCali"
@@ -109,7 +109,7 @@
             style="@style/Smbtn"
             android:layout_marginLeft="6dp"
             android:text="编辑"
-            android:textColor="@color/acc"
+            android:textColor="@color/accText"
             android:visibility="gone" />
 
         <TextView

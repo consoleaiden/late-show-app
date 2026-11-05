@@ -21,7 +21,8 @@
 
             <TextView
                 android:id="@+id/sName"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
+                android:layout_weight="1"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
                 android:textStyle="bold"
@@ -36,6 +37,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="8dp"
                 android:text="使用中"
+                android:maxLines="1"
+                android:singleLine="true"
                 android:textColor="@color/ok"
                 android:visibility="gone" />
         </LinearLayout>
@@ -54,7 +57,7 @@
         android:id="@+id/btnUse"
         style="@style/Smbtn"
         android:text="使用"
-        android:textColor="@color/acc" />
+        android:textColor="@color/accText" />
 
     <TextView
         android:id="@+id/btnEditSource"

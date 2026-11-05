@@ -169,7 +169,7 @@
                             android:id="@+id/btnAddProxy"
                             style="@style/Smbtn"
                             android:text="+ 新增代理"
-                            android:textColor="@color/acc" />
+                            android:textColor="@color/accText" />
                     </LinearLayout>
 
                     <TextView
@@ -261,7 +261,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:paddingLeft="12dp"
-                        android:paddingRight="40dp"
+                        android:paddingRight="48dp"
                         android:background="@null"
                         android:textSize="12sp"
                         android:textColor="@color/t1"
@@ -271,11 +271,10 @@
                     <!-- 有内容时显示，点击一键清空 -->
                     <ImageView
                         android:id="@+id/btnClearBaseUrl"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
                         android:layout_gravity="end|center_vertical"
-                        android:layout_marginEnd="6dp"
-                        android:padding="5dp"
+                        android:padding="14dp"
                         android:src="@drawable/ic_close"
                         android:tint="@color/t3"
                         android:background="?attr/selectableItemBackgroundBorderless"
@@ -320,7 +319,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:paddingLeft="12dp"
-                        android:paddingRight="40dp"
+                        android:paddingRight="48dp"
                         android:background="@null"
                         android:hint="vs_xxxxxxxxxxxx"
                         android:textSize="12sp"
@@ -332,11 +331,10 @@
                     <!-- 有内容时显示，点击一键清空 -->
                     <ImageView
                         android:id="@+id/btnClearToken"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
                         android:layout_gravity="end|center_vertical"
-                        android:layout_marginEnd="6dp"
-                        android:padding="5dp"
+                        android:padding="14dp"
                         android:src="@drawable/ic_close"
                         android:tint="@color/t3"
                         android:background="?attr/selectableItemBackgroundBorderless"
@@ -537,7 +535,7 @@
 
                     <TextView
                         android:id="@+id/btnAddCustom"
-                        style="@style/OpBtn" android:text="添加自定义源站" android:textColor="@color/acc" />
+                        style="@style/OpBtn" android:text="添加自定义源站" android:textColor="@color/accText" />
 
                     <TextView
                         android:id="@+id/btnProxyStatus"
@@ -591,7 +589,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="全选"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textColor="@color/t2" />
 
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
@@ -781,7 +779,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="统计中…"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:textColor="@color/t2"
                     android:lineSpacingMultiplier="1.5" />
 

@@ -9,16 +9,21 @@
     <color name="lineStrong">#38121820</color>
     <color name="t1">#1B2026</color>
     <color name="t2">#5C6672</color>
-    <color name="t3">#8B95A1</color>
+    <color name="t3">#66707D</color>
     <color name="acc">#FF5A36</color>
     <color name="accInk">#170A05</color>
     <color name="accSoft">#21FF5A36</color>
     <color name="ok">#2E7D52</color>
     <color name="okSoft">#1A5FBF8E</color>
-    <color name="warn">#B97A1E</color>
+    <color name="warn">#96630F</color>
     <color name="warnSoft">#1AE8A33D</color>
-    <color name="bad">#C5453A</color>
+    <color name="bad">#B03A30</color>
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F7F8FA</color>
+    <!-- 浅色主题专用「橙色文本」：acc 作为小字正文对比度仅 3.1，此色对白底 5.41 / 页面底 4.87 -->
+    <color name="accText">#C13A17</color>
+    <!-- 按压波纹：浅底用深色 13% 透明度 -->
+    <color name="ripple">#22101820</color>
+    <color name="rippleOnAcc">#33FFFFFF</color>
 </resources>

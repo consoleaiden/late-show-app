@@ -340,7 +340,7 @@ public class SettingsFragment extends Fragment {
         int total = srcAdapter.getItemCount();
         autoCount.setText("自动同步 " + auto + "/" + total);
         selCount.setText(picked == 0 ? "未选择源站" : "已选 " + picked + " 个源站");
-        selCount.setTextColor(getColor(picked == 0 ? R.color.t3 : R.color.acc));
+        selCount.setTextColor(getColor(picked == 0 ? R.color.t3 : R.color.accText));
         if (total > 0) {
             chkAll.setOnCheckedChangeListener(null);
             chkAll.setChecked(picked == total);
@@ -625,7 +625,7 @@ public class SettingsFragment extends Fragment {
                 {TimeUtil.thousands(s.videosTotal), "已入库视频"}});
         addStatRow(new String[][]{
                 {String.valueOf(s.sourcesSyncing), "正在同步"},
-                {TimeUtil.thousands(s.todayInserted), "今日新增 " + s.todayInserted}});
+                {TimeUtil.thousands(s.todayInserted), "今日新增"}});
         // v1.4.1：同步负载 + 待续传（有断点的站数）
         if (s.sync_load != null) {
             addStatRow(new String[][]{
@@ -640,18 +640,19 @@ public class SettingsFragment extends Fragment {
     private void renderRuntime(Models.StatsResp s) {
         if (tvRuntime == null || !isAdded()) return;
         StringBuilder sb = new StringBuilder();
+        // 一行一个维度：比「代理：已启用 · 直连成功 0 · 代理成功 1694 · …」长句更好扫读
         if (s.proxy != null && s.proxy.enabled) {
-            sb.append("代理：已启用 · 直连成功 ").append(s.proxy.directSuccess)
-              .append(" · 代理成功 ").append(s.proxy.proxySuccess)
-              .append(" · 路由失败 ").append(s.proxy.routeFail);
+            sb.append("代理通道 · 已启用\n直连 ").append(s.proxy.directSuccess)
+              .append(" · 代理 ").append(s.proxy.proxySuccess)
+              .append(" · 失败 ").append(s.proxy.routeFail);
             if (s.proxy.preferred_hosts != null && !s.proxy.preferred_hosts.isEmpty()) {
                 sb.append(" · 走代理 ").append(s.proxy.preferred_hosts.size()).append(" 站");
             }
         } else {
-            sb.append("代理：未启用");
+            sb.append("代理通道 · 未启用");
         }
         if (s.db_pool != null && s.db_pool.size > 0) {
-            sb.append("\n连接池：占用 ").append(s.db_pool.checkedOut).append("/").append(s.db_pool.size)
+            sb.append("\n连接池 · ").append(s.db_pool.checkedOut).append("/").append(s.db_pool.size)
               .append(" · 溢出 ").append(s.db_pool.overflow).append("/").append(s.db_pool.maxOverflow);
         }
         String text = sb.toString();

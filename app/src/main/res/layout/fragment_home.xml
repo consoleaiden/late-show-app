@@ -47,7 +47,7 @@
                 android:paddingRight="38dp"
                 android:background="@null"
                 android:hint="搜片名 / 演员"
-                android:textSize="12.5sp"
+                android:textSize="13sp"
                 android:textColor="@color/t1"
                 android:textColorHint="@color/t3"
                 android:maxLines="1"
@@ -154,7 +154,7 @@
             android:gravity="center"
             android:background="@drawable/bg_smbtn"
             android:text="清空历史"
-            android:textSize="11.5sp"
+            android:textSize="12sp"
             android:textColor="@color/bad"
             android:visibility="gone" />
     </LinearLayout>
@@ -163,7 +163,7 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/chips"
         android:layout_width="match_parent"
-        android:layout_height="30dp"
+        android:layout_height="36dp"
         android:overScrollMode="never"
         android:paddingLeft="5dp"
         android:paddingRight="5dp"
@@ -208,6 +208,16 @@
             android:overScrollMode="never"
             android:paddingTop="2dp"
             android:clipToPadding="false" />
+
+        <!-- 首屏骨架屏：首次加载且列表为空时显示，避免白屏「假死」 -->
+        <LinearLayout
+            android:id="@+id/skeletonBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:paddingTop="2dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fabTop"
