@@ -15,15 +15,24 @@
         <item name="android:popupMenuStyle">@style/LateShow.PopupMenu</item>
     </style>
 
-    <!-- 弹层主题 overlay：颜色令牌走 @color 引用，深浅主题自动适配 -->
+    <!-- 弹层主题 overlay：颜色令牌走 @color 引用，深浅主题自动适配。
+         注意：按钮样式/窗口参数必须设在主题层（appcompat AlertController 从 themed context 读取），
+         容器形状/底色则由 alertDialogStyle 指向的样式控制（MDC 程序化构建 MaterialShapeDrawable） -->
     <style name="ThemeOverlay.LateShow.AlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
-        <item name="materialAlertDialogStyle">@style/LateShow.MaterialAlertDialog</item>
+        <item name="alertDialogStyle">@style/LateShow.MaterialAlertDialog</item>
         <item name="materialAlertDialogTitleTextStyle">@style/LateShow.DialogTitle</item>
         <item name="materialAlertDialogBodyTextStyle">@style/LateShow.DialogBody</item>
         <!-- colorPrimary 驱动主按钮文字色：浅色用深橙 accText（对比度达标） -->
         <item name="colorPrimary">@color/accText</item>
         <!-- 遮罩由默认 0.6 降到 0.45：透出页面内容，观感更柔和 -->
         <item name="android:backgroundDimAmount">0.45</item>
+        <!-- 投影：M3 默认之上略加强，配合表面色分层 -->
+        <item name="android:windowElevation">8dp</item>
+        <!-- 入场淡入 + 微缩放，退场快速淡出 -->
         <item name="android:windowAnimationStyle">@style/LateShow.DialogAnim</item>
+        <!-- 按钮层次：主操作橙色加粗，次/中性灰色常规（minHeight 44dp） -->
+        <item name="buttonBarPositiveButtonStyle">@style/LateShow.DialogBtnPrimary</item>
+        <item name="buttonBarNegativeButtonStyle">@style/LateShow.DialogBtnSecondary</item>
+        <item name="buttonBarNeutralButtonStyle">@style/LateShow.DialogBtnSecondary</item>
     </style>
 </resources>
