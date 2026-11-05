@@ -193,7 +193,7 @@ public final class UpdateChecker {
                 MAIN.post(() -> d.setMessage(idx == 0 ? "直连 GitHub…"
                         : "切换线路 " + idx + "/" + (urls.length - 1) + "…"));
                 try {
-                    if (fetch(urls[i], out, pd, info.size)) {
+                    if (fetch(urls[i], out, d, info.size)) {
                         MAIN.post(() -> {
                             d.dismiss();
                             install(act, out);
