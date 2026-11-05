@@ -43,7 +43,7 @@
                     android:text="同步与播放偏好" />
             </LinearLayout>
 
-            <com.airbnb.lottie.LottieAnimationView
+            <com.lateshow.app.util.ThemeToggleIcon
                 android:id="@+id/btnTheme"
                 android:layout_width="36dp"
                 android:layout_height="36dp"

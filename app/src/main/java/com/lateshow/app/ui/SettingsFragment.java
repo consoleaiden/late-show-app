@@ -238,29 +238,19 @@ public class SettingsFragment extends Fragment {
         logList.setLayoutManager(new LinearLayoutManager(getContext()));
         logList.setAdapter(logAdapter);
 
-        // 主题切换：日月图标按目标主题正向（太阳→月亮）/反向播放，播完再应用主题重建
-        final com.airbnb.lottie.LottieAnimationView themeIcon = v.findViewById(R.id.btnTheme);
-        themeIcon.pauseAnimation();
-        themeIcon.setProgress(PrefStore.get().theme() == PrefStore.THEME_LIGHT ? 0f : 1f);
+        // 主题切换：三态形变图标（明/暗/随系统，与 Web 端 demo 同一套时序与缓动），播完再应用主题重建
+        final com.lateshow.app.util.ThemeToggleIcon themeIcon = v.findViewById(R.id.btnTheme);
+        themeIcon.setMode(PrefStore.get().theme(), false);
         v.findViewById(R.id.btnTheme).setOnClickListener(vv -> {
             int t = (PrefStore.get().theme() + 1) % 3;
-            boolean toDark = t != PrefStore.THEME_LIGHT;   // 深色 / 跟随系统 → 月亮
-            if (toDark) {
-                themeIcon.setSpeed(1f);
-                themeIcon.setProgress(0f);
-                themeIcon.playAnimation();
-            } else {
-                themeIcon.setSpeed(-1f);
-                themeIcon.setProgress(1f);
-                themeIcon.playAnimation();
-            }
+            themeIcon.setMode(t, true);
             vv.postDelayed(() -> {
                 if (!isAdded()) return;
                 PrefStore.get().setTheme(t);
                 String name = t == PrefStore.THEME_DARK ? "主题：深色" : t == PrefStore.THEME_LIGHT ? "主题：浅色" : "主题：跟随系统";
                 toast(name);
                 if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).applyTheme();
-            }, 480);
+            }, 700);
         });
 
         refreshConsole(true);
