@@ -9,10 +9,10 @@ import android.graphics.PathMeasure;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.Interpolator;
+import android.view.animation.PathInterpolator;
 
 import androidx.annotation.Nullable;
 import androidx.core.graphics.PathParser;
-import androidx.core.view.animation.PathInterpolator;
 
 /**
  * 三态主题切换形变图标（明亮 / 夜间 / 随系统）。
@@ -206,7 +206,7 @@ public class ThemeToggleIcon extends View {
         float from = Math.max(0f, -d), to = Math.min(1f, 1f - d);
         if (to - from <= 0.002f) return;
         pm.setPath(path, false);
-        float len = pm.length();
+        float len = pm.getLength();
         if (len <= 0f) return;
         seg.rewind();
         pm.getSegment(len * from, len * to, seg, true);
