@@ -250,18 +250,38 @@
                     android:textColor="@color/t2"
                     android:lineSpacingMultiplier="1.6" />
 
-                <EditText
-                    android:id="@+id/inputBaseUrl"
+                <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:layout_marginTop="10dp"
-                    android:paddingLeft="12dp"
-                    android:paddingRight="12dp"
-                    android:background="@drawable/bg_field"
-                    android:textSize="12sp"
-                    android:textColor="@color/t1"
-                    android:inputType="textUri"
-                    android:maxLines="1" />
+                    android:background="@drawable/bg_field">
+
+                    <EditText
+                        android:id="@+id/inputBaseUrl"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:paddingLeft="12dp"
+                        android:paddingRight="40dp"
+                        android:background="@null"
+                        android:textSize="12sp"
+                        android:textColor="@color/t1"
+                        android:inputType="textUri"
+                        android:maxLines="1" />
+
+                    <!-- 有内容时显示，点击一键清空 -->
+                    <ImageView
+                        android:id="@+id/btnClearBaseUrl"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="end|center_vertical"
+                        android:layout_marginEnd="6dp"
+                        android:padding="5dp"
+                        android:src="@drawable/ic_close"
+                        android:tint="@color/t3"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="清空后端地址"
+                        android:visibility="gone" />
+                </FrameLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -289,20 +309,40 @@
                     android:textColor="@color/t2"
                     android:lineSpacingMultiplier="1.6" />
 
-                <EditText
-                    android:id="@+id/inputToken"
+                <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:layout_marginTop="8dp"
-                    android:paddingLeft="12dp"
-                    android:paddingRight="12dp"
-                    android:background="@drawable/bg_field"
-                    android:hint="vs_xxxxxxxxxxxx"
-                    android:textSize="12sp"
-                    android:textColor="@color/t1"
-                    android:textColorHint="@color/t3"
-                    android:inputType="textVisiblePassword"
-                    android:maxLines="1" />
+                    android:background="@drawable/bg_field">
+
+                    <EditText
+                        android:id="@+id/inputToken"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:paddingLeft="12dp"
+                        android:paddingRight="40dp"
+                        android:background="@null"
+                        android:hint="vs_xxxxxxxxxxxx"
+                        android:textSize="12sp"
+                        android:textColor="@color/t1"
+                        android:textColorHint="@color/t3"
+                        android:inputType="textVisiblePassword"
+                        android:maxLines="1" />
+
+                    <!-- 有内容时显示，点击一键清空 -->
+                    <ImageView
+                        android:id="@+id/btnClearToken"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="end|center_vertical"
+                        android:layout_marginEnd="6dp"
+                        android:padding="5dp"
+                        android:src="@drawable/ic_close"
+                        android:tint="@color/t3"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="清空 API Token"
+                        android:visibility="gone" />
+                </FrameLayout>
 
                 <TextView
                     android:id="@+id/srcStatus"

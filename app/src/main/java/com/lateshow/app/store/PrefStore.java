@@ -153,6 +153,67 @@ public final class PrefStore {
         }
     }
 
+    // ---------- 搜索历史 ----------
+
+    /** 历史记录上限：超出后淘汰最旧的（列表尾部） */
+    public static final int MAX_SEARCH_HISTORY = 100;
+    private static final String KEY_SEARCH_HISTORY = "search_history";
+
+    /** 搜索历史：最新在前；解析失败时返回空列表 */
+    public List<String> searchHistory() {
+        String s = sp.getString(KEY_SEARCH_HISTORY, null);
+        if (s != null) {
+            try {
+                List<String> list = gson.fromJson(s, new TypeToken<List<String>>() {}.getType());
+                if (list != null) return list;
+            } catch (Exception ignored) { }
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * 记录一次搜索：去重（忽略大小写）后置顶，超过 {@link #MAX_SEARCH_HISTORY} 条淘汰最旧。
+     * 空串直接忽略，避免记录无意义关键词。
+     */
+    public void addSearchHistory(String keyword) {
+        String k = keyword == null ? "" : keyword.trim();
+        if (k.isEmpty()) return;
+        List<String> list = searchHistory();
+        for (int i = 0; i < list.size(); i++) {
+            String it = list.get(i);
+            if (it != null && it.equalsIgnoreCase(k)) {
+                list.remove(i);
+                break;
+            }
+        }
+        list.add(0, k);
+        while (list.size() > MAX_SEARCH_HISTORY) {
+            list.remove(list.size() - 1);
+        }
+        sp.edit().putString(KEY_SEARCH_HISTORY, gson.toJson(list)).apply();
+    }
+
+    /** 删除单条历史（忽略大小写匹配） */
+    public void removeSearchHistory(String keyword) {
+        String k = keyword == null ? "" : keyword.trim();
+        if (k.isEmpty()) return;
+        List<String> list = searchHistory();
+        boolean changed = false;
+        for (int i = list.size() - 1; i >= 0; i--) {
+            String it = list.get(i);
+            if (it != null && it.equalsIgnoreCase(k)) {
+                list.remove(i);
+                changed = true;
+            }
+        }
+        if (changed) sp.edit().putString(KEY_SEARCH_HISTORY, gson.toJson(list)).apply();
+    }
+
+    /** 一键清空全部搜索历史 */
+    public void clearSearchHistory() {
+        sp.edit().remove(KEY_SEARCH_HISTORY).apply();
+    }
+
     // ---------- 数据源模式 ----------
 
     /** 数据源模式：0=NAS 同步库（默认），1=资源站直连（NAS 关机时的兜底） */

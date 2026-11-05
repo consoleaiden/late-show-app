@@ -133,6 +133,8 @@ public class SettingsFragment extends Fragment {
 
         inputBaseUrl.setText(PrefStore.get().baseUrl());
         inputToken.setText(PrefStore.get().apiToken());
+        bindClearButton(inputBaseUrl, v.findViewById(R.id.btnClearBaseUrl));
+        bindClearButton(inputToken, v.findViewById(R.id.btnClearToken));
 
         // 数据源模式：NAS 同步库 / 资源站直连（NAS 关机时兜底）
         segModeSync = v.findViewById(R.id.segModeSync);
@@ -459,6 +461,23 @@ public class SettingsFragment extends Fragment {
                 failStatus("● 无法连接 · " + m);
                 toast("地址不可用，请检查地址与端口");
             }
+        });
+    }
+
+    /** 输入框右侧清空按钮：有内容才显示，点击一键清空并保持输入焦点 */
+    private void bindClearButton(final EditText input, final View btn) {
+        if (input == null || btn == null) return;
+        btn.setVisibility(input.getText().length() > 0 ? View.VISIBLE : View.GONE);
+        input.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(android.text.Editable s) {
+                btn.setVisibility(s.length() > 0 ? View.VISIBLE : View.GONE);
+            }
+        });
+        btn.setOnClickListener(x -> {
+            input.setText("");
+            input.requestFocus();
         });
     }
 

@@ -64,6 +64,101 @@
         </FrameLayout>
     </LinearLayout>
 
+    <!-- 搜索历史面板：点击搜索框在其下方展开（默认 10 条/页，可翻页、单条删除、一键清空） -->
+    <LinearLayout
+        android:id="@+id/histPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="5dp"
+        android:layout_marginRight="5dp"
+        android:layout_marginTop="2dp"
+        android:orientation="vertical"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:background="@drawable/bg_card_lg"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="搜索历史" />
+
+            <TextView
+                android:id="@+id/histCount"
+                style="@style/MetaLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:text="" />
+
+            <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/histPage"
+                style="@style/MetaLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/histEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="暂无搜索历史 · 输入关键词后按搜索键记录"
+            android:textSize="10.5sp"
+            android:textColor="@color/t3"
+            android:lineSpacingMultiplier="1.6"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/histBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+
+        <LinearLayout
+            android:id="@+id/histPager"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/histPrev"
+                style="@style/Smbtn"
+                android:text="‹ 上一页" />
+
+            <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/histNext"
+                style="@style/Smbtn"
+                android:text="下一页 ›" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnClearHist"
+            android:layout_width="match_parent"
+            android:layout_height="34dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:background="@drawable/bg_smbtn"
+            android:text="清空历史"
+            android:textSize="11.5sp"
+            android:textColor="@color/bad"
+            android:visibility="gone" />
+    </LinearLayout>
+
     <!-- 分类横滑 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/chips"

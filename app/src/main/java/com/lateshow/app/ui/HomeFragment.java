@@ -60,6 +60,12 @@ public class HomeFragment extends Fragment {
     private boolean catFailed = false; // 分类接口失败时用列表数据兜底
     private List<Models.VideoSummary> lastRawList = new ArrayList<>();
 
+    /** 搜索历史每页条数（默认展示前 10 条，翻页查看更多） */
+    private static final int HIST_PAGE_SIZE = 10;
+    private LinearLayout histPanel, histBody, histPager;
+    private TextView histCount, histEmpty, histPage, histPrev, histNext, btnClearHist;
+    private int histPageNo = 0;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inf, @Nullable ViewGroup c, @Nullable Bundle b) {
@@ -75,6 +81,7 @@ public class HomeFragment extends Fragment {
         com.lateshow.app.util.LottieIcon.loop(btnSourceIcon, "ic_menu_list");
         com.lateshow.app.util.LottieIcon.loop(v.findViewById(R.id.imgSearch), "ic_search");
         inputSearch = v.findViewById(R.id.inputSearch);
+        setupSearchHistory(v);
         chips = v.findViewById(R.id.chips);
         grid = v.findViewById(R.id.grid);
         metaCount = v.findViewById(R.id.metaCount);
@@ -125,6 +132,7 @@ public class HomeFragment extends Fragment {
             /** 滚动期间暂停顶栏两个常驻循环动画，静止后恢复——消除每帧额外重绘 */
             @Override public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
                 boolean scrolling = newState != RecyclerView.SCROLL_STATE_IDLE;
+                if (scrolling) hideHistory(); // 开始滚动列表即收起历史面板
                 if (btnSourceIcon instanceof com.airbnb.lottie.LottieAnimationView) {
                     com.airbnb.lottie.LottieAnimationView lv = (com.airbnb.lottie.LottieAnimationView) btnSourceIcon;
                     if (scrolling) lv.pauseAnimation();
@@ -153,6 +161,7 @@ public class HomeFragment extends Fragment {
             @Override public void onTextChanged(CharSequence s, int a, int b2, int c2) {}
             @Override public void afterTextChanged(Editable s) {
                 keyword = s.toString().trim();
+                if (!keyword.isEmpty()) hideHistory(); // 输入中收起历史，把空间让给结果列表
                 reload();
             }
         });
@@ -162,7 +171,200 @@ public class HomeFragment extends Fragment {
     }
 
     private void openDetail(CardItem item) {
+        // 关键词检索后点开影片也算一次有效搜索：记录历史（覆盖「打字后直接点卡片」的场景）
+        if (keyword != null && !keyword.isEmpty()) PrefStore.get().addSearchHistory(keyword);
         if (getContext() != null) PlayActivity.start(getContext(), item);
+    }
+
+    // ---------- 搜索历史 ----------
+
+    /** 绑定搜索历史：点击/聚焦搜索框展开；回车或点搜索图标记录关键词；支持单条删除、翻页、一键清空 */
+    private void setupSearchHistory(View root) {
+        histPanel = root.findViewById(R.id.histPanel);
+        histBody = root.findViewById(R.id.histBody);
+        histPager = root.findViewById(R.id.histPager);
+        histCount = root.findViewById(R.id.histCount);
+        histEmpty = root.findViewById(R.id.histEmpty);
+        histPage = root.findViewById(R.id.histPage);
+        histPrev = root.findViewById(R.id.histPrev);
+        histNext = root.findViewById(R.id.histNext);
+        btnClearHist = root.findViewById(R.id.btnClearHist);
+        if (histPanel == null || inputSearch == null) return;
+
+        inputSearch.setOnClickListener(vv -> showHistory());
+        inputSearch.setOnFocusChangeListener((vv, has) -> {
+            if (has) showHistory();
+            else hideHistory();
+        });
+        // 键盘「搜索」键：记录关键词并检索
+        inputSearch.setOnEditorActionListener((vv, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                    || (event != null && event.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER)) {
+                submitSearch(inputSearch.getText().toString());
+                return true;
+            }
+            return false;
+        });
+        // 搜索图标：与回车等价
+        View icon = root.findViewById(R.id.imgSearch);
+        if (icon != null) icon.setOnClickListener(vv -> submitSearch(inputSearch.getText().toString()));
+
+        histPrev.setOnClickListener(vv -> {
+            if (histPageNo > 0) {
+                histPageNo--;
+                renderHistory();
+            }
+        });
+        histNext.setOnClickListener(vv -> {
+            if (histPageNo < histPageCount() - 1) {
+                histPageNo++;
+                renderHistory();
+            }
+        });
+        btnClearHist.setOnClickListener(vv -> {
+            PrefStore.get().clearSearchHistory();
+            histPageNo = 0;
+            renderHistory();
+            toastShort("搜索历史已清空");
+        });
+    }
+
+    /** 提交搜索：记录历史（去重置顶）→ 收起面板与键盘 → 按关键词重新加载 */
+    private void submitSearch(String raw) {
+        String k = raw == null ? "" : raw.trim();
+        if (k.isEmpty()) { // 空关键词不记录，仅展示历史
+            showHistory();
+            return;
+        }
+        PrefStore.get().addSearchHistory(k);
+        hideKeyboard();
+        hideHistory();
+        if (!k.equals(inputSearch.getText().toString().trim())) {
+            inputSearch.setText(k); // 触发 afterTextChanged → reload
+            inputSearch.setSelection(k.length());
+        } else {
+            keyword = k;
+            reload();
+        }
+    }
+
+    /** 点击历史 tag：回填关键词并检索（同时把该记录置顶） */
+    private void applyHistory(String k) {
+        PrefStore.get().addSearchHistory(k);
+        histPageNo = 0;
+        hideKeyboard();
+        hideHistory();
+        if (k.equals(inputSearch.getText().toString().trim())) {
+            keyword = k;
+            reload();
+        } else {
+            inputSearch.setText(k); // 触发 afterTextChanged → reload
+            inputSearch.setSelection(k.length());
+        }
+    }
+
+    /** 展开历史面板（首次展开回到第一页，已展开时保持当前页） */
+    private void showHistory() {
+        if (histPanel == null || !isAdded()) return;
+        if (histPanel.getVisibility() != View.VISIBLE) histPageNo = 0;
+        renderHistory();
+        histPanel.setVisibility(View.VISIBLE);
+    }
+
+    private void hideHistory() {
+        if (histPanel != null && histPanel.getVisibility() == View.VISIBLE) {
+            histPanel.setVisibility(View.GONE);
+        }
+    }
+
+    /** 总页数：按每页 10 条向上取整，至少 1 页 */
+    private int histPageCount() {
+        int total = PrefStore.get().searchHistory().size();
+        return Math.max(1, (total + HIST_PAGE_SIZE - 1) / HIST_PAGE_SIZE);
+    }
+
+    /** 渲染当前页历史：2 列 tag 网格 + 翻页状态 + 清空按钮显隐（无记录时显示空态） */
+    private void renderHistory() {
+        if (histPanel == null || !isAdded()) return;
+        List<String> all = PrefStore.get().searchHistory();
+        int total = all.size();
+        boolean empty = total == 0;
+
+        histCount.setText(total + " 条");
+        histEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
+        histBody.setVisibility(empty ? View.GONE : View.VISIBLE);
+        btnClearHist.setVisibility(empty ? View.GONE : View.VISIBLE);
+        histBody.removeAllViews();
+        if (empty) {
+            histPager.setVisibility(View.GONE);
+            histPage.setText("");
+            return;
+        }
+
+        int pages = histPageCount();
+        if (histPageNo >= pages) histPageNo = pages - 1;
+        if (histPageNo < 0) histPageNo = 0;
+        int from = histPageNo * HIST_PAGE_SIZE;
+        int to = Math.min(from + HIST_PAGE_SIZE, total);
+
+        int rows = 0;
+        for (int i = from; i < to; i += 2) {
+            LinearLayout row = new LinearLayout(getContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (rows > 0) rp.topMargin = dp(6);
+            row.addView(tagView(all.get(i), false));
+            if (i + 1 < to) {
+                row.addView(tagView(all.get(i + 1), true));
+            } else {
+                // 本页奇数条：右侧放等宽占位，避免左侧 tag 被拉满
+                row.addView(new View(getContext()), new LinearLayout.LayoutParams(0, 1, 1f));
+            }
+            histBody.addView(row, rp);
+            rows++;
+        }
+
+        histPage.setText((histPageNo + 1) + "/" + pages + " 页");
+        histPager.setVisibility(pages > 1 ? View.VISIBLE : View.GONE);
+        histPrev.setAlpha(histPageNo > 0 ? 1f : 0.35f);
+        histNext.setAlpha(histPageNo < pages - 1 ? 1f : 0.35f);
+    }
+
+    /** 单个历史 tag：点 tag 回填检索，点右侧叉号删除该条 */
+    private View tagView(final String word, boolean withLeftMargin) {
+        View tag = LayoutInflater.from(getContext()).inflate(R.layout.item_hist_tag, histBody, false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(30), 1f);
+        if (withLeftMargin) lp.leftMargin = dp(6);
+        tag.setLayoutParams(lp);
+        ((TextView) tag.findViewById(R.id.tagText)).setText(word);
+        tag.setOnClickListener(vv -> applyHistory(word));
+        tag.findViewById(R.id.tagDel).setOnClickListener(vv -> {
+            PrefStore.get().removeSearchHistory(word);
+            renderHistory();
+        });
+        return tag;
+    }
+
+    private void hideKeyboard() {
+        if (inputSearch == null || getContext() == null) return;
+        android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getContext()
+                        .getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(inputSearch.getWindowToken(), 0);
+        inputSearch.clearFocus();
+    }
+
+    private void toastShort(String msg) {
+        if (getContext() != null) {
+            android.widget.Toast.makeText(getContext(), msg, android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onPause() {
+        hideHistory();
+        super.onPause();
     }
 
     /** 源站按钮圆环状态：true=后端通畅（橙色圆环），false=不通（灰色圆环） */
