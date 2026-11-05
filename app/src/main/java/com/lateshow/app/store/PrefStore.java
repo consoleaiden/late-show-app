@@ -91,6 +91,68 @@ public final class PrefStore {
         return s;
     }
 
+    // ---------- 播放源多地址管理（保存成功的地址 + Token 列表） ----------
+
+    /** 已保存的播放源：名称 + 后端地址 + API Token（Token 经 Keystore 加密存储） */
+    public static class SavedSource {
+        public String name;
+        public String url;
+        public String token;
+    }
+
+    private static final int MAX_SAVED_SOURCES = 10;
+
+    public List<SavedSource> savedSources() {
+        return loadList("saved_sources", new TypeToken<List<SavedSource>>() {}.getType());
+    }
+
+    /** 保存成功后写入列表：按地址去重，存在则更新 Token/名称；超出上限淘汰最久未用的尾部 */
+    public void upsertSavedSource(String url, String token, String name) {
+        List<SavedSource> list = savedSources();
+        String key = trimSlash(url == null ? "" : url.trim());
+        for (SavedSource it : list) {
+            if (it.url != null && trimSlash(it.url).equals(key)) {
+                if (token != null) it.token = token.trim();
+                if (name != null && !name.trim().isEmpty()) it.name = name.trim();
+                saveSavedSources(list);
+                return;
+            }
+        }
+        SavedSource it = new SavedSource();
+        it.url = key;
+        it.token = token == null ? "" : token.trim();
+        it.name = (name == null || name.trim().isEmpty()) ? hostOf(key) : name.trim();
+        list.add(0, it);
+        while (list.size() > MAX_SAVED_SOURCES) list.remove(list.size() - 1);
+        saveSavedSources(list);
+    }
+
+    public void removeSavedSource(String url) {
+        List<SavedSource> list = savedSources();
+        String key = trimSlash(url == null ? "" : url.trim());
+        boolean changed = list.removeIf(it -> it.url != null && trimSlash(it.url).equals(key));
+        if (changed) saveSavedSources(list);
+    }
+
+    private void saveSavedSources(List<SavedSource> list) {
+        sp.edit().putString("saved_sources", gson.toJson(list)).apply();
+    }
+
+    /** 编辑列表后整体写回（地址去重 / 更新 Token 等） */
+    public void saveSavedSourcesList(List<SavedSource> list) {
+        saveSavedSources(list);
+    }
+
+    private static String hostOf(String url) {
+        try {
+            android.net.Uri u = android.net.Uri.parse(url);
+            String h = u.getHost();
+            return h == null || h.isEmpty() ? url : h;
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
     // ---------- 数据源模式 ----------
 
     /** 数据源模式：0=NAS 同步库（默认），1=资源站直连（NAS 关机时的兜底） */
@@ -100,6 +162,40 @@ public final class PrefStore {
 
     public void setDataMode(int mode) {
         sp.edit().putInt("data_mode", mode == 1 ? 1 : 0).apply();
+    }
+
+    // ---------- 直连模式代理访问 API 列表 ----------
+
+    /** 内置默认代理（与 VodSync 后端 PROXY_URLS 一致），用户可在设置页增删改 */
+    public static final String[] DEFAULT_PROXIES = {
+            "https://pz.v88.qzz.io/?url=",
+            "https://mconfig.viptv.work/?url=",
+    };
+
+    /** 代理列表：未自定义过时返回内置默认；按列表顺序依次尝试 */
+    public List<String> proxies() {
+        String s = sp.getString("proxy_list", null);
+        if (s != null) {
+            try {
+                List<String> list = gson.fromJson(s, new TypeToken<List<String>>() {}.getType());
+                if (list != null) return list;
+            } catch (Exception ignored) { }
+        }
+        List<String> def = new ArrayList<>();
+        for (String p : DEFAULT_PROXIES) def.add(p);
+        return def;
+    }
+
+    public void setProxies(List<String> list) {
+        sp.edit().putString("proxy_list", gson.toJson(list == null ? new ArrayList<>() : list)).apply();
+    }
+
+    /** 新增/修改代理（index=-1 表示新增）；校验：http(s) 开头；返回错误信息，null 表示通过 */
+    public static String validateProxy(String url) {
+        String u = url == null ? "" : url.trim();
+        if (u.isEmpty()) return "代理地址不能为空";
+        if (!u.startsWith("http://") && !u.startsWith("https://")) return "代理地址需以 http:// 或 https:// 开头";
+        return null;
     }
 
     // ---------- API Token（服务端 v1.5.0+ 访问控制） ----------

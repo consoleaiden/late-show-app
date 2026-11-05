@@ -43,6 +43,10 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.VH> {
             case "success": dot = R.drawable.dot_ok; color = R.color.ok; label = "完成"; break;
             case "failed": dot = R.drawable.dot_bad; color = R.color.bad; label = "失败"; break;
             case "paused": dot = R.drawable.dot_warn; color = R.color.warn; label = "已暂停"; break;
+            // v1.6.0：部分完成（批内有失败页，断点保留可续传）
+            case "incomplete": dot = R.drawable.dot_warn; color = R.color.warn; label = "部分完成"; break;
+            // v1.6.0：服务重启时中断的任务
+            case "interrupted": dot = R.drawable.dot_bad; color = R.color.bad; label = "中断"; break;
             default: dot = R.drawable.dot_acc; color = R.color.acc; label = "同步中";
         }
         h.dot.setBackgroundResource(dot);

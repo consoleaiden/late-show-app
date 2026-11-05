@@ -42,7 +42,9 @@ public class SettingsFragment extends Fragment {
 
     private EditText inputBaseUrl, inputToken;
     private TextView srcStatus, btnSave, btnTest, pauseWarn, autoCount, selCount, tvVersion, btnCheckUpdate, tvCacheInfo;
-    private TextView segModeSync, segModeStatic, tvModeState;
+    private TextView segModeSync, segModeStatic, tvModeState, tvRuntime;
+    private TextView tvSavedCount, tvSavedEmpty;
+    private LinearLayout savedList, proxySection, proxyList;
     private LinearLayout statsGrid;
     private LinearLayout pauseRows;
     private CheckBox chkAll;
@@ -56,11 +58,11 @@ public class SettingsFragment extends Fragment {
 
     /** 手风琴面板：同一时间只展开一个 */
     private static final int[] PANEL_HEADERS = {
-            R.id.hdrSource, R.id.hdrPlay, R.id.hdrCache, R.id.hdrSync, R.id.hdrApp};
+            R.id.hdrMode, R.id.hdrSource, R.id.hdrPlay, R.id.hdrCache, R.id.hdrSync, R.id.hdrApp};
     private static final int[] PANEL_BODIES = {
-            R.id.panelSource, R.id.panelPlay, R.id.panelCache, R.id.panelSync, R.id.panelApp};
+            R.id.panelMode, R.id.panelSource, R.id.panelPlay, R.id.panelCache, R.id.panelSync, R.id.panelApp};
     private static final int[] PANEL_ARROWS = {
-            R.id.arSource, R.id.arPlay, R.id.arCache, R.id.arSync, R.id.arApp};
+            R.id.arMode, R.id.arSource, R.id.arPlay, R.id.arCache, R.id.arSync, R.id.arApp};
 
     /** 初始化手风琴：点头部切换，展开一个自动收起其他（默认展开第一个） */
     private void setupAccordion(View root) {
@@ -136,9 +138,13 @@ public class SettingsFragment extends Fragment {
         segModeSync = v.findViewById(R.id.segModeSync);
         segModeStatic = v.findViewById(R.id.segModeStatic);
         tvModeState = v.findViewById(R.id.tvModeState);
+        proxySection = v.findViewById(R.id.proxySection);
+        proxyList = v.findViewById(R.id.proxyList);
         segModeSync.setOnClickListener(x -> switchDataSource(com.lateshow.app.api.Catalog.MODE_SYNC));
         segModeStatic.setOnClickListener(x -> switchDataSource(com.lateshow.app.api.Catalog.MODE_STATIC));
         renderModeSwitch();
+        renderProxies();
+        v.findViewById(R.id.btnAddProxy).setOnClickListener(x -> showProxyDialog(-1));
 
         // 播放偏好：跳过片头/片尾（输入即保存，0 = 不跳过）
         EditText inputSkipIntro = v.findViewById(R.id.inputSkipIntro);
@@ -184,6 +190,17 @@ public class SettingsFragment extends Fragment {
         btnSave.setOnClickListener(vv -> verifySource(true));
         btnTest.setOnClickListener(vv -> verifySource(false));
 
+        // 已保存播放源列表
+        savedList = v.findViewById(R.id.savedList);
+        tvSavedCount = v.findViewById(R.id.tvSavedCount);
+        tvSavedEmpty = v.findViewById(R.id.tvSavedEmpty);
+        renderSavedSources();
+
+        // 自定义源站 + 代理状态
+        tvRuntime = v.findViewById(R.id.tvRuntime);
+        v.findViewById(R.id.btnAddCustom).setOnClickListener(vv -> showCustomSourceDialog(null));
+        v.findViewById(R.id.btnProxyStatus).setOnClickListener(vv -> showProxyStatusDialog());
+
         // 同步操作
         v.findViewById(R.id.btnSyncAll).setOnClickListener(vv -> post("/api/v1/sync-all?mode=auto", "全站同步已受理"));
         v.findViewById(R.id.btnRefresh).setOnClickListener(vv -> post("/api/v1/sources/refresh", "源站列表刷新已受理"));
@@ -198,6 +215,8 @@ public class SettingsFragment extends Fragment {
             @Override public void onPickChanged() { syncSelectionUi(); }
             @Override public void onAction(String msg) { toast(msg); refreshConsole(false); }
             @Override public Map<String, String> ctx() { return null; }
+            @Override public void onEditCustom(Models.SyncSource s) { showCustomSourceDialog(s); }
+            @Override public void onDeleteCustom(Models.SyncSource s) { confirmDeleteCustom(s); }
         });
         srcList.setLayoutManager(new LinearLayoutManager(getContext()));
         srcList.setAdapter(srcAdapter);
@@ -437,6 +456,11 @@ public class SettingsFragment extends Fragment {
         srcStatus.setTextColor(getColor(R.color.ok));
         btnSave.setText("已保存");
         btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_ok));
+        // 保存成功：地址 + Token 一并登记进播放源列表（按地址去重）
+        PrefStore.get().upsertSavedSource(
+                inputBaseUrl.getText().toString().trim(),
+                inputToken.getText().toString().trim(), null);
+        renderSavedSources();
         toast("配置已保存");
         postResetSave();
     }
@@ -569,6 +593,38 @@ public class SettingsFragment extends Fragment {
         addStatRow(new String[][]{
                 {String.valueOf(s.sourcesSyncing), "正在同步"},
                 {TimeUtil.thousands(s.todayInserted), "今日新增 " + s.todayInserted}});
+        // v1.4.1：同步负载 + 待续传（有断点的站数）
+        if (s.sync_load != null) {
+            addStatRow(new String[][]{
+                    {s.sync_load.running + "/" + s.sync_load.limit,
+                            "同步负载（并发上限）" + (s.sync_load.queued > 0 ? " · 排队 " + s.sync_load.queued : "")},
+                    {String.valueOf(s.sourcesUnfinished), "有断点待续传"}});
+        }
+        renderRuntime(s);
+    }
+
+    /** 运行态明细：代理降级通道（v1.4.0）+ 数据库连接池（v1.4.1） */
+    private void renderRuntime(Models.StatsResp s) {
+        if (tvRuntime == null || !isAdded()) return;
+        StringBuilder sb = new StringBuilder();
+        if (s.proxy != null && s.proxy.enabled) {
+            sb.append("代理：已启用 · 直连成功 ").append(s.proxy.directSuccess)
+              .append(" · 代理成功 ").append(s.proxy.proxySuccess)
+              .append(" · 路由失败 ").append(s.proxy.routeFail);
+            if (s.proxy.preferred_hosts != null && !s.proxy.preferred_hosts.isEmpty()) {
+                sb.append(" · 走代理 ").append(s.proxy.preferred_hosts.size()).append(" 站");
+            }
+        } else {
+            sb.append("代理：未启用");
+        }
+        if (s.db_pool != null && s.db_pool.size > 0) {
+            sb.append("\n连接池：占用 ").append(s.db_pool.checkedOut).append("/").append(s.db_pool.size)
+              .append(" · 溢出 ").append(s.db_pool.overflow).append("/").append(s.db_pool.maxOverflow);
+        }
+        String text = sb.toString();
+        if (text.isEmpty()) { tvRuntime.setVisibility(View.GONE); return; }
+        tvRuntime.setText(text);
+        tvRuntime.setVisibility(View.VISIBLE);
     }
 
     private void addStatRow(String[][] cells) {
@@ -619,9 +675,389 @@ public class SettingsFragment extends Fragment {
         if (isAdded()) Toast.makeText(getContext(), s, Toast.LENGTH_SHORT).show();
     }
 
+    /** 列表拼接（minSdk 24 不用 String.join，其需 API 26） */
+    private static String joinList(List<String> list, String sep) {
+        if (list == null || list.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            if (i > 0) sb.append(sep);
+            sb.append(list.get(i));
+        }
+        return sb.toString();
+    }
+
+    // ---------- 已保存播放源（多地址管理） ----------
+
+    /** 渲染已保存播放源列表；当前生效地址标「使用中」 */
+    private void renderSavedSources() {
+        if (savedList == null || !isAdded()) return;
+        List<PrefStore.SavedSource> list = PrefStore.get().savedSources();
+        savedList.removeAllViews();
+        String active = PrefStore.get().baseUrl();
+        tvSavedCount.setText(list.isEmpty() ? "" : list.size() + " 个");
+        tvSavedEmpty.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+        for (final PrefStore.SavedSource it : list) {
+            View row = getLayoutInflater().inflate(R.layout.item_saved_source, savedList, false);
+            ((TextView) row.findViewById(R.id.sName)).setText(it.name);
+            ((TextView) row.findViewById(R.id.sUrl)).setText(it.url);
+            boolean isActive = it.url != null && it.url.equals(active);
+            row.findViewById(R.id.sActive).setVisibility(isActive ? View.VISIBLE : View.GONE);
+            row.findViewById(R.id.btnUse).setOnClickListener(v -> applySavedSource(it));
+            row.findViewById(R.id.btnEditSource).setOnClickListener(v -> showSavedSourceEditDialog(it));
+            row.findViewById(R.id.btnDelSource).setOnClickListener(v -> confirmDeleteSavedSource(it));
+            savedList.addView(row);
+        }
+    }
+
+    /** 一键切换：写回地址与 Token，地址变化时清接口缓存并通知首页重载，再走保存校验 */
+    private void applySavedSource(PrefStore.SavedSource it) {
+        String old = PrefStore.get().baseUrl();
+        PrefStore.get().setBaseUrl(it.url);
+        PrefStore.get().setApiToken(it.token);
+        inputBaseUrl.setText(it.url);
+        inputToken.setText(it.token);
+        if (!old.equals(PrefStore.get().baseUrl())) {
+            // 不同后端数据不同：清缓存避免串数据
+            com.lateshow.app.util.ApiCache.clear();
+            if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).notifyDataSourceChanged();
+        }
+        verifySource(true);
+        renderSavedSources();
+    }
+
+    /** 编辑播放源条目（名称 / 地址 / Token），校验地址格式；若是当前生效地址同步更新输入框 */
+    private void showSavedSourceEditDialog(final PrefStore.SavedSource it) {
+        if (!isAdded()) return;
+        View dlg = getLayoutInflater().inflate(R.layout.dialog_custom_source, null);
+        EditText inName = dlg.findViewById(R.id.dcsName);
+        EditText inUrl = dlg.findViewById(R.id.dcsUrl);
+        EditText inToken = dlg.findViewById(R.id.dcsToken);
+        EditText inSlug = dlg.findViewById(R.id.dcsSlug);
+        EditText inDesc = dlg.findViewById(R.id.dcsDesc);
+        dlg.findViewById(R.id.dcsProbe).setVisibility(View.GONE);
+        dlg.findViewById(R.id.dcsSlug).setVisibility(View.GONE);
+        dlg.findViewById(R.id.dcsDesc).setVisibility(View.GONE);
+        inName.setText(it.name);
+        inUrl.setText(it.url);
+        inToken.setText(it.token);
+        new AlertDialog.Builder(requireContext())
+                .setTitle("编辑播放源")
+                .setView(dlg)
+                .setPositiveButton("保存", (d, w) -> {
+                    String url = inUrl.getText().toString().trim();
+                    if (PrefStore.validateProxy(url) != null) { toast("地址需以 http:// 或 https:// 开头"); return; }
+                    String oldUrl = it.url;
+                    it.name = inName.getText().toString().trim();
+                    it.url = url;
+                    it.token = inToken.getText().toString().trim();
+                    List<PrefStore.SavedSource> list = PrefStore.get().savedSources();
+                    list.removeIf(x -> x != it && x.url != null && x.url.equals(it.url)); // 地址改成已有项：覆盖旧项
+                    PrefStore.get().saveSavedSourcesList(list);
+                    if (oldUrl.equals(PrefStore.get().baseUrl())) {
+                        // 编辑的是当前生效地址：输入框与生效值同步
+                        PrefStore.get().setBaseUrl(it.url);
+                        PrefStore.get().setApiToken(it.token);
+                        inputBaseUrl.setText(it.url);
+                        inputToken.setText(it.token);
+                    }
+                    renderSavedSources();
+                    toast("已保存");
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void confirmDeleteSavedSource(final PrefStore.SavedSource it) {
+        if (!isAdded()) return;
+        new AlertDialog.Builder(requireContext())
+                .setTitle("删除播放源")
+                .setMessage("确认删除「" + it.name + "」？\n" + it.url
+                        + "\n\n仅从列表移除，不影响当前已生效的配置。")
+                .setPositiveButton("删除", (d, w) -> {
+                    PrefStore.get().removeSavedSource(it.url);
+                    renderSavedSources();
+                    toast("已删除");
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // ---------- 直连模式代理访问 API（新增 / 修改 / 删除） ----------
+
+    /** 渲染代理列表；直连模式显示，NAS 模式隐藏 */
+    private void renderProxies() {
+        if (proxyList == null || !isAdded()) return;
+        List<String> list = PrefStore.get().proxies();
+        proxyList.removeAllViews();
+        for (int i = 0; i < list.size(); i++) {
+            final int idx = i;
+            View row = getLayoutInflater().inflate(R.layout.item_proxy, proxyList, false);
+            ((TextView) row.findViewById(R.id.pUrl)).setText(list.get(i));
+            row.findViewById(R.id.btnEditProxy).setOnClickListener(v -> showProxyDialog(idx));
+            row.findViewById(R.id.btnDelProxy).setOnClickListener(v -> confirmDeleteProxy(idx));
+            proxyList.addView(row);
+        }
+    }
+
+    /** 新增（index=-1）/ 修改代理，校验 http(s) 前缀 */
+    private void showProxyDialog(final int index) {
+        if (!isAdded()) return;
+        List<String> list = PrefStore.get().proxies();
+        final boolean editing = index >= 0 && index < list.size();
+        android.widget.EditText input = new android.widget.EditText(requireContext());
+        input.setSingleLine(true);
+        input.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        input.setTextSize(12);
+        int pad = (int) (20 * getResources().getDisplayMetrics().density);
+        input.setPadding(pad, pad / 2, pad, pad / 2);
+        if (editing) input.setText(list.get(index));
+        new AlertDialog.Builder(requireContext())
+                .setTitle(editing ? "修改代理" : "新增代理")
+                .setMessage("请求方式：代理地址 + ?url=目标地址（整段 URL 编码）")
+                .setView(input)
+                .setPositiveButton("保存", (d, w) -> {
+                    String url = input.getText().toString().trim();
+                    String err = PrefStore.validateProxy(url);
+                    if (err != null) { toast(err); return; }
+                    if (editing) list.set(index, url); else list.add(url);
+                    PrefStore.get().setProxies(list);
+                    renderProxies();
+                    toast(editing ? "代理已更新，立即生效" : "代理已添加，立即生效");
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void confirmDeleteProxy(final int index) {
+        if (!isAdded()) return;
+        List<String> list = PrefStore.get().proxies();
+        if (index < 0 || index >= list.size()) return;
+        new AlertDialog.Builder(requireContext())
+                .setTitle("删除代理")
+                .setMessage("确认删除代理？\n" + list.get(index)
+                        + "\n\n删除后该代理不再参与兜底；列表清空后直连失败将无代理可用。")
+                .setPositiveButton("删除", (d, w) -> {
+                    list.remove(index);
+                    PrefStore.get().setProxies(list);
+                    renderProxies();
+                    toast("已删除");
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // ---------- 自定义源站（VodSync v1.8.0） ----------
+
+    /**
+     * 添加 / 编辑自定义源站对话框。
+     * 编辑时 slug 不可改（它决定表名与 API 路径）；改地址会清空该站已入库数据（后端行为）。
+     */
+    private void showCustomSourceDialog(final Models.SyncSource edit) {
+        if (!isAdded()) return;
+        final boolean isEdit = edit != null;
+        View dlg = getLayoutInflater().inflate(R.layout.dialog_custom_source, null);
+        final EditText inName = dlg.findViewById(R.id.dcsName);
+        final EditText inUrl = dlg.findViewById(R.id.dcsUrl);
+        final EditText inSlug = dlg.findViewById(R.id.dcsSlug);
+        final EditText inToken = dlg.findViewById(R.id.dcsToken);
+        final EditText inDesc = dlg.findViewById(R.id.dcsDesc);
+        final TextView probeView = dlg.findViewById(R.id.dcsProbe);
+        final TextView hintView = dlg.findViewById(R.id.dcsHint);
+        inToken.setVisibility(View.GONE);
+        if (isEdit) {
+            inSlug.setVisibility(View.GONE);
+            inName.setText(edit.name);
+            inUrl.setText(edit.apiUrl);
+            inDesc.setText(edit.description);
+            hintView.setVisibility(View.VISIBLE);
+            hintView.setText("⚠ 修改地址会清空该站已入库的数据并重置同步水位线（后端行为）。");
+        } else {
+            hintView.setVisibility(View.VISIBLE);
+            hintView.setTextColor(getColor(R.color.t3));
+            hintView.setText("标识留空时由名称自动推导；保存前会先抓一页验证地址可用性。");
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setTitle(isEdit ? "编辑自定义源站 · " + edit.slug : "添加自定义源站")
+                .setView(dlg)
+                .setPositiveButton(isEdit ? "保存" : "添加", null)
+                .setNegativeButton("取消", null)
+                .setNeutralButton(isEdit ? null : "测试连接", null)
+                .create();
+
+        dialog.setOnShowListener(d -> {
+            // 测试连接（仅添加时）：POST /api/v1/sources/probe，永远 200，用 ok 字段判结果
+            if (!isEdit) {
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+                    String url = inUrl.getText().toString().trim();
+                    if (url.isEmpty()) { toast("请先填写接口地址"); return; }
+                    probeView.setText("● 探测中…");
+                    probeView.setTextColor(getColor(R.color.t2));
+                    try {
+                        org.json.JSONObject body = new org.json.JSONObject().put("api_url", url);
+                        VodSyncApi.get().postJson("/api/v1/sources/probe", body.toString(),
+                                Models.ProbeResp.class, new VodSyncApi.ApiCb<Models.ProbeResp>() {
+                            @Override public void onOk(Models.ProbeResp r) {
+                                if (!isAdded()) return;
+                                if (r != null && r.ok) {
+                                    probeView.setTextColor(getColor(R.color.ok));
+                                    probeView.setText("● 可用 · " + (r.total > 0 ? "共 " + r.total + " 条 · " : "") + r.elapsedMs + "ms");
+                                } else {
+                                    probeView.setTextColor(getColor(R.color.bad));
+                                    probeView.setText("● 不可用 · " + (r != null && r.error != null ? r.error : "未知原因"));
+                                }
+                            }
+                            @Override public void onErr(String m) {
+                                if (!isAdded()) return;
+                                probeView.setTextColor(getColor(R.color.bad));
+                                probeView.setText("● 探测失败 · " + m);
+                            }
+                        });
+                    } catch (Exception e) {
+                        probeView.setTextColor(getColor(R.color.bad));
+                        probeView.setText("● 探测失败 · " + e.getMessage());
+                    }
+                });
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String name = inName.getText().toString().trim();
+                String url = inUrl.getText().toString().trim();
+                String desc = inDesc.getText().toString().trim();
+                if (name.isEmpty()) { toast("请填写源站名称"); return; }
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    toast("接口地址需以 http:// 或 https:// 开头");
+                    return;
+                }
+                if (isEdit) {
+                    patchCustomSource(edit, name, url, desc, dialog);
+                } else {
+                    addCustomSource(name, url, inSlug.getText().toString().trim(), desc, dialog, false);
+                }
+            });
+        });
+        dialog.show();
+    }
+
+    /** 添加自定义源站（默认带探测；探测失败询问是否强制添加） */
+    private void addCustomSource(String name, String url, String slug, String desc,
+                                 final AlertDialog dialog, final boolean force) {
+        try {
+            org.json.JSONObject body = new org.json.JSONObject()
+                    .put("name", name)
+                    .put("api_url", url)
+                    .put("description", desc)
+                    .put("probe", true)
+                    .put("allow_unreachable", force);
+            if (!slug.isEmpty()) body.put("slug", slug);
+            VodSyncApi.get().postJson("/api/v1/sources/custom", body.toString(),
+                    Models.CustomSourceResp.class, new VodSyncApi.ApiCb<Models.CustomSourceResp>() {
+                @Override public void onOk(Models.CustomSourceResp r) {
+                    if (!isAdded()) return;
+                    dialog.dismiss();
+                    toast(r.msg != null ? r.msg : "已添加");
+                    refreshConsole(false);
+                }
+                @Override public void onErr(String m) {
+                    if (!isAdded()) return;
+                    if (!force && m != null && m.contains("源站不可用")) {
+                        new AlertDialog.Builder(requireContext())
+                                .setTitle("探测失败")
+                                .setMessage(m + "\n\n确认地址无误仍要强制添加吗？")
+                                .setPositiveButton("强制添加", (d2, w2) ->
+                                        addCustomSource(name, url, slug, desc, dialog, true))
+                                .setNegativeButton("取消", null)
+                                .show();
+                    } else {
+                        toast(m);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            toast("请求构造失败：" + e.getMessage());
+        }
+    }
+
+    /** 修改自定义源站（PATCH；后端只更新传出的字段） */
+    private void patchCustomSource(Models.SyncSource s, String name, String url, String desc, final AlertDialog dialog) {
+        try {
+            org.json.JSONObject body = new org.json.JSONObject()
+                    .put("name", name)
+                    .put("api_url", url)
+                    .put("description", desc);
+            VodSyncApi.get().patchJson("/api/v1/sources/" + s.slug + "/custom", body.toString(),
+                    Models.MsgResp.class, new VodSyncApi.ApiCb<Models.MsgResp>() {
+                @Override public void onOk(Models.MsgResp r) {
+                    if (!isAdded()) return;
+                    dialog.dismiss();
+                    toast(r.msg != null ? r.msg : "已修改");
+                    refreshConsole(false);
+                }
+                @Override public void onErr(String m) { if (isAdded()) toast(m); }
+            });
+        } catch (Exception e) {
+            toast("请求构造失败：" + e.getMessage());
+        }
+    }
+
+    /** 删除自定义源站：后端要求 confirm=<slug>，二次确认防误删 */
+    private void confirmDeleteCustom(final Models.SyncSource s) {
+        if (!isAdded()) return;
+        new AlertDialog.Builder(requireContext())
+                .setTitle("删除自定义源站")
+                .setMessage("确认删除「" + s.name + "」（" + s.slug + "）？\n"
+                        + "该站已入库的 " + TimeUtil.thousands(s.totalVideos) + " 条数据将一并删除，且不可恢复。")
+                .setPositiveButton("删除", (d, w) -> {
+                    Map<String, String> p = HomeFragment.map("confirm", s.slug, "drop_table", "true");
+                    VodSyncApi.get().delete("/api/v1/sources/" + s.slug + "/custom", p,
+                            Models.MsgResp.class, new VodSyncApi.ApiCb<Models.MsgResp>() {
+                        @Override public void onOk(Models.MsgResp r) {
+                            toast(r.msg != null ? r.msg : "已删除");
+                            refreshConsole(false);
+                        }
+                        @Override public void onErr(String m) { toast(m); }
+                    });
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 代理运行态弹窗（v1.4.0：是否启用、代理列表、走代理的源站、成功/失败计数） */
+    private void showProxyStatusDialog() {
+        if (!isAdded()) return;
+        VodSyncApi.get().get("/api/v1/stats", null, Models.StatsResp.class,
+            new VodSyncApi.ApiCb<Models.StatsResp>() {
+                @Override public void onOk(Models.StatsResp s) {
+                    if (!isAdded()) return;
+                    StringBuilder sb = new StringBuilder();
+                    if (s.proxy == null) {
+                        sb.append("该版本后端未上报代理状态（需 v1.4.0+）。");
+                    } else {
+                        sb.append(s.proxy.enabled ? "代理已启用" : "代理未启用").append('\n');
+                        if (s.proxy.urls != null && !s.proxy.urls.isEmpty()) {
+                            sb.append("代理地址：").append(joinList(s.proxy.urls, "、")).append('\n');
+                        }
+                        sb.append("直连成功 ").append(s.proxy.directSuccess)
+                          .append(" · 代理成功 ").append(s.proxy.proxySuccess)
+                          .append(" · 路由失败 ").append(s.proxy.routeFail).append('\n');
+                        if (s.proxy.preferred_hosts != null && !s.proxy.preferred_hosts.isEmpty()) {
+                            sb.append("当前走代理的源站：").append(joinList(new ArrayList<>(s.proxy.preferred_hosts.keySet()), "、"));
+                        } else {
+                            sb.append("当前无源站走代理（全部直连）");
+                        }
+                    }
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle("中转代理状态")
+                            .setMessage(sb.toString())
+                            .setPositiveButton("好", null)
+                            .show();
+                }
+                @Override public void onErr(String m) { toast(m); }
+            });
+    }
+
     // ---------- 数据源模式 ----------
 
-    /** 渲染模式选中态；直连模式下隐藏 NAS 专属的同步控制台 */
+    /** 渲染模式选中态；直连模式显示代理管理、隐藏 NAS 同步控制台 */
     private void renderModeSwitch() {
         View root = getView();
         if (root == null || segModeSync == null || !isAdded()) return;
@@ -633,6 +1069,10 @@ public class SettingsFragment extends Fragment {
         if (tvModeState != null) tvModeState.setText(st ? "直连 · 免 NAS" : "NAS · 需在线");
         View syncCard = root.findViewById(R.id.cardSync);
         if (syncCard != null) syncCard.setVisibility(st ? View.GONE : View.VISIBLE);
+        if (proxySection != null) {
+            proxySection.setVisibility(st ? View.VISIBLE : View.GONE);
+            if (st) renderProxies(); // 回到直连模式时刷新代理列表
+        }
     }
 
     /** 切换数据源：清空接口缓存（两种模式数据不混用）→ 通知首页重载 */

@@ -96,6 +96,14 @@ public final class Models {
         @SerializedName("last_sync_at") public String lastSyncAt;
         public boolean paused;
         @SerializedName("auto_sync") public boolean autoSync;
+        /** v1.4.1：已提交但被并发闸门排队（尚未真正开跑） */
+        public boolean queued;
+        /** v1.4.0：是否同步过（水位线/入库/断点任一成立）；false 显示「从未同步」 */
+        public boolean synced;
+        /** v1.8.0：来源（latest=官方目录 / custom=面板手动登记的自定义源站） */
+        public String origin;
+        public String homepage;
+        public String description;
         public boolean pick; // UI 勾选态
     }
 
@@ -124,10 +132,49 @@ public final class Models {
         @SerializedName("sources_total") public int sourcesTotal;
         @SerializedName("sources_enabled") public int sourcesEnabled;
         @SerializedName("sources_syncing") public int sourcesSyncing;
+        @SerializedName("sources_unfinished") public int sourcesUnfinished; // v1.4.0：有断点的站数
         @SerializedName("videos_total") public int videosTotal;
         @SerializedName("today_inserted") public int todayInserted;
         @SerializedName("today_updated") public int todayUpdated;
         public PauseState pause;
+        /** v1.4.0：中转代理运行态 */
+        public ProxyInfo proxy;
+        /** v1.4.1：数据库连接池 */
+        public DbPool db_pool;
+        /** v1.4.1：同步负载（正在跑 / 排队 / 并发上限） */
+        public SyncLoad sync_load;
+    }
+
+    /** GET /api/v1/stats 的 proxy 段（v1.4.0 中转代理降级通道） */
+    public static class ProxyInfo {
+        public boolean enabled;
+        public java.util.List<String> urls;
+        @SerializedName("direct_success") public int directSuccess;
+        @SerializedName("proxy_success") public int proxySuccess;
+        @SerializedName("route_fail") public int routeFail;
+        /** key=源站域名，value=当前偏好的代理地址 + 记忆时长 */
+        public java.util.Map<String, PreferredProxy> preferred_hosts;
+    }
+
+    public static class PreferredProxy {
+        public String proxy;
+        @SerializedName("age_seconds") public double ageSeconds;
+    }
+
+    /** GET /api/v1/stats 的 db_pool 段（v1.4.1 连接池排障） */
+    public static class DbPool {
+        public int size;
+        @SerializedName("checked_out") public int checkedOut;
+        public int overflow;
+        @SerializedName("max_overflow") public int maxOverflow;
+        @SerializedName("pool_timeout") public int poolTimeout;
+    }
+
+    /** GET /api/v1/stats 的 sync_load 段（v1.4.1 并发闸门） */
+    public static class SyncLoad {
+        public int running;
+        public int queued;
+        public int limit;
     }
 
     public static class SyncLog {
@@ -152,6 +199,24 @@ public final class Models {
     public static class MsgResp {
         public int code;
         public String msg;
+    }
+
+    /** POST /api/v1/sources/probe 响应（v1.8.0 连通性测试，永远 200，ok 字段表示结果） */
+    public static class ProbeResp {
+        public int code;
+        public boolean ok;
+        public String error;
+        public int total;
+        @SerializedName("elapsed_ms") public int elapsedMs;
+    }
+
+    /** POST /api/v1/sources/custom 响应（v1.8.0 添加自定义源站） */
+    public static class CustomSourceResp {
+        public int code;
+        public String slug;
+        public String msg;
+        @SerializedName("sync_started") public boolean syncStarted;
+        public ProbeResp probe;
     }
 
     /** GET /api/v1/auth/state（免鉴权）：服务端访问控制状态 */

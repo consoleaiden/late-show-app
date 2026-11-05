@@ -55,6 +55,7 @@ public final class VodSyncApi {
 
     private static final Gson GSON = new Gson();
     private static final MediaType FORM = MediaType.parse("application/x-www-form-urlencoded");
+    private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     /** 所有回调统一切回主线程（UI 只能在主线程更新） */
     private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
     private static volatile VodSyncApi sInstance;
@@ -172,6 +173,50 @@ public final class VodSyncApi {
         }
         Request req = new Request.Builder().url(b.build())
                 .post(RequestBody.create("", FORM)).build();
+        client.newCall(req).enqueue(new Callback() {
+            @Override public void onFailure(Call call, IOException e) {
+                String msg = "网络异常：" + e.getMessage();
+                MAIN.post(() -> cb.onErr(msg));
+            }
+            @Override public void onResponse(Call call, Response resp) throws IOException {
+                deliver(resp, clazz, cb);
+            }
+        });
+    }
+
+    /** POST 请求（JSON body，FastAPI BaseModel 接口用） */
+    public <T> void postJson(String path, @Nullable String jsonBody, final Class<T> clazz, final ApiCb<T> cb) {
+        sendJson("POST", path, null, jsonBody, clazz, cb);
+    }
+
+    /** PATCH 请求（JSON body） */
+    public <T> void patchJson(String path, @Nullable String jsonBody, final Class<T> clazz, final ApiCb<T> cb) {
+        sendJson("PATCH", path, null, jsonBody, clazz, cb);
+    }
+
+    /** DELETE 请求（query 传参） */
+    public <T> void delete(String path, @Nullable Map<String, String> params, final Class<T> clazz, final ApiCb<T> cb) {
+        sendJson("DELETE", path, params, null, clazz, cb);
+    }
+
+    /** 统一的 JSON/DELETE 发送器 */
+    private <T> void sendJson(String method, String path, @Nullable Map<String, String> params,
+                              @Nullable String jsonBody, final Class<T> clazz, final ApiCb<T> cb) {
+        okhttp3.HttpUrl base = okhttp3.HttpUrl.parse(baseUrl() + path);
+        if (base == null) {
+            cb.onErr("地址无效：" + baseUrl() + path);
+            return;
+        }
+        HttpUrl.Builder b = base.newBuilder();
+        if (params != null) {
+            for (Map.Entry<String, String> e : params.entrySet()) {
+                if (e.getValue() != null) b.addQueryParameter(e.getKey(), e.getValue());
+            }
+        }
+        RequestBody body = jsonBody != null
+                ? RequestBody.create(jsonBody, JSON)
+                : RequestBody.create("", FORM);
+        Request req = new Request.Builder().url(b.build()).method(method, body).build();
         client.newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
                 String msg = "网络异常：" + e.getMessage();

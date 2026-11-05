@@ -20,13 +20,17 @@ import com.lateshow.app.ui.HomeFragment;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 设置页源站同步状态列表（勾选 + 自动同步开关 + 进度 + 同步/校准） */
+/** 设置页源站同步状态列表（勾选 + 自动同步开关 + 进度 + 同步/校准 + 自定义源站管理） */
 public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH> {
 
     public interface Callbacks {
         void onPickChanged();
         void onAction(String msg);
         java.util.Map<String, String> ctx();
+        /** 编辑自定义源站（v1.8.0，仅 origin=custom 的行会触发） */
+        void onEditCustom(Models.SyncSource s);
+        /** 删除自定义源站（v1.8.0，仅 origin=custom 的行会触发） */
+        void onDeleteCustom(Models.SyncSource s);
     }
 
     private final List<Models.SyncSource> items = new ArrayList<>();
@@ -90,7 +94,8 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
             });
         });
 
-        // 状态判定（API 文档 §5.1）：running > paused > syncing(断点) > 已完成
+        // 状态判定（API 文档 §5.1 + v1.4.1 排队态 + v1.4.0 从未同步）：
+        // running > paused > queued > 断点 > 从未同步 > 已完成
         Context ctx = h.itemView.getContext();
         String pill;
         int dotRes, colorRes;
@@ -104,8 +109,18 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
             pill = "本站暂停";
             dotRes = R.drawable.dot_warn;
             colorRes = R.color.warn;
+        } else if (s.queued) {
+            // v1.4.1 并发闸门：已受理但排队等待（不占数据库连接）
+            pill = "排队中";
+            dotRes = R.drawable.dot_acc;
+            colorRes = R.color.acc;
         } else if (tp > 0 && lp < tp) {
             pill = "断点 " + lp + "/" + tp + " 页";
+            dotRes = R.drawable.dot_warn;
+            colorRes = R.color.warn;
+        } else if (!s.synced) {
+            // v1.4.0：从未同步（水位线/入库/断点均无）
+            pill = "从未同步";
             dotRes = R.drawable.dot_warn;
             colorRes = R.color.warn;
         } else {
@@ -118,7 +133,11 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
         h.pill.setCompoundDrawablesWithIntrinsicBounds(ContextCompat.getDrawable(ctx, dotRes), null, null, null);
         h.pill.setCompoundDrawablePadding((int) (4 * ctx.getResources().getDisplayMetrics().density));
 
-        h.meta.setText(s.slug + " · " + TimeUtil.thousands(s.totalVideos) + " 条 · 最后同步 " + TimeUtil.stampOrEmpty(s.lastSyncAt));
+        // v1.8.0：来源徽标（自定义源站附「自定义」标记）
+        boolean custom = "custom".equals(s.origin);
+        String meta = s.slug + " · " + TimeUtil.thousands(s.totalVideos) + " 条 · 最后同步 " + TimeUtil.stampOrEmpty(s.lastSyncAt);
+        if (custom) meta = "自定义 · " + meta;
+        h.meta.setText(meta);
 
         int pct = (int) Math.max(0, Math.min(100, s.progress));
         h.pbar.setProgress(pct);
@@ -154,6 +173,15 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
                 }
             });
         });
+
+        // v1.8.0：自定义源站的编辑 / 删除入口（官方源站隐藏）
+        boolean isCustom = "custom".equals(s.origin);
+        h.btnEdit.setVisibility(isCustom ? View.VISIBLE : View.GONE);
+        h.btnDel.setVisibility(isCustom ? View.VISIBLE : View.GONE);
+        if (isCustom) {
+            h.btnEdit.setOnClickListener(v -> { if (cb != null) cb.onEditCustom(s); });
+            h.btnDel.setOnClickListener(v -> { if (cb != null) cb.onDeleteCustom(s); });
+        }
     }
 
     @Override
@@ -163,7 +191,7 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
 
     static class VH extends RecyclerView.ViewHolder {
         CheckBox chk;
-        TextView name, pill, autoLabel, meta, pct, btnSync, btnCali;
+        TextView name, pill, autoLabel, meta, pct, btnSync, btnCali, btnEdit, btnDel;
         Switch swAuto;
         ProgressBar pbar;
 
@@ -177,6 +205,8 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
             pct = v.findViewById(R.id.pct);
             btnSync = v.findViewById(R.id.btnSync);
             btnCali = v.findViewById(R.id.btnCali);
+            btnEdit = v.findViewById(R.id.btnEdit);
+            btnDel = v.findViewById(R.id.btnDel);
             swAuto = v.findViewById(R.id.swAuto);
             pbar = v.findViewById(R.id.pbar);
         }

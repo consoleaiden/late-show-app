@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingLeft="22dp"
+    android:paddingRight="22dp"
+    android:paddingTop="10dp">
+
+    <EditText
+        android:id="@+id/dcsName"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:background="@drawable/bg_field"
+        android:hint="名称（如：我的 HD 站）"
+        android:textSize="12sp"
+        android:textColor="@color/t1"
+        android:textColorHint="@color/t3"
+        android:inputType="text"
+        android:maxLines="1" />
+
+    <EditText
+        android:id="@+id/dcsUrl"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:background="@drawable/bg_field"
+        android:hint="接口地址（http:// 或 https:// 开头）"
+        android:textSize="12sp"
+        android:textColor="@color/t1"
+        android:textColorHint="@color/t3"
+        android:inputType="textUri"
+        android:maxLines="1" />
+
+    <EditText
+        android:id="@+id/dcsSlug"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:background="@drawable/bg_field"
+        android:hint="标识（可选，留空自动生成，登记后不可改）"
+        android:textSize="12sp"
+        android:textColor="@color/t1"
+        android:textColorHint="@color/t3"
+        android:inputType="text"
+        android:maxLines="1" />
+
+    <EditText
+        android:id="@+id/dcsToken"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:background="@drawable/bg_field"
+        android:hint="API Token（服务器未开启鉴权可留空）"
+        android:textSize="12sp"
+        android:textColor="@color/t1"
+        android:textColorHint="@color/t3"
+        android:inputType="textVisiblePassword"
+        android:maxLines="1" />
+
+    <EditText
+        android:id="@+id/dcsDesc"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:background="@drawable/bg_field"
+        android:hint="备注（可选）"
+        android:textSize="12sp"
+        android:textColor="@color/t1"
+        android:textColorHint="@color/t3"
+        android:inputType="text"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/dcsProbe"
+        style="@style/MetaLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="● 未探测" />
+
+    <TextView
+        android:id="@+id/dcsHint"
+        style="@style/MetaLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="6dp"
+        android:textColor="@color/warn"
+        android:text=""
+        android:visibility="gone" />
+</LinearLayout>

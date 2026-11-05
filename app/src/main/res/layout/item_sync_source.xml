@@ -103,5 +103,21 @@
             style="@style/Smbtn"
             android:layout_marginLeft="6dp"
             android:text="校准" />
+
+        <TextView
+            android:id="@+id/btnEdit"
+            style="@style/Smbtn"
+            android:layout_marginLeft="6dp"
+            android:text="编辑"
+            android:textColor="@color/acc"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/btnDel"
+            style="@style/Smbtn"
+            android:layout_marginLeft="6dp"
+            android:text="删除"
+            android:textColor="@color/bad"
+            android:visibility="gone" />
     </LinearLayout>
 </LinearLayout>

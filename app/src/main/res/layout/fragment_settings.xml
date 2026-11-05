@@ -53,16 +53,28 @@
                 android:contentDescription="主题" />
         </LinearLayout>
 
-        <!-- ① 数据源模式：NAS 同步库 / 资源站直连（NAS 关机时的兜底） -->
+        <!-- ① 数据源模式：NAS 同步库 / 资源站直连（手风琴面板，与其他模块一致） -->
         <LinearLayout
             style="@style/SettingsCard"
             android:orientation="vertical">
 
             <LinearLayout
+                android:id="@+id/hdrMode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:gravity="center_vertical"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="@null">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_mode"
+                    app:tint="@color/t3"
+                    android:contentDescription="数据源模式" />
 
                 <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="数据源模式" />
 
@@ -75,48 +87,105 @@
                     style="@style/MetaLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginRight="8dp"
                     android:text="" />
+
+                <com.airbnb.lottie.LottieAnimationView
+                    android:id="@+id/arMode"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:tag="ic_chevron_down"
+                    app:tint="@color/t3"
+                    android:contentDescription="展开" />
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/panelMode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="horizontal"
-                android:background="@drawable/bg_capsule"
-                android:padding="3dp">
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal"
+                    android:background="@drawable/bg_capsule"
+                    android:padding="3dp">
+
+                    <TextView
+                        android:id="@+id/segModeSync"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="30dp"
+                        android:gravity="center"
+                        android:text="NAS 同步库"
+                        android:textSize="12sp"
+                        android:textColor="@color/accInk"
+                        android:background="@drawable/bg_seg_on" />
+
+                    <TextView
+                        android:id="@+id/segModeStatic"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="30dp"
+                        android:gravity="center"
+                        android:text="资源站直连"
+                        android:textSize="12sp"
+                        android:textColor="@color/t2" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/segModeSync"
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
-                    android:layout_height="30dp"
-                    android:gravity="center"
-                    android:text="NAS 同步库"
-                    android:textSize="12sp"
-                    android:textColor="@color/accInk"
-                    android:background="@drawable/bg_seg_on" />
+                    android:id="@+id/tvModeDesc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textSize="10.5sp"
+                    android:textColor="@color/t2"
+                    android:lineSpacingMultiplier="1.6"
+                    android:text="NAS 同步库：走自己的 VodSync 聚合库，速度快、数据全，需要 NAS 在线。\n资源站直连：从公开资源站目录直接取片，NAS 关机也能正常浏览与播放。" />
 
-                <TextView
-                    android:id="@+id/segModeStatic"
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
-                    android:layout_height="30dp"
-                    android:gravity="center"
-                    android:text="资源站直连"
-                    android:textSize="12sp"
-                    android:textColor="@color/t2" />
+                <!-- 代理访问 API（仅直连模式显示）：源站直连失败/过慢时按顺序尝试 -->
+                <LinearLayout
+                    android:id="@+id/proxySection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="代理访问 API" />
+
+                        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                        <TextView
+                            android:id="@+id/btnAddProxy"
+                            style="@style/Smbtn"
+                            android:text="+ 新增代理"
+                            android:textColor="@color/acc" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/MetaLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="源站直连失败或过慢时，按列表顺序依次尝试以下代理（请求方式：代理地址?url=目标地址）" />
+
+                    <LinearLayout
+                        android:id="@+id/proxyList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="vertical" />
+                </LinearLayout>
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/tvModeDesc"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:textSize="10.5sp"
-                android:textColor="@color/t2"
-                android:lineSpacingMultiplier="1.6"
-                android:text="NAS 同步库：走自己的 VodSync 聚合库，速度快、数据全，需要 NAS 在线。\n资源站直连：从公开资源站目录直接取片，NAS 关机也能正常浏览与播放。\n部分源站较慢或连接失败时会自动经代理加速。" />
         </LinearLayout>
 
         <!-- ② 播放源与鉴权（手风琴面板） -->
@@ -133,6 +202,14 @@
                 android:paddingTop="2dp"
                 android:paddingBottom="2dp"
                 android:background="@null">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_source"
+                    app:tint="@color/t3"
+                    android:contentDescription="播放源" />
 
                 <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放源与鉴权" />
 
@@ -158,7 +235,8 @@
                 android:id="@+id/panelSource"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:visibility="gone">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -262,6 +340,40 @@
                         android:textSize="13sp"
                         android:textColor="@color/t1" />
                 </LinearLayout>
+
+                <!-- 已保存播放源：保存成功后自动登记，可切换 / 编辑 / 删除 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="已保存播放源" />
+
+                    <TextView
+                        android:id="@+id/tvSavedCount"
+                        style="@style/MetaLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="8dp"
+                        android:text="" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/savedList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/tvSavedEmpty"
+                    style="@style/MetaLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="保存成功后会记录在这里（地址 + Token 一并保存），可一键切换、编辑、删除。" />
             </LinearLayout>
         </LinearLayout>
 
@@ -279,6 +391,14 @@
                 android:paddingTop="2dp"
                 android:paddingBottom="2dp"
                 android:background="@null">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_play"
+                    app:tint="@color/t3"
+                    android:contentDescription="播放偏好" />
 
                 <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放偏好" />
 
@@ -366,6 +486,14 @@
                 android:paddingBottom="2dp"
                 android:background="@null">
 
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_cache"
+                    app:tint="@color/t3"
+                    android:contentDescription="离线与缓存" />
+
                 <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="离线与缓存" />
 
                 <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
@@ -425,6 +553,14 @@
                 android:paddingBottom="2dp"
                 android:background="@null">
 
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_sync"
+                    app:tint="@color/t3"
+                    android:contentDescription="同步控制台" />
+
                 <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步控制台" />
 
                 <TextView
@@ -461,6 +597,17 @@
                     android:layout_marginTop="10dp"
                     android:orientation="vertical" />
 
+                <!-- 运行态明细：同步负载 / 代理 / 连接池（v1.4.0+） -->
+                <TextView
+                    android:id="@+id/tvRuntime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textSize="10.5sp"
+                    android:textColor="@color/t3"
+                    android:lineSpacingMultiplier="1.6"
+                    android:visibility="gone" />
+
                 <!-- 同步操作 -->
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -496,6 +643,21 @@
                     <TextView
                         android:id="@+id/btnRecount"
                         style="@style/OpBtn" android:text="条数校准" android:layout_marginLeft="8dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnAddCustom"
+                        style="@style/OpBtn" android:text="添加自定义源站" android:textColor="@color/acc" />
+
+                    <TextView
+                        android:id="@+id/btnProxyStatus"
+                        style="@style/OpBtn" android:text="代理状态" android:layout_marginLeft="8dp" />
                 </LinearLayout>
 
                 <TextView
@@ -606,6 +768,14 @@
                 android:paddingTop="2dp"
                 android:paddingBottom="2dp"
                 android:background="@null">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_app"
+                    app:tint="@color/t3"
+                    android:contentDescription="应用更新" />
 
                 <TextView style="@style/SectionTitle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="应用更新" />
 

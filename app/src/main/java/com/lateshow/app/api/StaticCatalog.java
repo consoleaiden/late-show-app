@@ -44,8 +44,7 @@ public final class StaticCatalog implements Catalog {
     /** 资源站目录（源站列表来源） */
     public static final String DIR_URL = "https://mylazily.github.io/ziyuanzhan/data/latest.json";
 
-    /** 备用代理：直连失败或过慢时，把目标地址作为 url 参数转发 */
-    public static final String PROXY = "https://pz.v88.qzz.io/?url=";
+    /** 备用代理格式约定：代理地址 + url=<urlencode(目标地址)>；列表可在设置页维护（PrefStore.proxies()） */
 
     /** 直连超过该耗时视为「慢」，后续请求优先走代理 */
     private static final long SLOW_DIRECT_MS = 3500;
@@ -370,22 +369,8 @@ public final class StaticCatalog implements Catalog {
         Request req = new Request.Builder().url(DIR_URL).head().header("User-Agent", UA).build();
         http.newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
-                // 目录站点也可能被墙/超时：再走一次代理
-                Request pr = new Request.Builder()
-                        .url(proxyUrlOf(DIR_URL)).head().header("User-Agent", UA).build();
-                proxyHttp.newCall(pr).enqueue(new Callback() {
-                    @Override public void onFailure(Call c2, IOException e2) {
-                        MAIN.post(() -> cb.onErr("网络异常：" + e2.getMessage()));
-                    }
-                    @Override public void onResponse(Call c2, Response resp2) {
-                        try (Response r2 = resp2) {
-                            if (r2.isSuccessful()) MAIN.post(() -> cb.onOk(System.currentTimeMillis() - t0));
-                            else MAIN.post(() -> cb.onErr("HTTP " + r2.code()));
-                        } catch (Exception ex) {
-                            MAIN.post(() -> cb.onErr("网络异常：" + ex.getMessage()));
-                        }
-                    }
-                });
+                // 目录站点也可能被墙/超时：依次走代理列表
+                fetchViaProxiesHead(t0, cb);
             }
             @Override public void onResponse(Call call, Response resp) {
                 try (Response r = resp) {
@@ -393,6 +378,38 @@ public final class StaticCatalog implements Catalog {
                     else MAIN.post(() -> cb.onErr("HTTP " + r.code()));
                 } catch (Exception e) {
                     MAIN.post(() -> cb.onErr("网络异常：" + e.getMessage()));
+                }
+            }
+        });
+    }
+
+    /** 目录 HEAD 探测的代理兜底：按代理列表顺序逐个尝试 */
+    private void fetchViaProxiesHead(final long t0, final VodSyncApi.ApiCb<Long> cb) {
+        final List<String> proxies = proxies();
+        if (proxies.isEmpty()) { MAIN.post(() -> cb.onErr("直连失败且代理列表为空")); return; }
+        tryHeadProxy(0, proxies, t0, cb);
+    }
+
+    private void tryHeadProxy(final int idx, final List<String> proxies, final long t0, final VodSyncApi.ApiCb<Long> cb) {
+        if (idx >= proxies.size()) { MAIN.post(() -> cb.onErr("直连失败且所有代理均不可用")); return; }
+        Request pr;
+        try {
+            pr = new Request.Builder().url(proxyUrlOf(proxies.get(idx), DIR_URL))
+                    .head().header("User-Agent", UA).build();
+        } catch (Exception e) {
+            tryHeadProxy(idx + 1, proxies, t0, cb);
+            return;
+        }
+        proxyHttp.newCall(pr).enqueue(new Callback() {
+            @Override public void onFailure(Call c2, IOException e2) {
+                tryHeadProxy(idx + 1, proxies, t0, cb);
+            }
+            @Override public void onResponse(Call c2, Response resp2) {
+                try (Response r2 = resp2) {
+                    if (r2.isSuccessful()) MAIN.post(() -> cb.onOk(System.currentTimeMillis() - t0));
+                    else tryHeadProxy(idx + 1, proxies, t0, cb);
+                } catch (Exception ex) {
+                    tryHeadProxy(idx + 1, proxies, t0, cb);
                 }
             }
         });
@@ -409,30 +426,44 @@ public final class StaticCatalog implements Catalog {
      * 统一 GET：带浏览器 UA，宽松解码（部分老站返回 GBK），回调切回主线程。
      *
      * 站点可用性策略（直连失败或过慢自动走代理）：
-     *  - host 未被标记慢：先直连（9s 上限），失败自动改走代理 pz.v88.qzz.io
-     *  - host 已被标记慢：直接走代理（省掉一次等待），代理失败再退回直连
+     *  - host 未被标记慢：先直连（9s 上限），失败按代理列表顺序逐个尝试
+     *  - host 已被标记慢：跳过直连，直接按列表顺序走代理，全部失败再退回直连
      *  - 直连成功但耗时超过 3.5s，同样标记为慢，之后 10 分钟内优先代理
      */
     private void get(HttpUrl url, final OnBody ok, final OnErr err) {
         final String host = url.host();
         if (isSlow(host)) {
             Log.d(TAG, "慢站点走代理：" + host);
-            fetch(url, true, ok, e1 -> {
-                Log.d(TAG, "代理失败，回退直连 " + host + "：" + e1);
-                fetch(url, false, ok, e2 -> err.onErr(e2 + "（直连与代理均失败）"));
+            fetchViaProxies(url, ok, e1 -> {
+                Log.d(TAG, "代理全部失败，回退直连 " + host + "：" + e1);
+                fetch(url, null, ok, e2 -> err.onErr(e2 + "（直连与代理均失败）"));
             });
         } else {
-            fetch(url, false, ok, e2 -> {
+            fetch(url, null, ok, e2 -> {
                 Log.d(TAG, "直连失败，改走代理 " + host + "：" + e2);
-                fetch(url, true, ok, e3 -> err.onErr(e3 + "（已尝试代理）"));
+                fetchViaProxies(url, ok, e3 -> err.onErr(e3 + "（已尝试代理）"));
             });
         }
     }
 
-    /** 单次请求：viaProxy=true 时把目标地址编码进代理 url 参数 */
-    private void fetch(final HttpUrl url, final boolean viaProxy, final OnBody ok, final OnErr err) {
+    /** 按代理列表顺序逐个尝试（index 从 0 开始，全部失败回调 err） */
+    private void fetchViaProxies(final HttpUrl url, final OnBody ok, final OnErr err) {
+        final List<String> proxies = proxies();
+        if (proxies.isEmpty()) { err.onErr("代理列表为空"); return; }
+        tryProxy(0, proxies, url, ok, err);
+    }
+
+    private void tryProxy(final int idx, final List<String> proxies, final HttpUrl url,
+                          final OnBody ok, final OnErr err) {
+        if (idx >= proxies.size()) { err.onErr("所有代理均不可用"); return; }
+        fetch(url, proxies.get(idx), ok, e -> tryProxy(idx + 1, proxies, url, ok, err));
+    }
+
+    /** 单次请求：proxyBase 非空时把目标地址编码进该代理的 url 参数 */
+    private void fetch(final HttpUrl url, final String proxyBase, final OnBody ok, final OnErr err) {
         final String host = url.host();
-        String target = viaProxy ? proxyUrlOf(url.toString()) : url.toString();
+        final boolean viaProxy = proxyBase != null;
+        String target = viaProxy ? proxyUrlOf(proxyBase, url.toString()) : url.toString();
         Request req = new Request.Builder()
                 .url(target)
                 .header("User-Agent", UA)
@@ -469,12 +500,23 @@ public final class StaticCatalog implements Catalog {
         });
     }
 
-    /** 目标地址 → 代理 URL（整段地址做 URL 编码，目标自带的 ?ac=xx&pg=1 才能完整透传） */
-    static String proxyUrlOf(String raw) {
+    /** 当前代理列表（设置页可维护，即时生效） */
+    private static List<String> proxies() {
         try {
-            return PROXY + java.net.URLEncoder.encode(raw, "UTF-8");
+            return com.lateshow.app.store.PrefStore.get().proxies();
         } catch (Exception e) {
-            return PROXY + raw;
+            List<String> def = new ArrayList<>();
+            for (String p : com.lateshow.app.store.PrefStore.DEFAULT_PROXIES) def.add(p);
+            return def;
+        }
+    }
+
+    /** 目标地址 → 代理 URL（整段地址做 URL 编码，目标自带的 ?ac=xx&pg=1 才能完整透传） */
+    static String proxyUrlOf(String proxyBase, String raw) {
+        try {
+            return proxyBase + java.net.URLEncoder.encode(raw, "UTF-8");
+        } catch (Exception e) {
+            return proxyBase + raw;
         }
     }
 
