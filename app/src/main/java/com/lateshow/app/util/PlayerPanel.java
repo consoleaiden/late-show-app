@@ -1,6 +1,7 @@
 package com.lateshow.app.util;
 
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.content.Context;
 import android.text.InputType;
 import android.view.Gravity;
@@ -79,7 +80,7 @@ public final class PlayerPanel {
         note.setPadding(0, dp(ctx, 6), 0, 0);
         box.addView(note);
 
-        new AlertDialog.Builder(ctx)
+        new MaterialAlertDialogBuilder(ctx)
                 .setTitle("播放设置")
                 .setView(box)
                 .setPositiveButton("保存", (d, w) -> {

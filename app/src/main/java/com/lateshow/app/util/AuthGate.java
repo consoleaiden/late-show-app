@@ -1,7 +1,8 @@
 package com.lateshow.app.util;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.text.InputType;
@@ -82,7 +83,7 @@ public final class AuthGate {
         lp.topMargin = dp(act, 14);
         box.addView(input, lp);
 
-        final AlertDialog d = new AlertDialog.Builder(act)
+        final AlertDialog d = new MaterialAlertDialogBuilder(act)
                 .setTitle("需要 API Token")
                 .setView(box)
                 .setPositiveButton("保存并验证", null)

@@ -9,5 +9,21 @@
         <item name="android:statusBarColor">@color/ink900</item>
         <item name="android:navigationBarColor">@color/ink900</item>
         <item name="android:windowLightStatusBar">true</item>
+
+        <!-- 弹出层统一规范：对话框 / 弹出菜单 -->
+        <item name="alertDialogTheme">@style/ThemeOverlay.LateShow.AlertDialog</item>
+        <item name="android:popupMenuStyle">@style/LateShow.PopupMenu</item>
+    </style>
+
+    <!-- 弹层主题 overlay：颜色令牌走 @color 引用，深浅主题自动适配 -->
+    <style name="ThemeOverlay.LateShow.AlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="materialAlertDialogStyle">@style/LateShow.MaterialAlertDialog</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/LateShow.DialogTitle</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/LateShow.DialogBody</item>
+        <!-- colorPrimary 驱动主按钮文字色：浅色用深橙 accText（对比度达标） -->
+        <item name="colorPrimary">@color/accText</item>
+        <!-- 遮罩由默认 0.6 降到 0.45：透出页面内容，观感更柔和 -->
+        <item name="android:backgroundDimAmount">0.45</item>
+        <item name="android:windowAnimationStyle">@style/LateShow.DialogAnim</item>
     </style>
 </resources>

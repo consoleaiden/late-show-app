@@ -1,8 +1,8 @@
 package com.lateshow.app.util;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.ProgressDialog;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -180,13 +180,9 @@ public final class UpdateChecker {
             Toast.makeText(act, "该版本没有可下载的 APK", Toast.LENGTH_SHORT).show();
             return;
         }
-        final ProgressDialog pd = new ProgressDialog(act);
-        pd.setTitle("正在下载更新 v" + info.version);
-        pd.setMessage("准备中…");
-        pd.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-        pd.setMax(100);
-        pd.setCancelable(false);
-        pd.show();
+        final ProgressDialog d = new ProgressDialog(act,
+                "正在下载更新 v" + info.version, "准备中…");
+        d.show();
 
         new Thread(() -> {
             final File out = new File(act.getCacheDir(), "late-show-update.apk");
@@ -194,12 +190,12 @@ public final class UpdateChecker {
             String lastErr = "未知错误";
             for (int i = 0; i < urls.length; i++) {
                 final int idx = i;
-                MAIN.post(() -> pd.setMessage(idx == 0 ? "直连 GitHub…"
+                MAIN.post(() -> d.setMessage(idx == 0 ? "直连 GitHub…"
                         : "切换线路 " + idx + "/" + (urls.length - 1) + "…"));
                 try {
                     if (fetch(urls[i], out, pd, info.size)) {
                         MAIN.post(() -> {
-                            pd.dismiss();
+                            d.dismiss();
                             install(act, out);
                         });
                         return;
@@ -212,7 +208,7 @@ public final class UpdateChecker {
             }
             final String err = lastErr;
             MAIN.post(() -> {
-                pd.dismiss();
+                d.dismiss();
                 showFailDialog(act, info, err);
             });
         }).start();
@@ -226,7 +222,7 @@ public final class UpdateChecker {
     }
 
     /** 下载单个线路；成功返回 true（大小与 APK 头都对得上） */
-    private static boolean fetch(String url, File out, ProgressDialog pd, long expectSize) throws IOException {
+    private static boolean fetch(String url, File out, ProgressDialog d, long expectSize) throws IOException {
         Request req = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android) LateShow-App")
@@ -254,8 +250,8 @@ public final class UpdateChecker {
                     if (total > 0) {
                         final int p = (int) Math.min(100, got * 100 / total);
                         MAIN.post(() -> {
-                            pd.setProgress(p);
-                            pd.setMessage("已下载 " + p + "%");
+                            d.setProgress(p);
+                            d.setMessage("已下载 " + p + "%");
                         });
                     }
                 }
@@ -269,7 +265,7 @@ public final class UpdateChecker {
 
     private static void showFailDialog(final Activity act, final Info info, String err) {
         if (act == null || act.isFinishing()) return;
-        new AlertDialog.Builder(act)
+        new MaterialAlertDialogBuilder(act)
                 .setTitle("下载失败")
                 .setMessage(err + "\n\n可以改用浏览器下载安装包。")
                 .setPositiveButton("浏览器下载", (d, w) -> {
@@ -286,7 +282,7 @@ public final class UpdateChecker {
         // Android 8.0+ 需要「安装未知应用」授权
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && !act.getPackageManager().canRequestPackageInstalls()) {
-            new AlertDialog.Builder(act)
+            new MaterialAlertDialogBuilder(act)
                     .setTitle("需要安装权限")
                     .setMessage("请允许「夜场 LATE SHOW」安装应用，返回后再次点击更新即可。")
                     .setPositiveButton("去开启", (d, w) -> {
@@ -308,5 +304,42 @@ public final class UpdateChecker {
         } catch (Exception e) {
             Toast.makeText(act, "无法唤起安装器：" + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    /** 下载进度弹窗：替代已废弃的 framework ProgressDialog，走 App 统一弹层主题 */
+    private static final class ProgressDialog {
+        final AlertDialog d;
+        final android.widget.TextView msg;
+        final android.widget.ProgressBar bar;
+
+        ProgressDialog(Activity act, String title, String message) {
+            float den = act.getResources().getDisplayMetrics().density;
+            android.widget.LinearLayout box = new android.widget.LinearLayout(act);
+            box.setOrientation(android.widget.LinearLayout.VERTICAL);
+            int pad = Math.round(24 * den);
+            box.setPadding(pad, Math.round(12 * den), pad, pad);
+            msg = new android.widget.TextView(act);
+            msg.setTextSize(13);
+            msg.setTextColor(androidx.core.content.ContextCompat.getColor(act, com.lateshow.app.R.color.t2));
+            box.addView(msg);
+            bar = new android.widget.ProgressBar(act, null, android.R.attr.progressBarStyleHorizontal);
+            bar.setMax(100);
+            android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.topMargin = Math.round(12 * den);
+            box.addView(bar, lp);
+            d = new MaterialAlertDialogBuilder(act)
+                    .setTitle(title)
+                    .setCancelable(false)
+                    .setView(box)
+                    .create();
+            msg.setText(message);
+        }
+
+        void show() { d.show(); }
+        void setMax(int m) { bar.setMax(m); }
+        void setMessage(String m) { msg.setText(m); }
+        void setProgress(int p) { bar.setProgress(p); }
+        void dismiss() { try { d.dismiss(); } catch (Exception ignored) { } }
     }
 }

@@ -8,6 +8,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
 import androidx.annotation.NonNull;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
@@ -116,7 +117,7 @@ public class MainActivity extends AppCompatActivity {
             if (info == null || isFinishing()) return;
             String notes = info.notes == null ? "" : info.notes.trim();
             if (notes.length() > 400) notes = notes.substring(0, 400) + "…";
-            new androidx.appcompat.app.AlertDialog.Builder(this)
+            new MaterialAlertDialogBuilder(this)
                     .setTitle("发现新版本 v" + info.version)
                     .setMessage("当前 v" + com.lateshow.app.util.UpdateChecker.currentVersion() + "\n\n" + notes)
                     .setPositiveButton("立即更新", (d, w) -> com.lateshow.app.util.UpdateChecker.downloadAndInstall(this, info))

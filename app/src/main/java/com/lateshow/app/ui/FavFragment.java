@@ -6,6 +6,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -113,7 +114,7 @@ public class FavFragment extends Fragment {
     private void confirmDelete(CardItem item) {
         if (!isAdded() || getContext() == null) return;
         boolean isFav = item.kind == CardItem.KIND_FAV;
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(isFav ? "删除收藏" : "删除播放记录")
                 .setMessage(item.title)
                 .setPositiveButton("删除", (d, w) -> {

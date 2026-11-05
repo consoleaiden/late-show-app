@@ -1,6 +1,6 @@
 package com.lateshow.app.ui;
 
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -17,6 +17,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
@@ -516,7 +517,7 @@ public class SettingsFragment extends Fragment {
                 return;
             }
             if (info == null) {
-                new AlertDialog.Builder(getContext())
+                new MaterialAlertDialogBuilder(getContext())
                         .setTitle("已是最新版本")
                         .setMessage("当前版本 v" + UpdateChecker.currentVersion())
                         .setPositiveButton("好", null)
@@ -525,7 +526,7 @@ public class SettingsFragment extends Fragment {
             }
             String notes = info.notes == null ? "" : info.notes.trim();
             if (notes.length() > 500) notes = notes.substring(0, 500) + "…";
-            new AlertDialog.Builder(getContext())
+            new MaterialAlertDialogBuilder(getContext())
                     .setTitle("发现新版本 v" + info.version)
                     .setMessage("当前 v" + UpdateChecker.currentVersion() + "\n\n" + notes)
                     .setPositiveButton("立即更新", (d, w) -> {
@@ -764,7 +765,7 @@ public class SettingsFragment extends Fragment {
         inName.setText(it.name);
         inUrl.setText(it.url);
         inToken.setText(it.token);
-        new AlertDialog.Builder(requireContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("编辑播放源")
                 .setView(dlg)
                 .setPositiveButton("保存", (d, w) -> {
@@ -793,7 +794,7 @@ public class SettingsFragment extends Fragment {
 
     private void confirmDeleteSavedSource(final PrefStore.SavedSource it) {
         if (!isAdded()) return;
-        new AlertDialog.Builder(requireContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("删除播放源")
                 .setMessage("确认删除「" + it.name + "」？\n" + it.url
                         + "\n\n仅从列表移除，不影响当前已生效的配置。")
@@ -835,7 +836,7 @@ public class SettingsFragment extends Fragment {
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
         input.setPadding(pad, pad / 2, pad, pad / 2);
         if (editing) input.setText(list.get(index));
-        new AlertDialog.Builder(requireContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(editing ? "修改代理" : "新增代理")
                 .setMessage("请求方式：代理地址 + ?url=目标地址（整段 URL 编码）")
                 .setView(input)
@@ -856,7 +857,7 @@ public class SettingsFragment extends Fragment {
         if (!isAdded()) return;
         List<String> list = PrefStore.get().proxies();
         if (index < 0 || index >= list.size()) return;
-        new AlertDialog.Builder(requireContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("删除代理")
                 .setMessage("确认删除代理？\n" + list.get(index)
                         + "\n\n删除后该代理不再参与兜底；列表清空后直连失败将无代理可用。")
@@ -901,7 +902,7 @@ public class SettingsFragment extends Fragment {
             hintView.setText("标识留空时由名称自动推导；保存前会先抓一页验证地址可用性。");
         }
 
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(isEdit ? "编辑自定义源站 · " + edit.slug : "添加自定义源站")
                 .setView(dlg)
                 .setPositiveButton(isEdit ? "保存" : "添加", null)
@@ -984,7 +985,7 @@ public class SettingsFragment extends Fragment {
                 @Override public void onErr(String m) {
                     if (!isAdded()) return;
                     if (!force && m != null && m.contains("源站不可用")) {
-                        new AlertDialog.Builder(requireContext())
+                        new MaterialAlertDialogBuilder(requireContext())
                                 .setTitle("探测失败")
                                 .setMessage(m + "\n\n确认地址无误仍要强制添加吗？")
                                 .setPositiveButton("强制添加", (d2, w2) ->
@@ -1026,7 +1027,7 @@ public class SettingsFragment extends Fragment {
     /** 删除自定义源站：后端要求 confirm=<slug>，二次确认防误删 */
     private void confirmDeleteCustom(final Models.SyncSource s) {
         if (!isAdded()) return;
-        new AlertDialog.Builder(requireContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("删除自定义源站")
                 .setMessage("确认删除「" + s.name + "」（" + s.slug + "）？\n"
                         + "该站已入库的 " + TimeUtil.thousands(s.totalVideos) + " 条数据将一并删除，且不可恢复。")
@@ -1069,7 +1070,7 @@ public class SettingsFragment extends Fragment {
                             sb.append("当前无源站走代理（全部直连）");
                         }
                     }
-                    new AlertDialog.Builder(requireContext())
+                    new MaterialAlertDialogBuilder(requireContext())
                             .setTitle("中转代理状态")
                             .setMessage(sb.toString())
                             .setPositiveButton("好", null)

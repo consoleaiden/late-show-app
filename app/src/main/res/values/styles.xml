@@ -121,4 +121,62 @@
         <item name="android:textSize">12sp</item>
         <item name="android:textColor">@color/t1</item>
     </style>
+
+    <!-- ===================== 弹出层（对话框 / 弹出菜单） ===================== -->
+
+    <!-- 容器形状：16dp 圆角，需与 bg_dialog.xml 半径一致 -->
+    <style name="LateShow.DialogShape">
+        <item name="cornerSize">16dp</item>
+    </style>
+
+    <!-- 对话框容器：自定义背景（描边分层）+ 投影 + 统一按钮样式 -->
+    <style name="LateShow.MaterialAlertDialog" parent="MaterialAlertDialog.Material3">
+        <item name="shapeAppearanceMediumComponent">@style/LateShow.DialogShape</item>
+        <item name="android:windowBackground">@drawable/bg_dialog</item>
+        <item name="android:windowElevation">8dp</item>
+        <item name="buttonBarPositiveButtonStyle">@style/LateShow.DialogBtnPrimary</item>
+        <item name="buttonBarNegativeButtonStyle">@style/LateShow.DialogBtnSecondary</item>
+        <item name="buttonBarNeutralButtonStyle">@style/LateShow.DialogBtnSecondary</item>
+    </style>
+
+    <!-- 主操作按钮：橙色加粗（色取自 colorPrimary=accText，44dp 触控高度） -->
+    <style name="LateShow.DialogBtnPrimary" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textSize">13sp</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:paddingLeft">16dp</item>
+        <item name="android:paddingRight">16dp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- 次/中性操作：灰色常规字重，与主操作拉开层次 -->
+    <style name="LateShow.DialogBtnSecondary" parent="LateShow.DialogBtnPrimary">
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">@color/t2</item>
+    </style>
+
+    <!-- 标题：17sp 粗体，与页面 SectionTitle 同阶 -->
+    <style name="LateShow.DialogTitle" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:textSize">17sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/t1</item>
+    </style>
+
+    <!-- 正文：13sp / t2 / 行距 +5dp（发布说明等多行长文更易读） -->
+    <style name="LateShow.DialogBody" parent="MaterialAlertDialog.Material3.Body.Text">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/t2</item>
+        <item name="android:lineSpacingExtra">5dp</item>
+    </style>
+
+    <!-- 对话框窗口动画：淡入 + 微缩放入场，快速淡出退场 -->
+    <style name="LateShow.DialogAnim">
+        <item name="android:windowShowAnimation">@anim/dialog_in</item>
+        <item name="android:windowHideAnimation">@anim/dialog_out</item>
+    </style>
+
+    <!-- 弹出菜单（倍速等）：12dp 圆角 + 描边，与对话框同族 -->
+    <style name="LateShow.PopupMenu" parent="Widget.Material3.PopupMenu">
+        <item name="android:popupBackground">@drawable/bg_menu</item>
+        <item name="android:dropDownVerticalOffset">4dp</item>
+    </style>
 </resources>
