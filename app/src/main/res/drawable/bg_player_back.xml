@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 全屏播放返回键底：半透明深色胶囊（45%），压在视频上不遮挡画面又不失可读性 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#73101318" />
+    <corners android:radius="999dp" />
+</shape>
