@@ -26,6 +26,9 @@
         <item name="materialAlertDialogBodyTextStyle">@style/LateShow.DialogBody</item>
         <!-- colorPrimary 驱动主按钮文字色：浅色用深橙 accText（对比度达标） -->
         <item name="colorPrimary">@color/accText</item>
+        <!-- 关闭 elevation 染色：M3 Light 默认 elevationOverlayEnabled=true 且 overlay 色 = colorPrimary，
+             8dp 投影高度会把 ~13% 的橙色混进容器底色（泛红）。关掉后容器 = 纯 ink800，与设置页卡片同色 -->
+        <item name="elevationOverlayEnabled">false</item>
         <!-- 遮罩由默认 0.6 降到 0.45：透出页面内容，观感更柔和 -->
         <item name="android:backgroundDimAmount">0.45</item>
         <!-- 投影：M3 默认之上略加强，配合表面色分层 -->
