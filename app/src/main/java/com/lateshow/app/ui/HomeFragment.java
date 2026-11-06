@@ -608,7 +608,8 @@ public class HomeFragment extends Fragment {
 
         PopupWindow pw = new PopupWindow(sv, dp(250),
                 ViewGroup.LayoutParams.WRAP_CONTENT, true);
-        pw.setBackgroundDrawable(getResources().getDrawable(R.drawable.bg_card_lg));
+        // 浮层统一 12dp 圆角（原 bg_card_lg 18dp，弹出层比页面卡片更收一档）、1dp 描边
+        pw.setBackgroundDrawable(getResources().getDrawable(R.drawable.bg_menu));
         pw.setOutsideTouchable(true);
         pw.setElevation(dp(8));
         pw.showAsDropDown(btnSource, 0, dp(6));
