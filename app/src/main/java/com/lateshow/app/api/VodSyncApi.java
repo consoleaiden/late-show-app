@@ -97,6 +97,42 @@ public final class VodSyncApi {
         return sInstance;
     }
 
+    /** 切网回调（NetMonitor 调用）：旧连接绑定的是已失效的网卡地址，必须全部丢弃 */
+    public static void onNetworkChanged() {
+        VodSyncApi i = sInstance;
+        if (i == null) return;
+        try {
+            i.client.connectionPool().evictAll();
+        } catch (Exception ignored) { }
+    }
+
+    /** 连接层失败 → 值得清缓存重试一次（请求尚未到达服务器，GET 重试无副作用） */
+    private static boolean recoverable(IOException e) {
+        return e instanceof java.net.UnknownHostException
+                || e instanceof java.net.SocketTimeoutException
+                || e instanceof java.net.NoRouteToHostException
+                || e instanceof java.net.ConnectException;
+    }
+
+    /** 网络异常 → 可读文案：区分「域名解析失败 / 地址族不可达 / 超时」，便于用户判断是否为 IPv6 问题 */
+    private static String describe(IOException e) {
+        if (e == null) return "未知错误";
+        String raw = e.getMessage() == null ? "" : e.getMessage();
+        if (e instanceof java.net.UnknownHostException) {
+            // SmartDns 会给出「当前 WiFi 无 IPv6，而该后端仅有 IPv6 地址」这类具体原因
+            return raw.isEmpty() ? "无法解析后端域名（请检查网络）" : raw;
+        }
+        if (e instanceof java.net.SocketTimeoutException) return "连接超时（后端不可达或网络不通）";
+        if (e instanceof java.net.NoRouteToHostException) return "网络不可达（当前网络不支持该地址）";
+        if (e instanceof java.net.ConnectException) return "无法连接后端：" + raw;
+        String lower = raw.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("unreachable") || lower.contains("enetunreach")) {
+            return "网络不可达（地址族与当前网络不匹配）";
+        }
+        if (lower.contains("failed to connect")) return "无法连接后端：" + raw;
+        return raw.isEmpty() ? e.getClass().getSimpleName() : raw;
+    }
+
     public String baseUrl() {
         return PrefStore.get().baseUrl();
     }
@@ -148,8 +184,20 @@ public final class VodSyncApi {
         }
         Request req = new Request.Builder().url(b.build()).get().build();
         client.newCall(req).enqueue(new Callback() {
+            private boolean retried = false;
+
             @Override public void onFailure(Call call, IOException e) {
-                String msg = "网络异常：" + e.getMessage();
+                // 切网后的第一次请求常见：解析结果还是上个网络的 / 连接池里是旧网卡的连接
+                // → 清缓存 + 清连接池后重试一次（GET 幂等，重试安全）
+                if (!retried && recoverable(e)) {
+                    retried = true;
+                    SmartDns.invalidate();
+                    client.connectionPool().evictAll();
+                    android.util.Log.d(DBG, "↻ 连接失败（" + e + "），已清 DNS/连接池并重试一次");
+                    client.newCall(call.request()).enqueue(this);
+                    return;
+                }
+                String msg = "网络异常：" + describe(e);
                 MAIN.post(() -> cb.onErr(msg));
             }
             @Override public void onResponse(Call call, Response resp) throws IOException {
@@ -175,7 +223,7 @@ public final class VodSyncApi {
                 .post(RequestBody.create("", FORM)).build();
         client.newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
-                String msg = "网络异常：" + e.getMessage();
+                String msg = "网络异常：" + describe(e);
                 MAIN.post(() -> cb.onErr(msg));
             }
             @Override public void onResponse(Call call, Response resp) throws IOException {
@@ -219,7 +267,7 @@ public final class VodSyncApi {
         Request req = new Request.Builder().url(b.build()).method(method, body).build();
         client.newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
-                String msg = "网络异常：" + e.getMessage();
+                String msg = "网络异常：" + describe(e);
                 MAIN.post(() -> cb.onErr(msg));
             }
             @Override public void onResponse(Call call, Response resp) throws IOException {

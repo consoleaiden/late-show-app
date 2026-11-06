@@ -77,11 +77,13 @@ public final class StaticCatalog implements Catalog {
 
     public StaticCatalog() {
         http = new OkHttpClient.Builder()
+                .dns(SmartDns.INSTANCE)   // 与 NAS 模式同一套网络感知 DNS（切网自动失效）
                 .connectTimeout(4, TimeUnit.SECONDS)
                 .readTimeout(8, TimeUnit.SECONDS)
                 .callTimeout(9, TimeUnit.SECONDS)
                 .build();
         proxyHttp = new OkHttpClient.Builder()
+                .dns(SmartDns.INSTANCE)
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(25, TimeUnit.SECONDS)
                 .callTimeout(30, TimeUnit.SECONDS)
