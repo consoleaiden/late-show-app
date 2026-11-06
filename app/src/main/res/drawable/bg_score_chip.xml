@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 相关推荐评分角标：半透明深底 + 8dp 圆角，压在封面左上角 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#A6101318" />
+    <corners android:radius="6dp" />
+</shape>

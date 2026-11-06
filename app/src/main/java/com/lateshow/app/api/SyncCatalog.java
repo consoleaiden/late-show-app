@@ -44,6 +44,17 @@ public final class SyncCatalog implements Catalog {
         VodSyncApi.get().get("/api/v1/videos/" + slug + "/" + vodId, null, Models.DetailResp.class, cb);
     }
 
+    /** 相关推荐：VodSync v1.9.0 预计算表直读（P95 < 50ms），带真实相关度分数 */
+    @Override
+    public void related(Models.VideoDetail base, int limit, VodSyncApi.ApiCb<Models.RelatedResp> cb) {
+        if (base == null) { cb.onErr("缺少详情"); return; }
+        Map<String, String> p = new HashMap<>();
+        p.put("slug", base.source != null ? base.source : "");
+        p.put("id", String.valueOf(base.vodId));
+        p.put("limit", String.valueOf(limit));
+        VodSyncApi.get().get("/api/v1/related", p, Models.RelatedResp.class, cb);
+    }
+
     @Override
     public void ping(VodSyncApi.ApiCb<Long> cb) {
         VodSyncApi.get().healthz(cb);

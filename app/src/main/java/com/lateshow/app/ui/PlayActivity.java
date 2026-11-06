@@ -54,6 +54,12 @@ public class PlayActivity extends AppCompatActivity {
     private com.airbnb.lottie.LottieAnimationView btnFav;
     private RecyclerView lines, epGrid;
 
+    // 相关推荐（VodSync v1.9.0 预计算，直连模式为同分类兜底）
+    private View relatedSection;
+    private RecyclerView relatedList;
+    private TextView tvRelatedHint;
+    private static final int RELATED_LIMIT = 12;
+
     // 内嵌播放器
     private ExoPlayer player;
     private PlayerView playerView;
@@ -105,6 +111,9 @@ public class PlayActivity extends AppCompatActivity {
         breadcrumb = findViewById(R.id.breadcrumb);
         lines = findViewById(R.id.lines);
         epGrid = findViewById(R.id.epGrid);
+        relatedSection = findViewById(R.id.relatedSection);
+        relatedList = findViewById(R.id.relatedList);
+        tvRelatedHint = findViewById(R.id.tvRelatedHint);
         playerView = findViewById(R.id.playerView);
         seekOverlay = findViewById(R.id.seekOverlay);
         playerContainer = findViewById(R.id.playerContainer);
@@ -340,6 +349,89 @@ public class PlayActivity extends AppCompatActivity {
         if (h != null && h.playedSec > 0) {
             btnPlay.setText("继续播放 · " + (eps.isEmpty() ? "" : epName(curEp)));
         }
+
+        loadRelated();
+    }
+
+    /** 相关推荐：详情响应里内嵌了就直接用（NAS 模式零额外请求），否则按数据源能力补拉一次 */
+    private void loadRelated() {
+        if (relatedSection == null || detail == null) return;
+        List<Models.RelatedCard> emb = detail.related;
+        if (emb != null && !emb.isEmpty()) {
+            renderRelated(emb, detail.relatedFallback);
+            return;
+        }
+        if (offlineMode) { // 离线缓存里没有推荐数据，不占位
+            relatedSection.setVisibility(View.GONE);
+            return;
+        }
+        final Models.VideoDetail base = detail;
+        com.lateshow.app.api.Catalogs.get().related(base, RELATED_LIMIT,
+            new VodSyncApi.ApiCb<Models.RelatedResp>() {
+                @Override public void onOk(Models.RelatedResp r) {
+                    if (isDestroyed() || detail != base) return; // 期间已切到别的片
+                    if (r == null || r.list == null || r.list.isEmpty()) return;
+                    renderRelated(r.list, r.fallback);
+                }
+                @Override public void onErr(String m) {
+                    // 推荐属增强项：失败静默收起，不影响详情主流程
+                    if (relatedSection != null) relatedSection.setVisibility(View.GONE);
+                }
+            });
+    }
+
+    /** 渲染横向推荐卡：排除自身；score>0 且非兜底条目才显示相关度百分比 */
+    private void renderRelated(final List<Models.RelatedCard> raw, boolean fallback) {
+        final List<Models.RelatedCard> list = new ArrayList<>();
+        for (Models.RelatedCard c : raw) {
+            if (c == null || c.vodId <= 0) continue;
+            boolean self = c.vodId == vodId && (c.source == null || c.source.equals(slug));
+            if (self) continue;
+            list.add(c);
+        }
+        if (list.isEmpty()) {
+            relatedSection.setVisibility(View.GONE);
+            return;
+        }
+        tvRelatedHint.setText(fallback ? "同类热门" : "按类型 · 主演匹配");
+        relatedSection.setVisibility(View.VISIBLE);
+        relatedList.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
+        relatedList.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int vt) {
+                return new RecyclerView.ViewHolder(
+                        getLayoutInflater().inflate(R.layout.item_related, p, false)) {};
+            }
+            @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder vh, int pos) {
+                Models.RelatedCard c = list.get(pos);
+                View v = vh.itemView;
+                android.widget.ImageView cover = v.findViewById(R.id.relCover);
+                TextView name = v.findViewById(R.id.relName);
+                TextView score = v.findViewById(R.id.relScore);
+                Glide.with(PlayActivity.this).load(c.vodPic)
+                        .placeholder(R.color.ink700)
+                        .centerCrop()
+                        .dontAnimate()
+                        .into(cover);
+                name.setText(c.vodName != null ? c.vodName : "");
+                if (c.score > 0.005 && !"fallback".equals(c.mode)) {
+                    score.setText(Math.round(c.score * 100) + "%");
+                    score.setVisibility(View.VISIBLE);
+                } else {
+                    score.setVisibility(View.GONE);
+                }
+                v.setOnClickListener(x -> {
+                    CardItem item = new CardItem();
+                    item.slug = c.source != null && !c.source.isEmpty() ? c.source : slug;
+                    item.sourceName = c.sourceName;
+                    item.vodId = c.vodId;
+                    item.title = c.vodName;
+                    item.pic = c.vodPic;
+                    item.remark = c.vodRemarks;
+                    PlayActivity.start(PlayActivity.this, item);
+                });
+            }
+            @Override public int getItemCount() { return list.size(); }
+        });
     }
 
     private List<Models.Episode> currentEpisodes() {

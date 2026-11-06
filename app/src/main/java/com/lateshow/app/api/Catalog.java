@@ -42,5 +42,19 @@ public interface Catalog {
         ping(cb);
     }
 
+    /**
+     * 相关推荐。
+     *
+     * <p>NAS 模式走 VodSync v1.9.0 的预计算接口（带真实相关度分数）；直连模式没有服务端计算，
+     * 实现方可用「同分类热门」兜底（score=0，客户端不展示百分比）。默认不支持。
+     *
+     * @param base  当前详情（提供 slug / vodId / 分类）
+     * @param limit 期望条数
+     */
+    default void related(Models.VideoDetail base, int limit,
+                         VodSyncApi.ApiCb<Models.RelatedResp> cb) {
+        cb.onErr("当前数据源不支持相关推荐");
+    }
+
     boolean isStatic();
 }

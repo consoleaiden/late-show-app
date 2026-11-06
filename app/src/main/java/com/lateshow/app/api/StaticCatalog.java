@@ -322,8 +322,7 @@ public final class StaticCatalog implements Catalog {
     }
 
     @Override
-    public void detail(String slug, final long vodId, final VodSyncApi.ApiCb<Models.DetailResp> cb) {
-        withApi(slug, apiBase -> {
+    public void detail(String slug, final long vodId, final VodSyncApi.ApiCb<Models.DetailResp> cb) {        withApi(slug, apiBase -> {
             HttpUrl u = HttpUrl.parse(apiBase);
             if (u == null) { cb.onErr("源站地址无效"); return; }
             HttpUrl url = u.newBuilder()
@@ -363,6 +362,51 @@ public final class StaticCatalog implements Catalog {
                 cb.onOk(r);
             }, cb::onErr);
         }, cb::onErr);
+    }
+
+    /**
+     * 相关推荐（直连兜底）：没有服务端预计算，用「同分类第一页 + 排除自身」凑一栏同类热门。
+     * score 留 0 → 客户端不展示百分比；走的是 {@link #videos} 同一套链路，代理兜底/解析都复用。
+     */
+    @Override
+    public void related(final Models.VideoDetail base, final int limit,
+                        final VodSyncApi.ApiCb<Models.RelatedResp> cb) {
+        if (base == null || base.typeName == null || base.typeName.isEmpty()) {
+            cb.onErr("该源站未提供分类信息");
+            return;
+        }
+        final String src = base.source;
+        final long selfId = base.vodId;
+        int pageSize = Math.max(limit + 2, 12);
+        videos(1, pageSize, src, base.typeName, "",
+            new VodSyncApi.ApiCb<Models.VideoListResp>() {
+                @Override public void onOk(Models.VideoListResp r) {
+                    Models.RelatedResp out = new Models.RelatedResp();
+                    out.code = 1;
+                    out.fallback = true;
+                    out.list = new ArrayList<>();
+                    if (r != null && r.list != null) {
+                        for (Models.VideoSummary v : r.list) {
+                            if (v.vodId == selfId) continue;
+                            Models.RelatedCard c = new Models.RelatedCard();
+                            c.vodId = v.vodId;
+                            c.vodName = v.vodName;
+                            c.vodPic = v.vodPic;
+                            c.vodRemarks = v.vodRemarks;
+                            c.typeName = v.typeName;
+                            c.source = src;
+                            c.sourceName = v.sourceName;
+                            c.score = 0d;
+                            c.mode = "fallback";
+                            out.list.add(c);
+                            if (out.list.size() >= limit) break;
+                        }
+                    }
+                    if (out.list.isEmpty()) cb.onErr("暂无同类推荐");
+                    else cb.onOk(out);
+                }
+                @Override public void onErr(String m) { cb.onErr(m); }
+            });
     }
 
     @Override

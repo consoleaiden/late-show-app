@@ -34,6 +34,34 @@ public final class Models {
         @SerializedName("vod_play_url") public String vodPlayUrl;
         @SerializedName("vod_play_from") public String vodPlayFrom;
         @SerializedName("vod_play_list") public List<PlayLine> vodPlayList;
+        /** 相关推荐（VodSync v1.9.0 预计算结果，详情接口内嵌；直连模式为空，需自行拉取） */
+        @SerializedName("related") public List<RelatedCard> related;
+        /** true = 该批推荐来自服务端兜底链（同分类/同地区年代/最新收录），无真实相关度 */
+        @SerializedName("related_fallback") public boolean relatedFallback;
+    }
+
+    /**
+     * 相关推荐卡片。结构与视频卡片对齐，额外带 source/source_name（支持跨站跳转）与 score。
+     * score ∈ [0,1]；mode = match | fallback；score<=0 表示无相关度（客户端不展示百分比）。
+     */
+    public static class RelatedCard {
+        @SerializedName("vod_id") public long vodId;
+        @SerializedName("vod_name") public String vodName;
+        @SerializedName("vod_pic") public String vodPic;
+        @SerializedName("vod_remarks") public String vodRemarks;
+        @SerializedName("type_name") public String typeName;
+        public String source;
+        @SerializedName("source_name") public String sourceName;
+        public double score;
+        public String mode;
+    }
+
+    /** GET /api/v1/related 的响应 */
+    public static class RelatedResp {
+        public int code;
+        @SerializedName("vod_id") public long vodId;
+        public boolean fallback;
+        public List<RelatedCard> list;
     }
 
     public static class VideoListResp {
