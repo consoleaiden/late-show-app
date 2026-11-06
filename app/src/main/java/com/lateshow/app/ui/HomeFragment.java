@@ -103,7 +103,7 @@ public class HomeFragment extends Fragment {
 
         curSlug = PrefStore.get().currentSourceSlug();
         curName = PrefStore.get().currentSourceName();
-        setSourceState(RING_TESTING); // 初始呼吸态，探测出结果后定格橙/灰
+        beginSourceProbe(); // 初始呼吸态，探测出结果后定格橙/灰
 
         chipAdapter = new ChipAdapter(c -> {
             curCategory = c == null ? null : c.typeName;
@@ -444,6 +444,7 @@ public class HomeFragment extends Fragment {
     public void onPause() {
         hideHistory();
         hideSkeleton();
+        com.lateshow.app.api.NetMonitor.removeListener(onNetChanged);
         stopRingAnim();
         super.onPause();
     }
@@ -468,8 +469,47 @@ public class HomeFragment extends Fragment {
     private static final int GLOW_MIN = 24;
     private static final android.animation.ArgbEvaluator RING_EVAL = new android.animation.ArgbEvaluator();
 
-    /** 源站按钮圆环：橙色=畅通，灰色=不通，橙↔灰呼吸=连接测试中 */
-    private void setSourceState(int state) {
+    /** 第几轮检测：每次开始新检测自增，回调带着发起时的轮次回来，过期结果直接丢弃 */
+    private int ringCycle;
+    /** 本轮是否已判定畅通：畅通一旦成立，同轮迟到的失败结果不再覆盖（失败多为过期请求的超时） */
+    private boolean ringCycleOk;
+    /** 本轮开始时刻（elapsedRealtime）：用于保证呼吸态至少可见一段时间 */
+    private long ringCycleStartAt;
+    private long lastNetProbeAt;
+
+    /** 开新一轮检测：进入呼吸态，同时作废上一轮所有在途结果 */
+    private int beginSourceProbe() {
+        ringCycle++;
+        ringCycleOk = false;
+        ringCycleStartAt = android.os.SystemClock.elapsedRealtime();
+        renderSourceState(RING_TESTING);
+        return ringCycle;
+    }
+
+    /**
+     * 上报某一轮的结果。三条规则：
+     * 1) 轮次已过期 → 丢弃（切网前发出、切网后才超时的请求不会把已点亮的状态打回灰色）
+     * 2) 本轮已判定畅通 → 失败结果丢弃（畅通优先）
+     * 3) 呼吸态至少展示 600ms，避免 100ms 级快响应让圆环闪一下就跳色
+     */
+    private void reportSourceProbe(int cycle, int state) {
+        if (cycle != ringCycle) return;
+        if (ringCycleOk) return;
+        if (state == RING_OK) ringCycleOk = true;
+        long dt = android.os.SystemClock.elapsedRealtime() - ringCycleStartAt;
+        long wait = state == RING_TESTING ? 0 : Math.max(0, 600 - dt);
+        if (wait == 0 || btnSource == null) {
+            renderSourceState(state);
+            return;
+        }
+        final int st = state;
+        btnSource.postDelayed(() -> {
+            if (cycle == ringCycle) renderSourceState(st);
+        }, wait);
+    }
+
+    /** 源站按钮圆环：橙色=畅通，灰色=不通，橙↔灰呼吸=连接测试中（纯渲染，状态迁移走 begin/report） */
+    private void renderSourceState(int state) {
         if (btnSource == null || btnSourceIcon == null) return;
         stopRingAnim();
         if (state == RING_TESTING) {
@@ -511,21 +551,39 @@ public class HomeFragment extends Fragment {
 
     /** 轻量健康探测：NAS 探 /healthz；直连探「当前选中源站」的 json 接口。测试中呼吸，出结果定格橙/灰 */
     private void pingHealth() {
-        setSourceState(RING_TESTING);
+        pingHealth(beginSourceProbe());
+    }
+
+    /** 复用调用方已开启的轮次（源站列表 / 首屏列表与探测共享同一轮次，谁先成功都算数） */
+    private void pingHealth(final int cyc) {
         com.lateshow.app.api.Catalogs.get().pingCurrent(curSlug, new VodSyncApi.ApiCb<Long>() {
             @Override public void onOk(Long ms) {
-                if (isAdded()) setSourceState(RING_OK);
+                if (isAdded()) reportSourceProbe(cyc, RING_OK);
             }
             @Override public void onErr(String m) {
-                if (isAdded()) setSourceState(RING_FAIL);
+                if (isAdded()) reportSourceProbe(cyc, RING_FAIL);
             }
         });
     }
 
+    /** 网络切换（WiFi ↔ 蜂窝）：新网络就绪后重测一次，否则圆环会停在上个网络的结果上 */
+    private final Runnable onNetChanged = () -> {
+        View v = getView();
+        if (v == null) return;
+        v.postDelayed(() -> {
+            if (!isAdded() || getView() == null) return;
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now - lastNetProbeAt < 3000) return; // 事件风暴兜底
+            lastNetProbeAt = now;
+            pingHealth();
+        }, 800);
+    };
+
     @Override
     public void onResume() {
         super.onResume();
-        pingHealth();
+        com.lateshow.app.api.NetMonitor.addListener(onNetChanged);
+        pingHealth(); // 回前台必重测：列表可能全部命中缓存，没有网络请求可依赖
         // 设置页切换过数据源：重新拉源站与列表
         if (com.lateshow.app.api.Catalogs.consumeDirty()) onDataSourceChanged();
     }
@@ -538,9 +596,10 @@ public class HomeFragment extends Fragment {
         keyword = "";
         if (inputSearch != null) inputSearch.setText("");
         if (getView() == null) return;
-        setSourceState(RING_TESTING);
+        final int cyc = beginSourceProbe();
         refreshSources();
         reload();
+        pingHealth(cyc); // 三者同一轮次：源站/首屏/探测谁先成功都点亮圆环
     }
 
     /** 源站列表缓存 key：带模式前缀，两种模式不互相命中 */
@@ -551,6 +610,7 @@ public class HomeFragment extends Fragment {
     /** 源站列表：菜单数据 + 元信息——优先用缓存，过期再拉（数据源由 Catalog 决定） */
     private void refreshSources() {
         final String ck = ckSources();
+        final int cyc = ringCycle; // 结果归属发起时的轮次，过期即丢弃
         Models.SyncSourcesResp cached = ApiCache.get(ck, Models.SyncSourcesResp.class, TTL_LIST);
         if (cached != null && cached.list != null && !cached.list.isEmpty()) {
             applySources(cached, true);
@@ -561,11 +621,12 @@ public class HomeFragment extends Fragment {
                 @Override public void onOk(Models.SyncSourcesResp r) {
                     if (!isAdded()) return;
                     ApiCache.put(ck, r);
+                    reportSourceProbe(cyc, RING_OK); // 源站列表拿到 = 后端可达
                     applySources(r, false);
                 }
                 @Override public void onErr(String m) {
                     if (!isAdded()) return;
-                    setSourceState(RING_FAIL);
+                    reportSourceProbe(cyc, RING_FAIL);
                     // 401：服务端开启了访问控制，引导填写 API Token
                     if (com.lateshow.app.util.AuthGate.handleApiError(getActivity(), m, HomeFragment.this::reload)) {
                         metaCount.setText("需要 API Token · 请在设置页填写");
@@ -601,7 +662,7 @@ public class HomeFragment extends Fragment {
             }
         }
         com.lateshow.app.util.SourceCache.putSync(sources);
-        if (!fromCache) setSourceState(RING_OK); // 缓存数据不改圆环状态，交给 healthz 探测
+        // 圆环状态由 pingHealth / 网络请求的 reportSourceProbe 决定，这里不再直接改
         long total = 0;
         for (Models.SyncSource s : sources) total += s.totalVideos;
         metaCount.setText("已收录 " + TimeUtil.compact((int) total) + " 部 · " + sources.size() + " 源");
@@ -786,6 +847,7 @@ public class HomeFragment extends Fragment {
         final String ck = listCacheKey(p);
         final String kw = keyword;
         final String type = curCategory;
+        final int cyc = ringCycle; // 首屏列表拿到即证明连通
 
         // 第一页优先用缓存（TTL 内直接渲染，不发请求）
         if (reqPage == 1) {
@@ -805,6 +867,8 @@ public class HomeFragment extends Fragment {
                 @Override public void onOk(Models.VideoListResp r) {
                     if (!isAdded()) return;
                     loading = false;
+                    // 首屏列表拿到 = 当前源站确实能出数据，作为「畅通」证据点亮圆环
+                    if (reqPage == 1) reportSourceProbe(cyc, RING_OK);
                     if (reqPage == 1) ApiCache.put(ck, r); // 只缓存第一页，翻页数据不落盘
                     applyList(r, reqPage, false);
                 }

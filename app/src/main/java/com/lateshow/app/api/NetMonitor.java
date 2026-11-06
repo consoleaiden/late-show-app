@@ -23,8 +23,20 @@ public final class NetMonitor {
     private static final String TAG = "LateShowNet";
     private static volatile boolean installed;
     private static volatile long lastHandled;
+    /** 网络变化订阅者（UI 层据此重测连通性） */
+    private static final java.util.List<Runnable> listeners =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
 
     private NetMonitor() { }
+
+    /** 订阅网络变化：回调在 binder 线程触发，订阅方需自行切主线程 */
+    public static void addListener(Runnable r) {
+        if (r != null && !listeners.contains(r)) listeners.add(r);
+    }
+
+    public static void removeListener(Runnable r) {
+        if (r != null) listeners.remove(r);
+    }
 
     /** 进程启动时调用一次（LateShowApp.onCreate） */
     public static void init(Context ctx) {
@@ -56,6 +68,13 @@ public final class NetMonitor {
         lastHandled = now;
         SmartDns.invalidate();
         VodSyncApi.onNetworkChanged();
+        for (Runnable r : listeners) {
+            try {
+                r.run();
+            } catch (Exception e) {
+                android.util.Log.w(TAG, "网络变化回调异常：" + e);
+            }
+        }
         android.util.Log.d(TAG, "网络变化（" + why + "）→ 已清 DNS 缓存与连接池");
     }
 }
