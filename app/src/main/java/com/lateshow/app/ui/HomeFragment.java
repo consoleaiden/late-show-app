@@ -460,28 +460,37 @@ public class HomeFragment extends Fragment {
     private static final int RING_TESTING = 2;
 
     private android.animation.ValueAnimator ringAnim;
+    private com.lateshow.app.util.RingBreathDrawable ringBg;
+
+    /** 呼吸最亮相位（=橙端）：渐变贴环处峰值不透明度，约 0.47 */
+    private static final int GLOW_PEAK = 120;
+    /** 呼吸最暗相位（=灰端）：留一层极淡的雾，保证明暗过渡有层次而不是彻底消失 */
+    private static final int GLOW_MIN = 24;
+    private static final android.animation.ArgbEvaluator RING_EVAL = new android.animation.ArgbEvaluator();
 
     /** 源站按钮圆环：橙色=畅通，灰色=不通，橙↔灰呼吸=连接测试中 */
     private void setSourceState(int state) {
         if (btnSource == null || btnSourceIcon == null) return;
         stopRingAnim();
         if (state == RING_TESTING) {
-            // 呼吸态用程序化圆环：描边色可被动画平滑驱动（xml ripple 底做不到颜色动画）
-            android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
-            ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-            ring.setColor(getResources().getColor(R.color.ink800, null));
-            int orange = getResources().getColor(R.color.acc, null);
-            int gray = getResources().getColor(R.color.t3, null);
-            final int stroke = dp(1.5f);
-            ring.setStroke(stroke, orange);
-            btnSource.setBackground(ring);
-            ringAnim = android.animation.ValueAnimator.ofObject(new android.animation.ArgbEvaluator(), orange, gray);
+            // 呼吸态用程序化 Drawable：描边色 + 环内径向渐变可被动画平滑驱动（xml ripple 底做不到颜色动画）
+            final int orange = getResources().getColor(R.color.acc, null);
+            final int gray = getResources().getColor(R.color.t3, null);
+            ringBg = new com.lateshow.app.util.RingBreathDrawable(
+                    dp(1.5f), getResources().getColor(R.color.ink800, null));
+            ringBg.setRingColor(orange);
+            ringBg.setGlowAlpha(GLOW_PEAK);
+            btnSource.setBackground(ringBg);
+            // 用 float 进度驱动颜色：颜色与渐变透明度取同一个 fraction，保证严格同相位呼吸
+            ringAnim = android.animation.ValueAnimator.ofFloat(0f, 1f);
             ringAnim.setDuration(900);
             ringAnim.setRepeatCount(android.animation.ValueAnimator.INFINITE);
             ringAnim.setRepeatMode(android.animation.ValueAnimator.REVERSE);
             ringAnim.addUpdateListener(a -> {
-                int c = (int) a.getAnimatedValue();
-                ring.setStroke(stroke, c);
+                float f = (float) a.getAnimatedValue(); // 0 = 橙(亮) … 1 = 灰(暗)
+                int c = (int) RING_EVAL.evaluate(f, orange, gray);
+                ringBg.setRingColor(c);
+                ringBg.setGlowAlpha(Math.round(GLOW_PEAK + (GLOW_MIN - GLOW_PEAK) * f));
                 com.lateshow.app.util.LottieIcon.tint(btnSourceIcon, c);
             });
             ringAnim.start();
