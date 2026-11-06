@@ -2,9 +2,14 @@ package com.lateshow.app.api;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.net.InetAddress;
 
 /**
  * 当前默认网络的能力快照。
@@ -48,8 +53,18 @@ final class NetInfo {
             Network net = cm.getActiveNetwork();
             if (net == null) return new NetInfo(0, false, false, false);
             LinkProperties lp = cm.getLinkProperties(net);
-            boolean v4 = lp != null && lp.hasIpv4DefaultRoute();
-            boolean v6 = lp != null && lp.hasIpv6DefaultRoute();
+            // LinkProperties.hasIpv4DefaultRoute() 是 @hide，公开 API 只能用链路地址判断：
+            // 有全局（非链路本地/回环）的 v4/v6 地址即视为该地址族可出网，
+            // 这样 WiFi 只有 fe80:: 时不会被误判成「有 IPv6」
+            boolean v4 = false, v6 = false;
+            if (lp != null) {
+                for (LinkAddress la : lp.getLinkAddresses()) {
+                    InetAddress a = la.getAddress();
+                    if (a == null || a.isLoopbackAddress() || a.isLinkLocalAddress()) continue;
+                    if (a instanceof Inet4Address) v4 = true;
+                    else if (a instanceof Inet6Address) v6 = true;
+                }
+            }
             NetworkCapabilities nc = cm.getNetworkCapabilities(net);
             boolean lan = nc != null
                     && (nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
