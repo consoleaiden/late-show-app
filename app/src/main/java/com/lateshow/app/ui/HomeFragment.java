@@ -103,7 +103,7 @@ public class HomeFragment extends Fragment {
 
         curSlug = PrefStore.get().currentSourceSlug();
         curName = PrefStore.get().currentSourceName();
-        setSourceHealth(false); // 默认灰色圆环，探测成功后转为橙色
+        setSourceState(RING_TESTING); // 初始呼吸态，探测出结果后定格橙/灰
 
         chipAdapter = new ChipAdapter(c -> {
             curCategory = c == null ? null : c.typeName;
@@ -556,7 +556,7 @@ public class HomeFragment extends Fragment {
                 }
                 @Override public void onErr(String m) {
                     if (!isAdded()) return;
-                    setSourceHealth(false);
+                    setSourceState(RING_FAIL);
                     // 401：服务端开启了访问控制，引导填写 API Token
                     if (com.lateshow.app.util.AuthGate.handleApiError(getActivity(), m, HomeFragment.this::reload)) {
                         metaCount.setText("需要 API Token · 请在设置页填写");
@@ -592,7 +592,7 @@ public class HomeFragment extends Fragment {
             }
         }
         com.lateshow.app.util.SourceCache.putSync(sources);
-        if (!fromCache) setSourceHealth(true); // 缓存数据不改圆环状态，交给 healthz 探测
+        if (!fromCache) setSourceState(RING_OK); // 缓存数据不改圆环状态，交给 healthz 探测
         long total = 0;
         for (Models.SyncSource s : sources) total += s.totalVideos;
         metaCount.setText("已收录 " + TimeUtil.compact((int) total) + " 部 · " + sources.size() + " 源");
