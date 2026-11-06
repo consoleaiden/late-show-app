@@ -444,27 +444,71 @@ public class HomeFragment extends Fragment {
     public void onPause() {
         hideHistory();
         hideSkeleton();
+        stopRingAnim();
         super.onPause();
     }
 
-    /** 源站按钮圆环状态：true=后端通畅（橙色圆环），false=不通（灰色圆环） */
-    private void setSourceHealth(boolean ok) {
-        if (btnSource == null || btnSourceIcon == null) return;
-        btnSource.setBackgroundResource(ok ? R.drawable.bg_ring_on : R.drawable.bg_ring_off);
-        int tint = getResources().getColor(ok ? R.color.acc : R.color.t3, null);
-        com.lateshow.app.util.LottieIcon.tint(btnSourceIcon, tint);
+    @Override
+    public void onDestroyView() {
+        stopRingAnim();
+        super.onDestroyView();
     }
 
-    /** 轻量健康探测（NAS 模式探 /healthz，直连模式探资源站目录），决定顶部圆环颜色 */
+    /** 源站按钮圆环状态机：灰=失败 / 橙=畅通 / 呼吸=测试中 */
+    private static final int RING_FAIL = 0;
+    private static final int RING_OK = 1;
+    private static final int RING_TESTING = 2;
+
+    private android.animation.ValueAnimator ringAnim;
+
+    /** 源站按钮圆环：橙色=畅通，灰色=不通，橙↔灰呼吸=连接测试中 */
+    private void setSourceState(int state) {
+        if (btnSource == null || btnSourceIcon == null) return;
+        stopRingAnim();
+        if (state == RING_TESTING) {
+            // 呼吸态用程序化圆环：描边色可被动画平滑驱动（xml ripple 底做不到颜色动画）
+            android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
+            ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            ring.setColor(getResources().getColor(R.color.ink800, null));
+            int orange = getResources().getColor(R.color.acc, null);
+            int gray = getResources().getColor(R.color.t3, null);
+            final int stroke = dp(1.5f);
+            ring.setStroke(stroke, orange);
+            btnSource.setBackground(ring);
+            ringAnim = android.animation.ValueAnimator.ofObject(new android.animation.ArgbEvaluator(), orange, gray);
+            ringAnim.setDuration(900);
+            ringAnim.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            ringAnim.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            ringAnim.addUpdateListener(a -> {
+                int c = (int) a.getAnimatedValue();
+                ring.setStroke(stroke, c);
+                com.lateshow.app.util.LottieIcon.tint(btnSourceIcon, c);
+            });
+            ringAnim.start();
+        } else {
+            boolean ok = state == RING_OK;
+            btnSource.setBackgroundResource(ok ? R.drawable.bg_ring_on : R.drawable.bg_ring_off);
+            com.lateshow.app.util.LottieIcon.tint(btnSourceIcon,
+                    getResources().getColor(ok ? R.color.acc : R.color.t3, null));
+        }
+    }
+
+    private void stopRingAnim() {
+        if (ringAnim != null) {
+            ringAnim.cancel();
+            ringAnim = null;
+        }
+    }
+
+    /** 轻量健康探测：NAS 探 /healthz；直连探「当前选中源站」的 json 接口。测试中呼吸，出结果定格橙/灰 */
     private void pingHealth() {
-        com.lateshow.app.api.Catalogs.get().ping(new VodSyncApi.ApiCb<Long>() {
+        setSourceState(RING_TESTING);
+        com.lateshow.app.api.Catalogs.get().pingCurrent(curSlug, new VodSyncApi.ApiCb<Long>() {
             @Override public void onOk(Long ms) {
-                if (!isAdded()) return;
-                setSourceHealth(true);
+                if (isAdded()) setSourceState(RING_OK);
             }
             @Override public void onErr(String m) {
-                if (!isAdded()) return;
-                setSourceHealth(false);
+                if (isAdded()) setSourceState(RING_FAIL);
             }
         });
     }
@@ -485,7 +529,7 @@ public class HomeFragment extends Fragment {
         keyword = "";
         if (inputSearch != null) inputSearch.setText("");
         if (getView() == null) return;
-        setSourceHealth(false);
+        setSourceState(RING_TESTING);
         refreshSources();
         reload();
     }
@@ -612,7 +656,8 @@ public class HomeFragment extends Fragment {
         pw.setBackgroundDrawable(getResources().getDrawable(R.drawable.bg_menu));
         pw.setOutsideTouchable(true);
         pw.setElevation(dp(8));
-        pw.showAsDropDown(btnSource, 0, dp(6));
+        // 左移 4dp：浮层左缘盖住海报列左缘，消除背后海报切出的 1px 细线
+        pw.showAsDropDown(btnSource, -dp(4), dp(6));
         box.setTag(pw);
     }
 
@@ -640,6 +685,8 @@ public class HomeFragment extends Fragment {
             PrefStore.get().setCurrentSource(curSlug, curName);
             android.widget.Toast.makeText(getContext(), "源站：" + curName,
                     android.widget.Toast.LENGTH_SHORT).show();
+            // 立即重测新选中源站的连通性，圆环状态不滞后到下次回到前台
+            pingHealth();
             refreshCategories();
             reload();
         });

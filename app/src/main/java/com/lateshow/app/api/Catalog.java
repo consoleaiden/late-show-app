@@ -34,5 +34,13 @@ public interface Catalog {
     /** 可用性探测：成功返回耗时 ms */
     void ping(VodSyncApi.ApiCb<Long> cb);
 
+    /**
+     * 探测「当前选中源站」：直连模式应探测该源站的 json 接口（首页圆环状态依据）。
+     * slug 为空表示「全部源站」，实现可自选兜底目标；NAS 模式无逐源概念，默认退化为 {@link #ping}。
+     */
+    default void pingCurrent(String slug, VodSyncApi.ApiCb<Long> cb) {
+        ping(cb);
+    }
+
     boolean isStatic();
 }

@@ -18,7 +18,6 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DecodeFormat;
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.bumptech.glide.request.RequestOptions;
 import com.lateshow.app.R;
 import com.lateshow.app.model.CardItem;
@@ -86,6 +85,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_card, parent, false);
         VH h = new VH(v);
+        // 圆角统一由 coverBox 的背景轮廓裁剪（bg_cover_round 8dp）：图片/遮罩/角标全部裁进圆角内
+        h.coverBox.setClipToOutline(true);
         // Lottie 图标一次装载随 ViewHolder 复用：删除角标白色静止、收藏角标心形实心（橙色）
         com.lateshow.app.util.LottieIcon.bind(h.imgDel, "ic_delete");
         com.lateshow.app.util.LottieIcon.tint(h.imgDel, 0xCCFFFFFF);
@@ -138,14 +139,14 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             h.tvRemark.setVisibility(View.GONE);
         }
 
-        // 封面加载：RGB_565 解码省一半内存、无淡入动画、圆角烘焙进位图（不再依赖 GPU 逐帧路径裁剪）
-        int r7 = Math.round(8f * h.itemView.getResources().getDisplayMetrics().density);
+        // 封面加载：RGB_565 解码省一半内存、无淡入动画。
+        // 圆角不再烘焙进位图（transform 会覆盖 centerCrop / 565 无 alpha 通道烘不出透明角），
+        // 改为 coverBox 按 bg_cover_round 的圆角轮廓做 outline 裁剪：任何加载状态四角都是 8dp
         Glide.with(h.cover).load(it.pic)
                 .apply(new RequestOptions()
                         .placeholder(R.color.ink700)
                         .error(R.color.ink700)
                         .centerCrop()
-                        .transform(new RoundedCorners(r7))
                         .format(DecodeFormat.PREFER_RGB_565)
                         .dontAnimate())
                 .into(h.cover);
@@ -174,6 +175,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
     }
 
     static class VH extends RecyclerView.ViewHolder {
+        FrameLayout coverBox;
         AppCompatImageView cover;
         TextView title, tvSrc, tvMaskLeft, tvMaskRight, tvRemark;
         LinearLayout topMask, maskBottom;
@@ -182,6 +184,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
 
         VH(@NonNull View v) {
             super(v);
+            coverBox = v.findViewById(R.id.coverBox);
             cover = v.findViewById(R.id.cover);
             title = v.findViewById(R.id.tvTitle);
             tvSrc = v.findViewById(R.id.tvSrc);

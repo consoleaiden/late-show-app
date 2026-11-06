@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 海报占位底色：四角 7dp 圆角（与封面 shape 一致，原 10dp 缩小三分之一） -->
+<!-- 海报占位底色：四角 8dp 圆角（与封面 shape 一致，原 10dp 缩小三分之一） -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="@color/ink700" />
-    <corners android:radius="7dp" />
+    <corners android:radius="8dp" />
 </shape>

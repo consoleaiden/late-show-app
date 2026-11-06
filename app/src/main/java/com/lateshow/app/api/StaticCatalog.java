@@ -385,6 +385,37 @@ public final class StaticCatalog implements Catalog {
         });
     }
 
+    /**
+     * 直连模式健康探测：探测「当前选中源站」的 json 接口（ac=videolist&pg=1 小页GET），
+     * HTTP 200 即视为畅通。slug 为空时由 withApi 兜底选目录内资源最多的可用站。
+     */
+    @Override
+    public void pingCurrent(String slug, final VodSyncApi.ApiCb<Long> cb) {
+        final long t0 = System.currentTimeMillis();
+        withApi(slug, apiBase -> {
+            HttpUrl u = HttpUrl.parse(apiBase);
+            if (u == null) { MAIN.post(() -> cb.onErr("源站地址无效")); return; }
+            HttpUrl url = u.newBuilder()
+                    .addQueryParameter("ac", "videolist")
+                    .addQueryParameter("pg", "1")
+                    .build();
+            Request req = new Request.Builder().url(url).header("User-Agent", UA).build();
+            http.newCall(req).enqueue(new Callback() {
+                @Override public void onFailure(Call call, IOException e) {
+                    MAIN.post(() -> cb.onErr("网络异常：" + e.getMessage()));
+                }
+                @Override public void onResponse(Call call, Response resp) {
+                    try (Response r = resp) {
+                        if (r.isSuccessful()) MAIN.post(() -> cb.onOk(System.currentTimeMillis() - t0));
+                        else MAIN.post(() -> cb.onErr("HTTP " + r.code()));
+                    } catch (Exception e) {
+                        MAIN.post(() -> cb.onErr("网络异常：" + e.getMessage()));
+                    }
+                }
+            });
+        }, e -> MAIN.post(() -> cb.onErr(e)));
+    }
+
     /** 目录 HEAD 探测的代理兜底：按代理列表顺序逐个尝试 */
     private void fetchViaProxiesHead(final long t0, final VodSyncApi.ApiCb<Long> cb) {
         final List<String> proxies = proxies();
