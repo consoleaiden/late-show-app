@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="match_parent">
+
+    <ScrollView
+        android:id="@+id/scrollSettings"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -890,4 +895,19 @@
             android:layout_marginTop="16dp"
             android:text="夜场 LATE SHOW · 开源影视聚合客户端" />
     </LinearLayout>
-</ScrollView>
+    </ScrollView>
+
+    <!-- 回到顶部：滚动超过半屏出现，样式/交互与首页、收藏页同款 -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabTop"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="12dp"
+        app:fabCustomSize="40dp"
+        app:maxImageSize="20dp"
+        app:backgroundTint="@color/ink700"
+        app:elevation="6dp"
+        android:contentDescription="回到顶部"
+        android:visibility="gone" />
+</FrameLayout>

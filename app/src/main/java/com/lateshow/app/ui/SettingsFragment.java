@@ -118,6 +118,23 @@ public class SettingsFragment extends Fragment {
         com.lateshow.app.util.LottieIcon.bindTree(v);
         setupAccordion(v);
 
+        // 回到顶部浮动按钮：滚动超过半屏出现，图标/交互与首页、收藏页同款
+        android.widget.ScrollView scroll = v.findViewById(R.id.scrollSettings);
+        com.google.android.material.floatingactionbutton.FloatingActionButton fabTop =
+                v.findViewById(R.id.fabTop);
+        final com.airbnb.lottie.LottieDrawable fabIcon =
+                com.lateshow.app.util.LottieIcon.into(fabTop, "ic_top", false);
+        scroll.setOnScrollChangeListener((View.OnScrollChangeListener) (vv, sx, sy, osx, osy) ->
+                fabTop.setVisibility(sy > scroll.getHeight() / 2 ? View.VISIBLE : View.GONE));
+        fabTop.setOnClickListener(vv -> {
+            if (fabIcon != null) {
+                fabIcon.setProgress(0f);
+                fabIcon.playAnimation();
+            }
+            scroll.smoothScrollTo(0, 0);
+            fabTop.setVisibility(View.GONE);
+        });
+
         inputBaseUrl = v.findViewById(R.id.inputBaseUrl);
         inputToken = v.findViewById(R.id.inputToken);
         srcStatus = v.findViewById(R.id.srcStatus);
