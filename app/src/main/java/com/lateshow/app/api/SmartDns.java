@@ -91,7 +91,9 @@ public final class SmartDns implements okhttp3.Dns {
 
     /** 进程启动时注入 context（LateShowApp.onCreate） */
     public static void init(Context ctx) {
-        if (ctx != null) appCtx = ctx.getApplicationContext();
+        if (ctx == null) return;
+        appCtx = ctx.getApplicationContext();
+        NetInfo.init(appCtx);
     }
 
     /** 网络变化时清空解析缓存（NetMonitor 调用） */

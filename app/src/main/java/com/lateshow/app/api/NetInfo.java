@@ -25,6 +25,18 @@ import java.net.InetAddress;
  */
 final class NetInfo {
 
+    private static volatile Context appCtx;
+
+    /** 进程启动时注入（SmartDns.init 转调） */
+    static void init(Context ctx) {
+        if (ctx != null) appCtx = ctx.getApplicationContext();
+    }
+
+    /** 无参版本：用进程 context 取当前默认网络 */
+    static NetInfo current() {
+        return current(appCtx);
+    }
+
     /** 默认网络标识；变化即视为不同网络（Network 的 hashCode 基于 netId） */
     final int key;
     final boolean hasV4;
@@ -51,7 +63,10 @@ final class NetInfo {
                     (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
             if (cm == null) return unknown();
             Network net = cm.getActiveNetwork();
-            if (net == null) return new NetInfo(0, false, false, false);
+            // 切换网络的过渡期（几百毫秒）getActiveNetwork() 可能为 null，
+            // 此时不能判定「地址全不可用」，否则会把刚解析的地址全部剔掉，
+            // 让用户看到「无可用地址」的假故障
+            if (net == null) return unknown();
             LinkProperties lp = cm.getLinkProperties(net);
             // LinkProperties.hasIpv4DefaultRoute() 是 @hide，公开 API 只能用链路地址判断：
             // 有全局（非链路本地/回环）的 v4/v6 地址即视为该地址族可出网，

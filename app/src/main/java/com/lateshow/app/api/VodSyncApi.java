@@ -188,13 +188,17 @@ public final class VodSyncApi {
 
             @Override public void onFailure(Call call, IOException e) {
                 // 切网后的第一次请求常见：解析结果还是上个网络的 / 连接池里是旧网卡的连接
-                // → 清缓存 + 清连接池后重试一次（GET 幂等，重试安全）
+                // → 清缓存 + 清连接池，延迟 600ms 再重试一次（给系统时间完成路由/DNS 切换；GET 幂等）
                 if (!retried && recoverable(e)) {
                     retried = true;
                     SmartDns.invalidate();
                     client.connectionPool().evictAll();
-                    android.util.Log.d(DBG, "↻ 连接失败（" + e + "），已清 DNS/连接池并重试一次");
-                    client.newCall(call.request()).enqueue(this);
+                    android.util.Log.d(DBG, "↻ 连接失败（" + e + "），600ms 后清缓存重试一次");
+                    MAIN.postDelayed(() -> {
+                        NetInfo ni = NetInfo.current();
+                        android.util.Log.d(DBG, "↻ 重试中：v4=" + ni.hasV4 + " v6=" + ni.hasV6 + " lan=" + ni.lan);
+                        client.newCall(call.request()).enqueue(this);
+                    }, 600);
                     return;
                 }
                 String msg = "网络异常：" + describe(e);
