@@ -124,10 +124,10 @@
 
     <!-- ===================== 弹出层（对话框 / 弹出菜单） ===================== -->
 
-    <!-- 容器形状：4dp 圆角（用户定稿：8dp 再减半，浮层走微圆角直边风）。
+    <!-- 容器形状：8dp 圆角（用户定稿：实机 10px ≈ 8dp）。
          parent="" 避免点分名隐式父级 -->
     <style name="LateShow.DialogShape" parent="">
-        <item name="cornerSize">4dp</item>
+        <item name="cornerSize">8dp</item>
     </style>
 
     <!-- 对话框容器：MDC 以 backgroundTint + shapeAppearance 程序化构建圆角底（描边不可行，层次靠投影与表面色差） -->
@@ -171,7 +171,7 @@
         <item name="android:windowHideAnimation">@anim/dialog_out</item>
     </style>
 
-    <!-- 弹出菜单（倍速等）：4dp 圆角 + 描边，与对话框 / 源站浮层同档 -->
+    <!-- 弹出菜单（倍速等）：8dp 圆角 + 描边，与对话框 / 源站浮层同档 -->
     <style name="LateShow.PopupMenu" parent="Widget.Material3.PopupMenu">
         <item name="android:popupBackground">@drawable/bg_menu</item>
         <item name="android:dropDownVerticalOffset">4dp</item>

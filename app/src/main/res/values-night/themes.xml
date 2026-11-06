@@ -10,8 +10,10 @@
         <item name="android:navigationBarColor">@color/ink900</item>
         <item name="android:windowLightStatusBar">false</item>
 
-        <!-- 弹出层统一规范：对话框 / 弹出菜单（overlay 与浅色共用，颜色令牌自动适配） -->
-        <item name="alertDialogTheme">@style/ThemeOverlay.LateShow.AlertDialog</item>
+        <!-- 弹出层统一规范：对话框 / 弹出菜单（overlay 与浅色共用，颜色令牌自动适配）。
+             MaterialAlertDialogBuilder 读的是 materialAlertDialogTheme（不是 alertDialogTheme，那是给系统/AppCompat AlertDialog 用的），
+             之前挂错属性导致整套弹层自定义从未生效 -->
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.LateShow.AlertDialog</item>
         <item name="android:popupMenuStyle">@style/LateShow.PopupMenu</item>
     </style>
 </resources>

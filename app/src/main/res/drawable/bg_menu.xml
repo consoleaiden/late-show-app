@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 弹出菜单（倍速菜单等）：4dp 圆角 + 描边（浮层统一 4dp） -->
+<!-- 弹出菜单（倍速菜单等）：8dp 圆角 + 描边（浮层统一 8dp，实机 10px） -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="@color/ink800" />
     <stroke android:width="1dp" android:color="@color/line" />
-    <corners android:radius="4dp" />
+    <corners android:radius="8dp" />
 </shape>
