@@ -5,7 +5,9 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- 返回栏：按钮自带的 16dp 内边距让箭头左缘与下方视频标题（16dp）对齐 -->
+    <!-- 返回栏：箭头图形在 ic_back 素材 24x24 画布里从 x=7 开始（36dp 内容盒中占 10.5dp），
+         左内边距 5.5dp 让箭头视觉左缘落在 16dp，与下方海报（16dp）精确对齐；
+         右内边距 26.5dp 保持内容盒仍为 36dp，箭头不缩放，触控区仍是整块 68dp -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -20,7 +22,10 @@
             android:id="@+id/btnBack"
             android:layout_width="68dp"
             android:layout_height="68dp"
-            android:padding="16dp"
+            android:paddingLeft="5.5dp"
+            android:paddingTop="16dp"
+            android:paddingRight="26.5dp"
+            android:paddingBottom="16dp"
             android:background="@null"
             android:tag="ic_back"
             android:contentDescription="返回" />
