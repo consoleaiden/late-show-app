@@ -195,7 +195,10 @@
                         </FrameLayout>
 
                         <!-- 信息模块：源站 / 更新信息 / 片名 / 分类·日期 / 演员 / 标签
-                             （整块跟着信息带底色，紧贴海报渐变的落点） -->
+                             底色两态（DetailFragment#applyBandTint）：
+                               · 海报态 = heroBand 固定深色，下端直接接内容区（不做渐变）；
+                               · 播放态 = ink900，与简介/选集区同色，播放器画面直接融进页面。
+                             两种状态之间底色与文字色一起做过渡，见 startInline。 -->
                         <LinearLayout
                             android:id="@+id/infoModule"
                             android:layout_width="match_parent"
@@ -203,7 +206,8 @@
                             android:orientation="vertical"
                             android:paddingLeft="16dp"
                             android:paddingRight="16dp"
-                            android:paddingTop="6dp">
+                            android:paddingTop="6dp"
+                            android:paddingBottom="14dp">
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -312,17 +316,6 @@
                                 </HorizontalScrollView>
                             </LinearLayout>
                         </LinearLayout>
-
-                        <!-- 信息带 → 内容区的收口渐变：上端正好是 heroBand 底色、下端正好是 ink900，
-                             两条边都和相邻区域同色，中间平滑过渡，不再出现一道色块硬边。
-                             浅色主题下 heroBand(#666666) 与 ink900(#F2F3F6) 反差大，没有这层会很"切一刀"。
-                             渐变在代码里按主题色现建（DetailFragment#setupBandFade），
-                             收起动画时与信息带一起淡出。 -->
-                        <View
-                            android:id="@+id/bandFade"
-                            android:layout_width="match_parent"
-                            android:layout_height="44dp"
-                            android:layout_marginTop="12dp" />
                     </LinearLayout>
 
                     <!-- ==================== 信息带以下：跟随主题 ==================== -->

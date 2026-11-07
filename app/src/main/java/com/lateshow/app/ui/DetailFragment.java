@@ -6,7 +6,6 @@ import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.graphics.Outline;
 import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -132,8 +131,12 @@ public class DetailFragment extends Fragment {
     private ColorDrawable pageBg;
     /** 信息带底色（海报 + 信息模块）：同样在收起时淡出，否则会留一块比卡片大的灰板 */
     private ColorDrawable bandBg;
-    /** 信息带 → 内容区的收口渐变（heroBand → ink900），收起时随信息带一起淡出 */
-    private View bandFade;
+    /** 信息模块自己的底色：海报态 = heroBand 深色，播放态 = ink900（与内容区同色） */
+    private ColorDrawable infoBg;
+    /** 信息带配色过渡（0 海报态 → 1 播放态），与海报区高度动画同参同步 */
+    private ValueAnimator bandAnim;
+    private float bandTint;
+    private final android.animation.ArgbEvaluator argb = new android.animation.ArgbEvaluator();
     private View heroBand;
     private FrameLayout heroWrap;
     private ImageView cover;
@@ -301,14 +304,11 @@ public class DetailFragment extends Fragment {
         // 页面分两段：信息带（固定偏深底）+ 信息带以下（跟随主题的页底）
         bandBg = new ColorDrawable(getColor(R.color.heroBand));
         heroBand.setBackground(bandBg);
-        // 信息带底部收口：上端 = heroBand、下端 = ink900，与下方选集区无缝衔接
-        // （浅色主题两者反差大，没有这层渐变会是一道生硬的色块分界）
-        bandFade = v.findViewById(R.id.bandFade);
-        if (bandFade != null) {
-            bandFade.setBackground(new GradientDrawable(
-                    GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[]{getColor(R.color.heroBand), getColor(R.color.ink900)}));
-        }
+        // 信息模块自己拿一块底色（不用 heroBand 的，否则播放态会把状态栏让位条也变成浅色，
+        // 白图标压在浅底上就看不见了）。两态之间由 applyBandTint 做颜色过渡。
+        infoBg = new ColorDrawable(getColor(R.color.heroBand));
+        infoModule.setBackground(infoBg);
+        applyBandTint(0f);
         pageBg = new ColorDrawable(getColor(R.color.ink900));
         playRoot.setBackground(pageBg);
 
@@ -539,7 +539,7 @@ public class DetailFragment extends Fragment {
         float bgAlpha = 1f - smooth(0.45f, 0.88f, p);
         pageBg.setAlpha(Math.round(255 * bgAlpha));
         bandBg.setAlpha(Math.round(255 * bgAlpha));
-        if (bandFade != null) bandFade.setAlpha(bgAlpha);
+        if (infoBg != null) infoBg.setAlpha(Math.round(255 * bgAlpha));
         heroFade.setAlpha(bgAlpha);
         lastBgAlpha = bgAlpha;
         applyScrimAlpha(bgAlpha);
@@ -1490,6 +1490,54 @@ public class DetailFragment extends Fragment {
 
     /** 内嵌播放窗口的高度：横向满屏的 16:9（比「屏幕一半」的海报矮） */
     /**
+     * 信息带配色：t = 0 海报态（固定深色底 + 浅色文字），t = 1 播放态（与内容区同底 + 主题文字）。
+     *
+     * <p>只改颜色不动布局，所以能和海报区高度动画用同一套时间/插值并行跑：
+     * 内容上移的同时信息带整体"融进"下方简介与选集区，标题/分类/时间也跟着换成深色字，
+     * 不会出现底色已经变浅、文字还是白字（或反之）的中间帧。
+     */
+    private void applyBandTint(float t) {
+        t = Math.max(0f, Math.min(1f, t));
+        bandTint = t;
+        if (infoBg != null) infoBg.setColor(colorLerp(t, R.color.heroBand, R.color.ink900));
+        if (tvTitle != null) tvTitle.setTextColor(colorLerp(t, R.color.heroT1, R.color.t1));
+        if (tvMeta != null) tvMeta.setTextColor(colorLerp(t, R.color.heroT3, R.color.t3));
+        if (tvActor != null) tvActor.setTextColor(colorLerp(t, R.color.heroT2, R.color.t2));
+        // 演员/标签两行的行首小字 + 标签胶囊文字（多数片源为空、行是 GONE，有数据时一并过渡）
+        int label = colorLerp(t, R.color.heroT3, R.color.t3);
+        int value = colorLerp(t, R.color.heroT2, R.color.t2);
+        setFirstChildTextColor(rowActor, label);
+        setFirstChildTextColor(rowTags, label);
+        if (tagRow != null) {
+            for (int i = 0; i < tagRow.getChildCount(); i++) {
+                View c = tagRow.getChildAt(i);
+                if (c instanceof TextView) ((TextView) c).setTextColor(value);
+            }
+        }
+    }
+
+    private void setFirstChildTextColor(View row, int color) {
+        if (row == null || row.getChildCount() == 0) return;
+        View c = row.getChildAt(0);
+        if (c instanceof TextView) ((TextView) c).setTextColor(color);
+    }
+
+    private int colorLerp(float t, int fromRes, int toRes) {
+        return (int) argb.evaluate(t, getColor(fromRes), getColor(toRes));
+    }
+
+    /** 播放态切换：底色/文字色过渡（与 setHeroHeight 的 240ms 减速曲线保持一致） */
+    private void animateBandTint(float to) {
+        if (bandAnim != null) bandAnim.cancel();
+        final float from = bandTint;
+        bandAnim = ValueAnimator.ofFloat(from, to);
+        bandAnim.setDuration(240);
+        bandAnim.setInterpolator(new DecelerateInterpolator(1.6f));
+        bandAnim.addUpdateListener(a -> applyBandTint((float) a.getAnimatedValue()));
+        bandAnim.start();
+    }
+
+    /**
      * 状态栏高度（px）。
      *
      * <p>本页是边到边（{@code setDecorFitsSystemWindows(false)}）：海报态要铺到屏幕最上沿，
@@ -1578,6 +1626,8 @@ public class DetailFragment extends Fragment {
             cover.setAlpha(1f);
         }
         setPlayerTopInset(0);   // 下次播放重新按状态栏让位
+        if (bandAnim != null) bandAnim.cancel();
+        applyBandTint(0f);      // 海报瞬间回来，信息带配色也跟着瞬间回到深色态
         int delta = posterH - heroWrap.getHeight();
         setHeroHeight(posterH, false);
         if (delta != 0 && scrollPlay != null) scrollPlay.scrollBy(0, delta);
@@ -1601,6 +1651,7 @@ public class DetailFragment extends Fragment {
         int inset = statusBarInsetPx();
         setPlayerTopInset(inset);
         setHeroHeight(inset + playerHeightPx(), true);
+        animateBandTint(1f);   // 信息带同时淡入「内容区同色 + 主题文字」
         if (cover != null) {
             cover.animate().cancel();
             cover.animate().alpha(0f).setDuration(180).start();
