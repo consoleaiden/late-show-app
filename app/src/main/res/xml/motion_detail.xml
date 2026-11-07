@@ -12,7 +12,13 @@
         app:constraintSetStart="@+id/ds_open"
         app:constraintSetEnd="@+id/ds_closed"
         app:duration="420"
-        app:motionInterpolator="decelerate" />
+        app:motionInterpolator="decelerate"
+        app:layoutDuringTransition="honorRequest" />
+        <!-- honorRequest：【关键】本页只用 setProgress 驱动（mCurrentState 恒为 UNSET），
+             MotionLayout 默认在「转场中」直接吞掉整棵子树的 requestLayout——
+             实测后果是数据回来后选集网格/文案永远停留在初始测量状态（高度 0、文字裁切），
+             直到下次 progress 变化才「突然出现」。转场完全由代码驱动且两个状态都是铺满，
+             必须让子 View 的布局请求照常生效。 -->
 
     <ConstraintSet android:id="@+id/ds_open">
         <Constraint
