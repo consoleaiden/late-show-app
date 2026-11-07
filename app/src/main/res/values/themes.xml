@@ -17,16 +17,6 @@
         <item name="android:popupMenuStyle">@style/LateShow.PopupMenu</item>
     </style>
 
-    <!-- 详情页主题（一镜到底容器变换）：
-         必须开 windowActivityTransitions，MaterialContainerTransform 才会作为 Activity 转场执行。
-         窗口背景沿用 Theme.LateShow 的 ink900：与首页底色同色，转场前铺底无可见色差；
-         不用透明窗口（windowIsTranslucent）是因为它会让下层首页在整个详情页期间持续绘制，
-         白白吃掉逐帧性能（首页有 Lottie/动画）。 -->
-    <style name="Theme.LateShow.Play" parent="Theme.LateShow">
-        <item name="android:windowActivityTransitions">true</item>
-        <item name="android:windowContentTransitions">true</item>
-    </style>
-
     <!-- 弹层主题 overlay：颜色令牌走 @color 引用，深浅主题自动适配。
          注意：按钮样式/窗口参数必须设在主题层（appcompat AlertController 从 themed context 读取），
          容器形状/底色则由 alertDialogStyle 指向的样式控制（MDC 程序化构建 MaterialShapeDrawable） -->

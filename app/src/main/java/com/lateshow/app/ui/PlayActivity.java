@@ -1,10 +1,7 @@
 package com.lateshow.app.ui;
 
-import android.app.ActivityOptions;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -29,7 +26,6 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
-import com.google.android.material.transition.MaterialContainerTransform;
 import com.lateshow.app.MainActivity;
 import com.lateshow.app.R;
 import com.lateshow.app.adapter.VideoAdapter;
@@ -56,9 +52,14 @@ public class PlayActivity extends AppCompatActivity {
     /** true = 详情来自本地缓存（服务器不可达），此时界面标注「离线」 */
     private boolean offlineMode = false;
 
-    // 一镜到底（MaterialContainerTransform）：卡片封面容器 → 整页容器
-    private static final String HERO_NAME = "ls_hero";   // 与 activity_play.xml 里 playRoot 的 transitionName 一致
-    private boolean heroPostponed = false;               // 进入动画是否还在等封面就绪
+    // 一镜到底（跨 Activity 手绘转场）：卡片快照放大铺满 → 页面淡入覆盖
+    private static final String EXTRA_HERO = "heroBounds";   // [x, y, w, h] 屏幕坐标
+    private static final int HERO_IN_MS = 380;
+    private static final int HERO_OUT_MS = 260;
+    private View playRoot;
+    private View heroOverlay;      // 进入动画期间垫在最底层的卡片快照
+    private int[] heroBounds;
+    private boolean heroAnimating = false;   // 返回动画进行中：拦截重复触发
 
     private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount, badge, breadcrumb;
     private com.airbnb.lottie.LottieAnimationView btnFav;
@@ -113,7 +114,8 @@ public class PlayActivity extends AppCompatActivity {
         applyTheme();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_play);
-        setupHeroTransition(savedInstanceState);
+        // 整页转场由本页手绘完成，关掉系统 Activity 动画，避免两套动画叠在一起
+        overridePendingTransition(0, 0);
         com.lateshow.app.util.LottieIcon.bindTree(findViewById(android.R.id.content));
         // 封面播放键在深色圆钮上，固定白色
         android.view.View playCover = findViewById(R.id.imgPlayCover);
@@ -149,20 +151,23 @@ public class PlayActivity extends AppCompatActivity {
         seekOverlay = findViewById(R.id.seekOverlay);
         playerContainer = findViewById(R.id.playerContainer);
         posterBox = findViewById(R.id.posterBox);
+        playRoot = findViewById(R.id.playRoot);
 
         tvTitle.setText(title);
         breadcrumb.setText("DETAIL / " + (sourceName != null ? sourceName : slug));
         badge.setText(remark != null && !remark.isEmpty() ? remark : "详情");
         if (pic != null) {
-            // 封面就绪后再放行进入动画（否则放大的是空占位块）
             Glide.with(this).load(pic).placeholder(R.color.ink700).centerCrop()
-                    .addListener(heroImageListener())
                     .into((android.widget.ImageView) findViewById(R.id.cover));
-        } else {
-            startHeroTransition();
         }
+        startHeroEnter(savedInstanceState);
 
-        findViewById(R.id.btnBack).setOnClickListener(v -> finish());
+        findViewById(R.id.btnBack).setOnClickListener(v -> finishWithHero());
+        // 系统返回键 / 返回手势走同一套收缩动画
+        getOnBackPressedDispatcher().addCallback(this,
+                new androidx.activity.OnBackPressedCallback(true) {
+                    @Override public void handleOnBackPressed() { finishWithHero(); }
+                });
         findViewById(R.id.btnPlayCover).setOnClickListener(v -> playCurrent(0));
         btnPlay.setOnClickListener(v -> {
             // 已在内嵌播放中：按钮变为 播放/暂停 切换
@@ -216,67 +221,114 @@ public class PlayActivity extends AppCompatActivity {
         com.lateshow.app.util.ThemeManager.apply(this);
     }
 
-    // ---------- 一镜到底（容器变换） ----------
+    // ---------- 一镜到底（跨 Activity 手绘转场） ----------
 
     /**
-     * 进入/返回统一用 MaterialContainerTransform：
-     * 起始 = 列表卡片的封面容器（8dp 圆角、9:16），结束 = 本页整页容器（playRoot）。
-     * 动画期间整页内容作为一张快照随容器一起缩放，形成「卡片展开成页面」的观感。
+     * 进入：把列表卡片的封面快照垫在页面最底层，从卡片位置等比放大到全屏；
+     * 页面内容在放大后半段淡入覆盖快照 —— 观感就是「卡片展开成详情页」。
+     *
+     * 这里不用 MaterialContainerTransform：它继承 androidx.transition.Transition，
+     * 只能用于 Fragment 转场；Activity 窗口转场所需的是平台 android.transition.Transition，
+     * 两者类型不兼容。手绘版本还能精确控制起止位置与页面淡入曲线。
      */
-    private void setupHeroTransition(Bundle st) {
-        if (Build.VERSION.SDK_INT < 21) return;
-        android.view.Window w = getWindow();
-        w.setSharedElementEnterTransition(heroTransform(true));
-        w.setSharedElementReturnTransition(heroTransform(false));
-        // 没有共享元素的入口（详情页内跳详情）退化为淡入，避免瞬切
-        w.setEnterTransition(new android.transition.Fade().setDuration(200));
-        w.setReturnTransition(new android.transition.Fade().setDuration(160));
-        // 封面（Glide）与布局就绪前不启动动画，否则会先闪一帧空页面。
-        // 旋转/主题重建（st != null）时没有共享元素入口，不需要等待。
-        if (st == null) {
-            supportPostponeEnterTransition();
-            heroPostponed = true;
-            // 兜底：封面迟迟不回调（弱网且无缓存）时 900ms 后照常进入，避免卡在空白页
-            new Handler(Looper.getMainLooper()).postDelayed(this::startHeroTransition, 900);
+    private void startHeroEnter(Bundle st) {
+        heroBounds = getIntent().getIntArrayExtra(EXTRA_HERO);
+        if (st != null || playRoot == null || heroBounds == null || heroBounds.length != 4) return;
+        // 首帧先藏起页面（快照垫在下面），否则会先闪一下完整页面再开始动画
+        playRoot.setAlpha(0f);
+        playRoot.post(this::runHeroEnter);
+    }
+
+    private void runHeroEnter() {
+        if (isFinishing() || playRoot == null || heroBounds == null) {
+            if (playRoot != null) playRoot.setAlpha(1f);   // 早退必须还原，否则页面一直不可见
+            return;
         }
+        android.view.ViewGroup host = findViewById(android.R.id.content);
+        if (host == null) { playRoot.setAlpha(1f); return; }
+        int[] origin = new int[2];
+        host.getLocationOnScreen(origin);
+        final int hostW = host.getWidth(), hostH = host.getHeight();
+        if (hostW <= 0 || hostH <= 0) { playRoot.setAlpha(1f); return; }
+
+        final int sx = heroBounds[0] - origin[0];
+        final int sy = heroBounds[1] - origin[1];
+        final int sw = Math.max(1, heroBounds[2]);
+        final int sh = Math.max(1, heroBounds[3]);
+
+        android.widget.ImageView snap = new android.widget.ImageView(this);
+        snap.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        // 圆角与列表卡片一致（8dp），放大过程中随缩放自然收边
+        snap.setBackgroundResource(R.drawable.bg_cover_round);
+        snap.setClipToOutline(true);
+        snap.setPivotX(0f);
+        snap.setPivotY(0f);
+        // 用 translation 定位而不是 margin：卡片可能有一半在屏幕外，负 margin 不可靠
+        android.widget.FrameLayout.LayoutParams lp =
+                new android.widget.FrameLayout.LayoutParams(sw, sh);
+        snap.setTranslationX(sx);
+        snap.setTranslationY(sy);
+        // index 0 = 垫在页面之下：页面淡入时自然盖住快照，不需要额外做交叉淡化
+        host.addView(snap, 0, lp);
+        heroOverlay = snap;
+        // 与列表同一 URL，Glide 内存缓存命中，首帧即可画出封面
+        if (pic != null) Glide.with(this).load(pic).centerCrop().into(snap);
+
+        snap.animate()
+                .scaleX(hostW / (float) sw)
+                .scaleY(hostH / (float) sh)
+                .translationX(0f)
+                .translationY(0f)
+                .setDuration(HERO_IN_MS)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f))
+                .start();
+
+        playRoot.animate()
+                .alpha(1f)
+                .setStartDelay(HERO_IN_MS / 2)
+                .setDuration(HERO_IN_MS - HERO_IN_MS / 2)
+                .withEndAction(this::dropHeroOverlay)
+                .start();
     }
 
-    private MaterialContainerTransform heroTransform(boolean entering) {
-        MaterialContainerTransform t = new MaterialContainerTransform(this, entering);
-        t.setDrawingViewId(android.R.id.content);
-        t.setDuration(380);
-        t.setScrimColor(Color.TRANSPARENT);
-        // THROUGH：起止快照交叉淡化，适合「整页内容展开」；IN 会先淡出背景再淡入内容，观感更碎
-        t.setFadeMode(MaterialContainerTransform.FADE_MODE_THROUGH);
-        return t;
+    private void dropHeroOverlay() {
+        if (heroOverlay == null) return;
+        android.view.ViewGroup host = findViewById(android.R.id.content);
+        if (host != null) host.removeView(heroOverlay);
+        heroOverlay = null;
     }
 
-    /** 放行被 postpone 的进入动画（幂等：图片回调与兜底定时器只会生效一次） */
-    private void startHeroTransition() {
-        if (!heroPostponed) return;
-        heroPostponed = false;
-        supportStartPostponedEnterTransition();
-    }
-
-    /** 封面加载完成 / 失败都放行动画：失败时用占位底色展开，不影响功能 */
-    private com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> heroImageListener() {
-        return new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
-            @Override public boolean onLoadFailed(
-                    @androidx.annotation.Nullable com.bumptech.glide.load.engine.GlideException e,
-                    Object model,
-                    com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
-                    boolean isFirstResource) {
-                startHeroTransition();
-                return false;
-            }
-            @Override public boolean onResourceReady(
-                    android.graphics.drawable.Drawable resource, Object model,
-                    com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
-                    com.bumptech.glide.load.DataSource dataSource, boolean isFirstResource) {
-                startHeroTransition();
-                return false;
-            }
-        };
+    /** 返回：整页以卡片位置为缩放中心收缩淡出，动画结束再 finish（卡片原位露出，视觉连续） */
+    private void finishWithHero() {
+        if (heroAnimating) return;
+        android.view.ViewGroup host = findViewById(android.R.id.content);
+        if (playRoot == null || heroBounds == null || heroBounds.length != 4 || host == null) {
+            finish();
+            return;
+        }
+        heroAnimating = true;
+        // 进入动画可能还在跑：先收尾，避免 alpha/scale 两组动画互相打架
+        playRoot.animate().cancel();
+        playRoot.setAlpha(1f);
+        int[] origin = new int[2];
+        host.getLocationOnScreen(origin);
+        final int sx = heroBounds[0] - origin[0];
+        final int sy = heroBounds[1] - origin[1];
+        final int sw = Math.max(1, heroBounds[2]);
+        // 以卡片位置为缩放中心：收缩后正好落回卡片所在位置
+        playRoot.setPivotX(sx);
+        playRoot.setPivotY(sy);
+        playRoot.animate()
+                .scaleX(sw / (float) Math.max(1, host.getWidth()))
+                .scaleY(sw / (float) Math.max(1, host.getWidth()))
+                .alpha(0f)
+                .setDuration(HERO_OUT_MS)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.6f))
+                .withEndAction(() -> {
+                    finish();
+                    overridePendingTransition(0, 0);
+                })
+                .start();
     }
 
     /** 收藏态：心形描边(未收藏) / 实心(已收藏)，animate=true 时播放描边→实心过渡 */
@@ -991,8 +1043,8 @@ public class PlayActivity extends AppCompatActivity {
     }
 
     /**
-     * 带共享元素的启动：source 为列表卡片的封面容器，进入时由 MaterialContainerTransform
-     * 把卡片展开成本页整页容器；source 为 null（详情页内跳详情）时走普通转场。
+     * 带起点位置的启动：source 为列表卡片封面容器，把它在屏幕上的位置/尺寸带过去，
+     * 详情页据此把封面快照从卡片位置放大到全屏。source 为 null（详情页内跳详情）时不做转场。
      */
     public static void start(Context ctx, CardItem item, View source) {
         Intent it = new Intent(ctx, PlayActivity.class);
@@ -1002,12 +1054,11 @@ public class PlayActivity extends AppCompatActivity {
         it.putExtra("pic", item.pic);
         it.putExtra("remark", item.remark);
         it.putExtra("sourceName", item.sourceName);
-        if (source != null && Build.VERSION.SDK_INT >= 21 && ctx instanceof android.app.Activity) {
-            ActivityOptions opts = ActivityOptions.makeSceneTransitionAnimation(
-                    (android.app.Activity) ctx, source, HERO_NAME);
-            ctx.startActivity(it, opts.toBundle());
-        } else {
-            ctx.startActivity(it);
+        if (source != null && source.getWidth() > 0 && source.getHeight() > 0) {
+            int[] loc = new int[2];
+            source.getLocationOnScreen(loc);
+            it.putExtra(EXTRA_HERO, new int[]{loc[0], loc[1], source.getWidth(), source.getHeight()});
         }
+        ctx.startActivity(it);
     }
 }

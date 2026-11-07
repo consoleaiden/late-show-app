@@ -5,8 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ink900"
-    android:transitionName="ls_hero">
+    android:background="@color/ink900">
 
     <!-- 返回栏：箭头图形在 ic_back 素材 24x24 画布里从 x=7 开始（36dp 内容盒中占 10.5dp），
          左内边距 5.5dp 让箭头视觉左缘落在 16dp，与下方海报（16dp）精确对齐；
