@@ -60,6 +60,15 @@ public class PlayActivity extends AppCompatActivity {
     private TextView tvRelatedHint;
     private static final int RELATED_LIMIT = 12;
 
+    // 相同演员作品（VodSync v1.9.1 /api/v1/star/related）：一次拉满后客户端按 match_stars 本地分组做 Tab
+    private View castSection;
+    private RecyclerView castTabs, castList;
+    private TextView tvCastHint;
+    private static final int STAR_LIMIT = 50;    // 服务端上限 50，一次拉足，Tab 切换不再发请求
+    private static final int CAST_MAX_TABS = 6;  // 「全部」之外最多 6 个明星 Tab
+    private Models.StarRelatedResp starResp;
+    private String curStarTab;                   // null = 「全部」Tab
+
     // 内嵌播放器
     private ExoPlayer player;
     private PlayerView playerView;
@@ -114,6 +123,10 @@ public class PlayActivity extends AppCompatActivity {
         relatedSection = findViewById(R.id.relatedSection);
         relatedList = findViewById(R.id.relatedList);
         tvRelatedHint = findViewById(R.id.tvRelatedHint);
+        castSection = findViewById(R.id.castSection);
+        castTabs = findViewById(R.id.castTabs);
+        castList = findViewById(R.id.castList);
+        tvCastHint = findViewById(R.id.tvCastHint);
         playerView = findViewById(R.id.playerView);
         seekOverlay = findViewById(R.id.seekOverlay);
         playerContainer = findViewById(R.id.playerContainer);
@@ -351,6 +364,7 @@ public class PlayActivity extends AppCompatActivity {
         }
 
         loadRelated();
+        loadCast();
     }
 
     /** 相关推荐：详情响应里内嵌了就直接用（NAS 模式零额外请求），否则按数据源能力补拉一次 */
@@ -432,6 +446,136 @@ public class PlayActivity extends AppCompatActivity {
             }
             @Override public int getItemCount() { return list.size(); }
         });
+    }
+
+    /** 相同演员作品：NAS 模式调 /api/v1/star/related（走 star_map 索引，毫秒级）。
+     *  空数据 / 离线 / 直连模式一律静默隐藏，不占位不影响主流程 */
+    private void loadCast() {
+        if (castSection == null || detail == null) return;
+        if (offlineMode || com.lateshow.app.api.Catalogs.isStatic()) {
+            castSection.setVisibility(View.GONE);
+            return;
+        }
+        final Models.VideoDetail base = detail;
+        com.lateshow.app.api.Catalogs.get().starRelated(base, STAR_LIMIT,
+            new VodSyncApi.ApiCb<Models.StarRelatedResp>() {
+                @Override public void onOk(Models.StarRelatedResp r) {
+                    if (isDestroyed() || detail != base) return; // 期间已切到别的片
+                    boolean usable = r != null && r.stars != null && !r.stars.isEmpty()
+                            && r.list != null && !r.list.isEmpty();
+                    starResp = usable ? r : null;
+                    curStarTab = null;
+                    if (starResp == null) {
+                        castSection.setVisibility(View.GONE);
+                        return;
+                    }
+                    renderCast();
+                }
+                @Override public void onErr(String m) {
+                    if (castSection != null) castSection.setVisibility(View.GONE);
+                }
+            });
+    }
+
+    /** 渲染明星 Tab（全部 + 命中明星）与横向影片卡；Tab 切换为本地过滤，不发请求 */
+    private void renderCast() {
+        // Tab 集合：null=全部；只收录在已拉取列表中至少命中 1 部的明星，避免空 Tab
+        final java.util.List<String> tabs = new ArrayList<>();
+        tabs.add(null);
+        final java.util.Map<String, Integer> hitCount = new java.util.HashMap<>();
+        for (Models.StarCard c : starResp.list) {
+            if (c.match_stars == null) continue;
+            for (String s : c.match_stars) {
+                Integer n = hitCount.get(s);
+                hitCount.put(s, n == null ? 1 : n + 1);
+            }
+        }
+        for (String s : starResp.stars) {
+            if (tabs.size() > CAST_MAX_TABS) break;
+            if (s != null && !s.trim().isEmpty() && !tabs.contains(s)
+                    && hitCount.containsKey(s)) tabs.add(s);
+        }
+
+        String hint = starResp.stars.get(0);
+        if (starResp.stars.size() > 1) hint += " 等 " + starResp.stars.size() + " 位";
+        tvCastHint.setText(hint);
+
+        castTabs.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
+        castTabs.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int vt) {
+                return new RecyclerView.ViewHolder(getLayoutInflater()
+                        .inflate(R.layout.item_cast_tab, p, false)) {};
+            }
+            @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder vh, int pos) {
+                String t = tabs.get(pos);
+                TextView tv = vh.itemView.findViewById(R.id.tabText);
+                boolean sel = t == null ? curStarTab == null : t.equals(curStarTab);
+                tv.setText(t == null ? "全部" : t);
+                tv.setBackgroundResource(sel ? R.drawable.bg_seg_on : R.drawable.bg_seg_off);
+                tv.setTextColor(getResources().getColor(sel ? R.color.maskText : R.color.t2, null));
+                vh.itemView.setOnClickListener(x -> {
+                    boolean same = t == null ? curStarTab == null : t.equals(curStarTab);
+                    if (same) return;
+                    curStarTab = t;
+                    castTabs.getAdapter().notifyDataSetChanged();
+                    castList.getAdapter().notifyDataSetChanged();
+                    castList.scrollToPosition(0);
+                });
+            }
+            @Override public int getItemCount() { return tabs.size(); }
+        });
+
+        castList.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
+        castList.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int vt) {
+                return new RecyclerView.ViewHolder(getLayoutInflater()
+                        .inflate(R.layout.item_related, p, false)) {};
+            }
+            @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder vh, int pos) {
+                Models.StarCard c = castFiltered().get(pos);
+                View v = vh.itemView;
+                android.widget.ImageView cover = v.findViewById(R.id.relCover);
+                TextView name = v.findViewById(R.id.relName);
+                TextView tag = v.findViewById(R.id.relScore);
+                Glide.with(PlayActivity.this).load(c.vodPic)
+                        .placeholder(R.color.ink700)
+                        .centerCrop()
+                        .dontAnimate()
+                        .into(cover);
+                name.setText(c.vodName != null ? c.vodName : "");
+                // 「全部」Tab 显示共享明星（如「吴京」）；明星 Tab 内已不言自明，隐藏
+                if (curStarTab == null && c.match_stars != null && !c.match_stars.isEmpty()) {
+                    tag.setText(c.match_stars.get(0));
+                    tag.setVisibility(View.VISIBLE);
+                } else {
+                    tag.setVisibility(View.GONE);
+                }
+                v.setOnClickListener(x -> {
+                    CardItem item = new CardItem();
+                    item.slug = c.source != null && !c.source.isEmpty() ? c.source : slug;
+                    item.vodId = c.vodId;
+                    item.title = c.vodName;
+                    item.pic = c.vodPic;
+                    item.remark = c.vodRemarks;
+                    PlayActivity.start(PlayActivity.this, item);
+                });
+            }
+            @Override public int getItemCount() { return castFiltered().size(); }
+        });
+        castSection.setVisibility(View.VISIBLE);
+    }
+
+    /** 当前 Tab 的影片：null=全部；明星 Tab 过滤 match_stars 包含该明星的卡片 */
+    private List<Models.StarCard> castFiltered() {
+        List<Models.StarCard> out = new ArrayList<>();
+        if (starResp == null || starResp.list == null) return out;
+        for (Models.StarCard c : starResp.list) {
+            if (c == null || c.vodId <= 0) continue;
+            if (curStarTab != null
+                    && (c.match_stars == null || !c.match_stars.contains(curStarTab))) continue;
+            out.add(c);
+        }
+        return out;
     }
 
     private List<Models.Episode> currentEpisodes() {

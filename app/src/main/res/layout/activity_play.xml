@@ -367,6 +367,57 @@
                         android:clipToPadding="false"
                         android:nestedScrollingEnabled="false" />
                 </LinearLayout>
+
+                <!-- 相同演员作品：明星 Tab + 横向影片卡（VodSync v1.9.1 /api/v1/star/related，
+                     一次拉取后客户端按 match_stars 本地分组切换 Tab，不再发请求） -->
+                <LinearLayout
+                    android:id="@+id/castSection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
+                            android:text="相同演员作品"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            android:id="@+id/tvCastHint"
+                            style="@style/MetaLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/castTabs"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:clipToPadding="false"
+                        android:overScrollMode="never"
+                        android:nestedScrollingEnabled="false" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/castList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:clipToPadding="false"
+                        android:nestedScrollingEnabled="false" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

@@ -55,6 +55,17 @@ public final class SyncCatalog implements Catalog {
         VodSyncApi.get().get("/api/v1/related", p, Models.RelatedResp.class, cb);
     }
 
+    /** 明星作品推荐：VodSync v1.9.1 star_map 倒排索引直查（毫秒级），与当前影片共享明星的其他影片 */
+    @Override
+    public void starRelated(Models.VideoDetail base, int limit, VodSyncApi.ApiCb<Models.StarRelatedResp> cb) {
+        if (base == null) { cb.onErr("缺少详情"); return; }
+        Map<String, String> p = new HashMap<>();
+        p.put("slug", base.source != null ? base.source : "");
+        p.put("vod_id", String.valueOf(base.vodId));
+        p.put("limit", String.valueOf(limit));
+        VodSyncApi.get().get("/api/v1/star/related", p, Models.StarRelatedResp.class, cb);
+    }
+
     @Override
     public void ping(VodSyncApi.ApiCb<Long> cb) {
         VodSyncApi.get().healthz(cb);

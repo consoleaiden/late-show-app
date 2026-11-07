@@ -64,6 +64,34 @@ public final class Models {
         public List<RelatedCard> list;
     }
 
+    /** GET /api/v1/star/related 响应（VodSync v1.9.1 明星作品推荐，走 star_map 索引毫秒级） */
+    public static class StarRelatedResp {
+        public int code;
+        public StarTarget target;
+        /** 目标视频的明星集（真实演员∩词库 + 标题推断），Tab 数据源 */
+        public List<String> stars;
+        /** 与目标共享明星的其他影片，overlap 降序 */
+        public List<StarCard> list;
+    }
+
+    public static class StarTarget {
+        @SerializedName("vod_id") public long vodId;
+        @SerializedName("vod_name") public String vodName;
+    }
+
+    /** 明星作品卡片：结构与视频卡片对齐 + match_stars（命中的明星，客户端据此做 Tab 分组） */
+    public static class StarCard {
+        @SerializedName("vod_id") public long vodId;
+        @SerializedName("vod_name") public String vodName;
+        @SerializedName("vod_pic") public String vodPic;
+        @SerializedName("vod_remarks") public String vodRemarks;
+        @SerializedName("type_name") public String typeName;
+        public String source;
+        public List<String> match_stars;
+        /** 与目标重叠的明星数（>=1） */
+        public int overlap;
+    }
+
     public static class VideoListResp {
         public int code;
         public int page;

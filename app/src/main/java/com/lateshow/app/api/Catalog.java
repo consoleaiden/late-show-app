@@ -56,5 +56,15 @@ public interface Catalog {
         cb.onErr("当前数据源不支持相关推荐");
     }
 
+    /**
+     * 相同演员作品（VodSync v1.9.1 GET /api/v1/star/related）：与当前影片共享明星的其他影片。
+     * 响应 stars 为明星集（Tab 数据源），list 卡片带 match_stars（客户端本地分组切换 Tab）。
+     * 直连模式不支持，默认 onErr。
+     */
+    default void starRelated(Models.VideoDetail base, int limit,
+                             VodSyncApi.ApiCb<Models.StarRelatedResp> cb) {
+        cb.onErr("当前数据源不支持明星作品推荐");
+    }
+
     boolean isStatic();
 }

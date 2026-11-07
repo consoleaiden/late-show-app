@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 明星 Tab 胶囊：选中 bg_seg_on（橙底白字）/ 未选中 bg_seg_off，背景与文字色由代码切换 -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tabText"
+    android:layout_width="wrap_content"
+    android:layout_height="30dp"
+    android:gravity="center"
+    android:paddingLeft="13dp"
+    android:paddingRight="13dp"
+    android:layout_marginRight="8dp"
+    android:maxWidth="140dp"
+    android:maxLines="1"
+    android:ellipsize="end"
+    android:textSize="12sp"
+    android:textStyle="bold"
+    android:textColor="@color/t2"
+    android:foreground="?attr/selectableItemBackground" />
