@@ -763,7 +763,8 @@ public class PlayActivity extends AppCompatActivity {
                     .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
                     .build();
             playerView.setPlayer(player);
-            playerView.setControllerShowTimeoutMs(2500);
+            // 控制栏/半透明遮罩 2 秒后自动隐藏（原 2.5s，与全屏保持一致）
+            playerView.setControllerShowTimeoutMs(2000);
             // 点全屏按钮才进入横屏全屏
             playerView.setFullscreenButtonClickListener(v -> goFullscreen());
             // 倍速 + 播放设置（悬浮工具，见布局右上角）
@@ -772,6 +773,7 @@ public class PlayActivity extends AppCompatActivity {
             com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
             player.addListener(new Player.Listener() {
                 @Override public void onPlaybackStateChanged(int state) {
+                    syncKeepScreenOn();
                     if (state == Player.STATE_READY) {
                         long d = player.getDuration() / 1000;
                         if (d > 0) saveProgress(player.getCurrentPosition() / 1000, d);
@@ -782,6 +784,7 @@ public class PlayActivity extends AppCompatActivity {
                 }
                 @Override public void onIsPlayingChanged(boolean p) {
                     updatePlayLabel();
+                    syncKeepScreenOn();
                 }
             });
             attachSeekGesture();
@@ -792,6 +795,15 @@ public class PlayActivity extends AppCompatActivity {
         player.setMediaItem(MediaItem.fromUri(playUrl), Math.max(0, startMs));
         player.prepare();
         player.play();
+    }
+
+    /** 内嵌播放/缓冲期间保持屏幕常亮；暂停、播完、idle 时恢复系统息屏策略 */
+    private void syncKeepScreenOn() {
+        if (playerView == null) return;
+        boolean on = player != null && player.getPlayWhenReady()
+                && player.getPlaybackState() != Player.STATE_IDLE
+                && player.getPlaybackState() != Player.STATE_ENDED;
+        playerView.setKeepScreenOn(on);
     }
 
     /** 横向滑动手势快进/快退（内嵌窗口）：划满全宽 = 总时长 1/2，半屏 = 1/4 */

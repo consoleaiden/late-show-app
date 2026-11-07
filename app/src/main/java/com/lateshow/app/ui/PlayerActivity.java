@@ -1,10 +1,12 @@
 package com.lateshow.app.ui;
 
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -22,6 +24,7 @@ import com.lateshow.app.util.GestureSeek;
 public class PlayerActivity extends AppCompatActivity {
 
     private ExoPlayer player;
+    private PlayerView pv;
     private String slug, epName, title, pic, remarks, sourceName;
     private long vodId;
     private int epIndex, lineIndex;
@@ -80,7 +83,7 @@ public class PlayerActivity extends AppCompatActivity {
             if (skip > 0) startMs = skip * 1000L;
         }
 
-        PlayerView pv = findViewById(R.id.playerView);
+        pv = findViewById(R.id.playerView);
 
         // 播放源站多为 m3u8 直链，不带 Referer（见 API 文档 §9.7/9.8）
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
@@ -92,12 +95,15 @@ public class PlayerActivity extends AppCompatActivity {
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
                 .build();
         pv.setPlayer(player);
+        // 控制栏/半透明遮罩 2 秒后自动隐藏（media3 默认 5 秒）
+        pv.setControllerShowTimeoutMs(2000);
         // 倍速 + 播放设置（悬浮工具，右上角），并把上次倍速立即应用
         com.lateshow.app.util.PlayerPanel.attach(
                 findViewById(R.id.btnSpeed), findViewById(R.id.btnGear), player);
         com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
 
-        // 横向滑动手势快进/快退：按总时长比例计算，划满全屏 = 总时长 1/2，半屏 = 1/4
+        // 手势：横向滑动快进/快退（划满全屏 = 总时长 1/2，半屏 = 1/4）；
+        // 纵向滑动：右半屏调亮度、左半屏调音量；轻点显隐控制栏
         final TextView seekOverlay = findViewById(R.id.seekOverlay);
         GestureSeek.attach(pv, 0.5f, new GestureSeek.Callback() {
             @Override public long durationMs() { return player != null ? player.getDuration() : 0; }
@@ -116,6 +122,23 @@ public class PlayerActivity extends AppCompatActivity {
             @Override public void onTap() {
                 if (pv.isControllerFullyVisible()) pv.hideController();
                 else pv.showController();
+            }
+        }, new GestureSeek.VerticalCallback() {
+            @Override public float currentValue(boolean right) {
+                return right ? currentBrightness() : currentVolumeFraction();
+            }
+            @Override public void onVerticalStart(boolean right, float value) {
+                if (pv.isControllerFullyVisible()) pv.hideController();
+                seekOverlay.setVisibility(View.VISIBLE);
+                seekOverlay.setText(label(right, value));
+            }
+            @Override public void onVerticalProgress(boolean right, float value) {
+                if (right) applyBrightness(value);
+                else applyVolumeFraction(value);
+                seekOverlay.setText(label(right, value));
+            }
+            @Override public void onVerticalEnd(boolean right, float value) {
+                seekOverlay.setVisibility(View.GONE);
             }
         });
 
@@ -138,6 +161,7 @@ public class PlayerActivity extends AppCompatActivity {
 
             @Override
             public void onPlaybackStateChanged(int state) {
+                syncKeepScreenOn();
                 if (state == Player.STATE_READY) {
                     long dur = player.getDuration() / 1000;
                     if (dur > 0 && lastSavedSec == 0) {
@@ -148,7 +172,65 @@ public class PlayerActivity extends AppCompatActivity {
                     saveProgress(player.getDuration() / 1000, player.getDuration() / 1000);
                 }
             }
+
+            @Override
+            public void onIsPlayingChanged(boolean isPlaying) {
+                syncKeepScreenOn();
+            }
         });
+    }
+
+    /** 播放/缓冲期间保持屏幕常亮；暂停、播完、idle 时恢复系统息屏策略 */
+    private void syncKeepScreenOn() {
+        boolean on = player != null && player.getPlayWhenReady()
+                && player.getPlaybackState() != Player.STATE_IDLE
+                && player.getPlaybackState() != Player.STATE_ENDED;
+        if (pv != null) pv.setKeepScreenOn(on);
+    }
+
+    // ==================== 全屏纵向手势：右半屏亮度 / 左半屏音量 ====================
+
+    private String label(boolean right, float value) {
+        int pct = Math.round(value * 100f);
+        return right ? "亮度 " + pct + "%" : "音量 " + pct + "%";
+    }
+
+    /** 当前窗口亮度：优先取本窗口已设值，否则读系统亮度作起步基准 */
+    private float currentBrightness() {
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        if (lp.screenBrightness >= 0f) return Math.min(1f, Math.max(0f, lp.screenBrightness));
+        try {
+            int sys = android.provider.Settings.System.getInt(
+                    getContentResolver(), android.provider.Settings.System.SCREEN_BRIGHTNESS);
+            return Math.min(1f, Math.max(0f, sys / 255f));
+        } catch (Exception e) {
+            return 0.5f;
+        }
+    }
+
+    private void applyBrightness(float value) {
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = Math.min(1f, Math.max(0.02f, value));  // 保底 2%，避免全黑
+        getWindow().setAttributes(lp);
+    }
+
+    private AudioManager audio() {
+        return (AudioManager) getSystemService(AUDIO_SERVICE);
+    }
+
+    private float currentVolumeFraction() {
+        AudioManager am = audio();
+        int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        if (max <= 0) return 0f;
+        return am.getStreamVolume(AudioManager.STREAM_MUSIC) / (float) max;
+    }
+
+    private void applyVolumeFraction(float value) {
+        AudioManager am = audio();
+        int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        if (max <= 0) return;
+        int idx = Math.round(Math.min(1f, Math.max(0f, value)) * max);
+        am.setStreamVolume(AudioManager.STREAM_MUSIC, idx, 0);  // flag=0：不弹系统音量面板
     }
 
     /** 隐藏系统状态栏与导航栏（真全屏）；回到前台/焦点恢复时重新隐藏 */
@@ -203,6 +285,7 @@ public class PlayerActivity extends AppCompatActivity {
             d.putExtra("pos", pos);
             setResult(RESULT_OK, d);
             player.pause();
+            syncKeepScreenOn();   // 暂停后立即放开常亮，允许系统息屏
         }
     }
 
