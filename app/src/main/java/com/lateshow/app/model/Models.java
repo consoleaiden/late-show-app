@@ -2,6 +2,7 @@ package com.lateshow.app.model;
 
 import com.google.gson.annotations.SerializedName;
 import java.util.List;
+import java.util.Map;
 
 /** VodSync 数据模型（只声明会解析的字段，未知字段由 Gson 忽略） */
 public final class Models {
@@ -70,6 +71,10 @@ public final class Models {
         public StarTarget target;
         /** 目标视频的明星集（真实演员∩词库 + 标题推断），Tab 数据源 */
         public List<String> stars;
+        /** v1.9.2 新增：{明星名: 作品总数}，Tab 排序/角标用；v1.9.1 旧服务端缺失（null），客户端自动降级 */
+        @SerializedName("star_counts") public Map<String, Integer> starCounts;
+        /** v1.9.2 新增：候选总数超过 limit 被截断；旧服务端缺失时恒 false */
+        public boolean truncated;
         /** 与目标共享明星的其他影片，overlap 降序 */
         public List<StarCard> list;
     }
@@ -90,6 +95,18 @@ public final class Models {
         public List<String> match_stars;
         /** 与目标重叠的明星数（>=1） */
         public int overlap;
+    }
+
+    /** GET /api/v1/star/works 响应（VodSync v1.9.2 按明星查作品，以明星为中心不受全局截断影响） */
+    public static class StarWorksResp {
+        public int code;
+        public String slug;
+        /** 服务端归一化后的明星主名（别名请求会归一） */
+        public String term;
+        /** 该明星现存作品总数，不受 limit 影响（也不含 exclude_id 排除项） */
+        public int total;
+        /** 按 vod_time desc 排序的作品卡片，字段与 StarCard 一致 */
+        public List<StarCard> list;
     }
 
     public static class VideoListResp {

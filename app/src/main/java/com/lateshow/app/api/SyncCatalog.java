@@ -66,6 +66,20 @@ public final class SyncCatalog implements Catalog {
         VodSyncApi.get().get("/api/v1/star/related", p, Models.StarRelatedResp.class, cb);
     }
 
+    /** 按明星查作品：VodSync v1.9.2 GET /api/v1/star/works（走 (slug,term) 索引，P95 < 50ms） */
+    @Override
+    public void starWorks(Models.VideoDetail base, String term, int limit,
+                          VodSyncApi.ApiCb<Models.StarWorksResp> cb) {
+        if (base == null) { cb.onErr("缺少详情"); return; }
+        if (term == null || term.trim().isEmpty()) { cb.onOk(null); return; }
+        Map<String, String> p = new HashMap<>();
+        p.put("slug", base.source != null ? base.source : "");
+        p.put("term", term.trim());
+        p.put("limit", String.valueOf(limit));
+        p.put("exclude_id", String.valueOf(base.vodId));
+        VodSyncApi.get().get("/api/v1/star/works", p, Models.StarWorksResp.class, cb);
+    }
+
     @Override
     public void ping(VodSyncApi.ApiCb<Long> cb) {
         VodSyncApi.get().healthz(cb);

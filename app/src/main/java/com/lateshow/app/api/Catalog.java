@@ -66,5 +66,15 @@ public interface Catalog {
         cb.onErr("当前数据源不支持明星作品推荐");
     }
 
+    /**
+     * 按明星查作品（VodSync v1.9.2 GET /api/v1/star/works）：以明星为中心的完整作品列表，
+     * 不受 star/related 的全局截断影响。total 为该明星现存作品总数（不含 exclude_id）。
+     * 服务端 v1.9.1 未部署该接口时返回 404 → 调用方应降级为本地过滤。
+     */
+    default void starWorks(Models.VideoDetail base, String term, int limit,
+                           VodSyncApi.ApiCb<Models.StarWorksResp> cb) {
+        cb.onErr("当前数据源不支持按明星查询");
+    }
+
     boolean isStatic();
 }

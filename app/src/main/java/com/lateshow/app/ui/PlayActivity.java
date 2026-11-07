@@ -38,7 +38,9 @@ import com.lateshow.app.util.GestureSeek;
 import com.lateshow.app.util.OfflineMedia;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** 播放详情页：竖版海报 + 简介 + 收藏 + 线路/选集网格 + 内嵌播放器（点全屏进横屏） */
 public class PlayActivity extends AppCompatActivity {
@@ -60,14 +62,21 @@ public class PlayActivity extends AppCompatActivity {
     private TextView tvRelatedHint;
     private static final int RELATED_LIMIT = 12;
 
-    // 相同演员作品（VodSync v1.9.1 /api/v1/star/related）：一次拉满后客户端按 match_stars 本地分组做 Tab
+    // 相同演员作品（VodSync v1.9.1 /api/v1/star/related + v1.9.2 /api/v1/star/works）：
+    // 「全部」Tab 用 star/related 的 top50 本地展示；明星 Tab 按需调 star/works 拉完整作品并缓存，
+    // 旧服务端（v1.9.1，无 works 接口）自动降级为本地 match_stars 过滤
     private View castSection;
     private RecyclerView castTabs, castList;
     private TextView tvCastHint;
-    private static final int STAR_LIMIT = 50;    // 服务端上限 50，一次拉足，Tab 切换不再发请求
+    private static final int STAR_LIMIT = 50;    // star/related 一次拉足，「全部」Tab 不再发请求
     private static final int CAST_MAX_TABS = 6;  // 「全部」之外最多 6 个明星 Tab
     private Models.StarRelatedResp starResp;
     private String curStarTab;                   // null = 「全部」Tab
+    private final Map<String, List<Models.StarCard>> starWorksCache = new HashMap<>();
+    private final Map<String, Integer> starTotalCache = new HashMap<>();  // term -> 完整作品总数
+    private final java.util.Set<String> starWorksLoading = new java.util.HashSet<>();
+    private int castGen = 0;                     // 防串台：详情切换后丢弃旧请求回调
+    private String castHintAll;                  // 「全部」Tab 的提示语（切换 Tab 时恢复用）
 
     // 内嵌播放器
     private ExoPlayer player;
@@ -457,10 +466,16 @@ public class PlayActivity extends AppCompatActivity {
             return;
         }
         final Models.VideoDetail base = detail;
+        castGen++;                                    // 详情已切换：之前的明星 Tab 请求回调全部作废
+        starWorksCache.clear();
+        starTotalCache.clear();
+        starWorksLoading.clear();
+        curStarTab = null;
+        final int gen = castGen;
         com.lateshow.app.api.Catalogs.get().starRelated(base, STAR_LIMIT,
             new VodSyncApi.ApiCb<Models.StarRelatedResp>() {
                 @Override public void onOk(Models.StarRelatedResp r) {
-                    if (isDestroyed() || detail != base) return; // 期间已切到别的片
+                    if (isDestroyed() || detail != base || gen != castGen) return; // 期间已切到别的片
                     boolean usable = r != null && r.stars != null && !r.stars.isEmpty()
                             && r.list != null && !r.list.isEmpty();
                     starResp = usable ? r : null;
@@ -477,12 +492,12 @@ public class PlayActivity extends AppCompatActivity {
             });
     }
 
-    /** 渲染明星 Tab（全部 + 命中明星）与横向影片卡；Tab 切换为本地过滤，不发请求 */
+    /** 渲染明星 Tab（全部 + 命中明星）与横向影片卡。
+     *  Tab 排序优先用服务端 star_counts（v1.9.2 完整作品数，可包含被 top50 挤出的明星），
+     *  旧服务端（v1.9.1）自动降级为本地命中数；明星 Tab 切换按需调 star/works 拉完整作品 */
     private void renderCast() {
-        // Tab 集合：null=全部；只收录在已拉取列表中至少命中 1 部的明星，避免空 Tab
-        final java.util.List<String> tabs = new ArrayList<>();
-        tabs.add(null);
-        final java.util.Map<String, Integer> hitCount = new java.util.HashMap<>();
+        // 本地命中数：「全部」Tab 的 top50 列表里各明星出现的次数
+        final Map<String, Integer> hitCount = new HashMap<>();
         for (Models.StarCard c : starResp.list) {
             if (c.match_stars == null) continue;
             for (String s : c.match_stars) {
@@ -490,15 +505,23 @@ public class PlayActivity extends AppCompatActivity {
                 hitCount.put(s, n == null ? 1 : n + 1);
             }
         }
-        for (String s : starResp.stars) {
+        final Map<String, Integer> counts = starResp.starCounts != null
+                ? starResp.starCounts : hitCount;     // 新服务端用完整作品数，旧服务端退回本地命中
+        final List<String> ranked = new ArrayList<>(starResp.stars);
+        java.util.Collections.sort(ranked, (a, b) -> Integer.compare(
+                counts.getOrDefault(b, 0), counts.getOrDefault(a, 0)));
+        final List<String> tabs = new ArrayList<>();
+        tabs.add(null);
+        for (String s : ranked) {
             if (tabs.size() > CAST_MAX_TABS) break;
             if (s != null && !s.trim().isEmpty() && !tabs.contains(s)
-                    && hitCount.containsKey(s)) tabs.add(s);
+                    && counts.getOrDefault(s, 0) > 0) tabs.add(s);
         }
 
-        String hint = starResp.stars.get(0);
-        if (starResp.stars.size() > 1) hint += " 等 " + starResp.stars.size() + " 位";
-        tvCastHint.setText(hint);
+        castHintAll = starResp.stars.get(0);
+        if (starResp.stars.size() > 1) castHintAll += " 等 " + starResp.stars.size() + " 位";
+        if (starResp.truncated) castHintAll += " · 已截取前 " + STAR_LIMIT + " 部";
+        tvCastHint.setText(curStarTab == null ? castHintAll : tabHint(curStarTab));
 
         castTabs.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
         castTabs.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -510,7 +533,7 @@ public class PlayActivity extends AppCompatActivity {
                 String t = tabs.get(pos);
                 TextView tv = vh.itemView.findViewById(R.id.tabText);
                 boolean sel = t == null ? curStarTab == null : t.equals(curStarTab);
-                tv.setText(t == null ? "全部" : t);
+                tv.setText(t == null ? "全部" : tabLabel(t));
                 tv.setBackgroundResource(sel ? R.drawable.bg_seg_on : R.drawable.bg_seg_off);
                 tv.setTextColor(getResources().getColor(sel ? R.color.maskText : R.color.t2, null));
                 vh.itemView.setOnClickListener(x -> {
@@ -520,6 +543,8 @@ public class PlayActivity extends AppCompatActivity {
                     castTabs.getAdapter().notifyDataSetChanged();
                     castList.getAdapter().notifyDataSetChanged();
                     castList.scrollToPosition(0);
+                    updateCastHint();
+                    if (t != null && !starWorksCache.containsKey(t)) loadStarWorks(t);
                 });
             }
             @Override public int getItemCount() { return tabs.size(); }
@@ -565,17 +590,78 @@ public class PlayActivity extends AppCompatActivity {
         castSection.setVisibility(View.VISIBLE);
     }
 
-    /** 当前 Tab 的影片：null=全部；明星 Tab 过滤 match_stars 包含该明星的卡片 */
+    /** 当前 Tab 的影片：null=全部（star/related top50 全量展示）；
+     *  明星 Tab 优先用 star/works 缓存，未命中（加载中或旧服务端无接口）回退本地 match_stars 过滤 */
     private List<Models.StarCard> castFiltered() {
         List<Models.StarCard> out = new ArrayList<>();
         if (starResp == null || starResp.list == null) return out;
-        for (Models.StarCard c : starResp.list) {
+        if (curStarTab == null) {
+            for (Models.StarCard c : starResp.list) {
+                if (c != null && c.vodId > 0) out.add(c);
+            }
+            return out;
+        }
+        List<Models.StarCard> cached = starWorksCache.get(curStarTab);
+        if (cached != null) {
+            out.addAll(cached);
+            return out;
+        }
+        for (Models.StarCard c : starResp.list) {   // 降级：本地过滤 top50 内命中该明星的影片
             if (c == null || c.vodId <= 0) continue;
-            if (curStarTab != null
-                    && (c.match_stars == null || !c.match_stars.contains(curStarTab))) continue;
+            if (c.match_stars == null || !c.match_stars.contains(curStarTab)) continue;
             out.add(c);
         }
         return out;
+    }
+
+    /** 明星 Tab 按需拉取该明星完整作品（v1.9.2 /api/v1/star/works），结果缓存；失败静默降级为本地过滤 */
+    private void loadStarWorks(String term) {
+        final Models.VideoDetail base = detail;
+        final int gen = castGen;
+        starWorksLoading.add(term);
+        com.lateshow.app.api.Catalogs.get().starWorks(base, term, STAR_LIMIT,
+            new VodSyncApi.ApiCb<Models.StarWorksResp>() {
+                @Override public void onOk(Models.StarWorksResp r) {
+                    starWorksLoading.remove(term);
+                    if (isDestroyed() || detail != base || gen != castGen) return;
+                    starWorksCache.put(term, r != null && r.list != null
+                            ? r.list : new ArrayList<>());
+                    if (r != null && r.total > 0) starTotalCache.put(term, r.total);
+                    if (term.equals(curStarTab)) {
+                        updateCastHint();
+                        if (castList.getAdapter() != null) castList.getAdapter().notifyDataSetChanged();
+                        castList.scrollToPosition(0);
+                    }
+                }
+                @Override public void onErr(String m) {
+                    starWorksLoading.remove(term);
+                    // 旧服务端无 works 接口（404）或网络失败：不缓存，castFiltered 自动回退本地过滤
+                    if (isDestroyed() || detail != base || gen != castGen) return;
+                    if (term.equals(curStarTab)) updateCastHint();
+                }
+            });
+        updateCastHint();   // 立即切换为「加载中」提示
+    }
+
+    /** 明星区提示语：「全部」Tab 用汇总语；明星 Tab 显示「共 N 部」/「加载中」 */
+    private void updateCastHint() {
+        if (tvCastHint == null || starResp == null) return;
+        tvCastHint.setText(curStarTab == null ? castHintAll : tabHint(curStarTab));
+    }
+
+    private String tabHint(String term) {
+        Integer total = starTotalCache.get(term);
+        if (total == null && starResp.starCounts != null) total = starResp.starCounts.get(term);
+        if (total != null && total > 0) return term + " · 共 " + total + " 部";
+        if (starWorksLoading.contains(term)) return term + " · 作品加载中…";
+        return term;
+    }
+
+    /** Tab 文案：作品数已知时附带角标（如「奈奈·42」），未知只显示名字 */
+    private String tabLabel(String term) {
+        Integer total = starTotalCache.get(term);
+        if (total == null && starResp.starCounts != null) total = starResp.starCounts.get(term);
+        return total != null && total > 0 ? term + "·" + total : term;
     }
 
     private List<Models.Episode> currentEpisodes() {
