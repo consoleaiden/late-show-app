@@ -158,6 +158,8 @@ public class DetailFragment extends Fragment {
     private boolean dismissed = false;
     private ValueAnimator motionAnim;
     private float radiusPx = 0f;
+    /** 顶部遮罩的两段基础 alpha（由滚动位置决定，0~1）；收起时再乘整体透明度 */
+    private float scrimTopBase = 1f, scrimStatusBase = 0f, lastBgAlpha = 1f;
 
     private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount,
             chipSource, chipUpdate, tvActor;
@@ -361,9 +363,21 @@ public class DetailFragment extends Fragment {
     private void setupScrollScrim() {
         scrollPlay.setOnScrollChangeListener((v, sx, sy, osx, osy) -> {
             float t = Math.min(1f, sy / (float) Math.max(1, heroWrap.getHeight() * 0.55f));
-            topScrim.setAlpha(1f - t);
-            statusScrim.setAlpha(t);
+            scrimTopBase = 1f - t;
+            scrimStatusBase = t;
+            applyScrimAlpha(lastBgAlpha);
         });
+    }
+
+    /**
+     * 顶部两层遮罩的 alpha = 滚动决定的基础值 × 收起进度决定的整体透明度。
+     *
+     * <p>不乘这个整体透明度的话，收起到底时页面只有卡片那么大，128dp 的顶部遮罩
+     * 会把整张海报压黑 —— 而列表卡片是原色的，摘下浮层那一下就会"亮一下"。
+     */
+    private void applyScrimAlpha(float overall) {
+        if (topScrim != null) topScrim.setAlpha(scrimTopBase * overall);
+        if (statusScrim != null) statusScrim.setAlpha(scrimStatusBase * overall);
     }
 
     // ==================== 一镜到底（MotionLayout 跟手） ====================
@@ -504,6 +518,8 @@ public class DetailFragment extends Fragment {
         pageBg.setAlpha(Math.round(255 * bgAlpha));
         bandBg.setAlpha(Math.round(255 * bgAlpha));
         heroFade.setAlpha(bgAlpha);
+        lastBgAlpha = bgAlpha;
+        applyScrimAlpha(bgAlpha);
         // 内嵌播放中：收起时让播放器先淡出，露出下面一直在位的海报，
         // 这样落点仍然是海报↔卡片，不会出现「视频缩成一张卡片」的跳变
         if (inlineActive && playerContainer != null) {
