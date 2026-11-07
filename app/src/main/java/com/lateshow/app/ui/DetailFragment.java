@@ -668,6 +668,10 @@ public class DetailFragment extends Fragment {
                     }
                     detail = r.detail;
                     offlineMode = false;
+                    android.util.Log.d("DetailDbg", "onOk actor='" + detail.vodActor
+                            + "' tag='" + detail.vodTag + "' lines="
+                            + (detail.vodPlayList == null ? -1 : detail.vodPlayList.size())
+                            + " related=" + (detail.related == null ? -1 : detail.related.size()));
                     renderDetail();
                     // 已收藏 / 有播放历史 → 刷新离线播放数据（覆盖旧线路与地址）
                     if (PrefStore.get().isFav(slug, vodId) || PrefStore.get().getHist(slug, vodId) != null) {
@@ -752,6 +756,8 @@ public class DetailFragment extends Fragment {
         tvMeta.setVisibility(meta.length() > 0 ? View.VISIBLE : View.GONE);
 
         renderActorTags();
+        android.util.Log.d("DetailDbg", "infoModule: actor='" + detail.vodActor
+                + "' tag='" + detail.vodTag + "'");
     }
 
     /** 演员 / 标签：数据源没给就整行隐藏（不占位、不出现空标签） */
@@ -937,6 +943,9 @@ public class DetailFragment extends Fragment {
         }
 
         buildEpPager(totalPages, eps.size());
+        android.util.Log.d("DetailDbg", "renderEpisodes size=" + eps.size() + " span=" + epSpan
+                + " page=" + epPage + "/" + totalPages + " from=" + from + " to=" + to
+                + " pagerVis=" + epPagerScroll.getVisibility());
 
         // 手动铺行：一页最多 epSpan × 8 = 32~40 格，没有虚拟化需求；
         // 换 RecyclerView 反而会被 ScrollView 的 UNSPECIFIED 测量截成两行高（实测 296px），
@@ -980,6 +989,8 @@ public class DetailFragment extends Fragment {
             epGrid.addView(row, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
+        android.util.Log.d("DetailDbg", "rows built=" + epGrid.getChildCount()
+                + " gridH=" + epGrid.getHeight());
         updatePlayLabel();
     }
 
