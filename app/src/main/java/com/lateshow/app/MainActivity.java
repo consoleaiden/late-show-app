@@ -192,9 +192,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** 详情页收起动画结束后回调：隐藏浮层、恢复系统栏图标配色 */
-    public void onDetailClosed() {
+    /**
+     * 详情页收起动画结束后回调：隐藏浮层、恢复系统栏图标配色。
+     *
+     * @param self 正在收起的详情页（由它自己负责摘除，这里只清理「详情页内跳详情」留下的旧页）
+     */
+    public void onDetailClosed(DetailFragment self) {
         detailFragment = null;
+        FragmentManager fm = getSupportFragmentManager();
+        java.util.ArrayList<DetailFragment> left = new java.util.ArrayList<>();
+        for (Fragment f : fm.getFragments()) {
+            if (f instanceof DetailFragment && f != self) left.add((DetailFragment) f);
+        }
+        for (DetailFragment f : left) {
+            fm.beginTransaction().remove(f).commitAllowingStateLoss();
+        }
         if (detailHost != null) detailHost.setVisibility(View.GONE);
         if (detailBack != null) detailBack.setEnabled(false);
         setLightStatusBarIcons(!com.lateshow.app.util.ThemeManager.actualNight(this));

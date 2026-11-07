@@ -397,6 +397,7 @@ public class DetailFragment extends Fragment {
             }
             @Override public void onDragStart() {
                 cancelMotionAnim();
+                fireEnterEnd();   // 进场被手势打断：旧页的清理不能丢，否则会一直压在下面
                 closing = true;
             }
             @Override public void onDragProgress(float progress) {
@@ -545,6 +546,7 @@ public class DetailFragment extends Fragment {
         if (dismissed || motion == null || getView() == null) return;
         closing = true;
         cancelMotionAnim();
+        fireEnterEnd();
         // 海报已经被滚出屏幕（或没有卡片起点＝详情页内跳详情）：形变终点看不到，改「缩小 + 淡出」收场
         if (cardBounds == null || cardBounds.length != 4
                 || scrollPlay.getScrollY() > heroWrap.getHeight()) {
@@ -563,7 +565,7 @@ public class DetailFragment extends Fragment {
         inlineActive = false;
         cancelMotionAnim();
         releasePlayer();
-        if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).onDetailClosed();
+        if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).onDetailClosed(this);
         // 视图动画已结束，直接摘掉 Fragment（列表在原位，卡片本来就露着）
         getParentFragmentManager().beginTransaction()
                 .remove(this)
@@ -1479,7 +1481,7 @@ public class DetailFragment extends Fragment {
                 @Override public void onPlayerError(PlaybackException error) {
                     // 有些源站的 "播放地址" 其实是一个网页播放页，ExoPlayer 拿到 HTML 必然失败：
                     // 先尝试从页面里把真正的 m3u8 抠出来重试一次，还不行才提示（并建议换线路）
-                    if (!triedHtmlResolve && curRawUrl != null && !looksLikeMedia(curRawUrl)) {
+                    if (!triedHtmlResolve && isPlayPage(curRawUrl)) {
                         triedHtmlResolve = true;
                         resolvePlayPage(curRawUrl, curStartMs);
                         return;
@@ -1521,15 +1523,28 @@ public class DetailFragment extends Fragment {
     }
 
     /**
+     * 是否「网页播放页」形态（{@code https://play.xxx.com/play/AbCd1234}）。
+     *
+     * <p>只对这种形态做归一化：真实数据里 556 条无扩展名地址全部长这样，而且正好都是
+     * 700+ 集的长剧；而其它无扩展名的地址（带参数的转发接口等）本来就是能播的，
+     * 不能去动它。
+     */
+    private static boolean isPlayPage(String url) {
+        if (TextUtils.isEmpty(url) || looksLikeMedia(url)) return false;
+        String u = url;
+        int q = u.indexOf('?');
+        if (q > 0) u = u.substring(0, q);
+        return u.matches(".*/play/[^/]+/?");
+    }
+
+    /**
      * 网页播放页 → 直链。
      *
-     * <p>真实数据里 {@code https://play.xxx.com/play/AbCd1234} 这类地址占了一小部分，
-     * 但它们正好全是 700+ 集的长剧（点播放必然失败）。这类站点页面里的播放源就是
-     * 同路径下的 {@code index.m3u8}，先按这个规则拼一次，播放器报错再退回去解析 HTML。
+     * <p>这类站点页面里的播放源就是同路径下的 {@code index.m3u8}，先按这个规则拼一次，
+     * 播放器报错再退回去解析 HTML（见 {@link #resolvePlayPage}）。
      */
     private static String guessStreamUrl(String url) {
-        if (TextUtils.isEmpty(url)) return url;
-        if (looksLikeMedia(url)) return url;
+        if (!isPlayPage(url)) return url;
         String s = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
         return s + "/index.m3u8";
     }
