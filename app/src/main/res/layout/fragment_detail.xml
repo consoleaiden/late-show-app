@@ -262,13 +262,19 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="12dp"
                                 android:orientation="horizontal"
+                                android:baselineAligned="false"
+                                android:gravity="center_vertical"
                                 android:visibility="gone">
 
+                                <!-- 行首标签：不再占固定 42dp 列宽（会把值推到屏幕中间），
+                                     字号与值统一、两边文字中心对齐，避免小字标签显得往下错一截。 -->
                                 <TextView
                                     style="@style/MetaLabel"
-                                    android:layout_width="42dp"
+                                    android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
+                                    android:layout_marginRight="12dp"
+                                    android:gravity="center_vertical"
+                                    android:textSize="12sp"
                                     android:textColor="@color/heroT3"
                                     android:text="演员" />
 
@@ -277,9 +283,10 @@
                                     android:layout_width="0dp"
                                     android:layout_weight="1"
                                     android:layout_height="wrap_content"
+                                    android:gravity="center_vertical"
                                     android:textSize="12.5sp"
                                     android:textColor="@color/heroT2"
-                                    android:lineSpacingMultiplier="1.5"
+                                    android:lineSpacingMultiplier="1.3"
                                     android:maxLines="2"
                                     android:ellipsize="end" />
                             </LinearLayout>
@@ -291,13 +298,18 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="10dp"
                                 android:orientation="horizontal"
+                                android:baselineAligned="false"
+                                android:gravity="center_vertical"
                                 android:visibility="gone">
 
+                                <!-- 与演员行同一套行首标签规格，保证两行的值起点、垂直中心一致 -->
                                 <TextView
                                     style="@style/MetaLabel"
-                                    android:layout_width="42dp"
+                                    android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="5dp"
+                                    android:layout_marginRight="12dp"
+                                    android:gravity="center_vertical"
+                                    android:textSize="12sp"
                                     android:textColor="@color/heroT3"
                                     android:text="标签" />
 
