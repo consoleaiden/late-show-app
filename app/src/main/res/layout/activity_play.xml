@@ -159,9 +159,11 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
+                    <!-- 两个胶囊并排：各自限宽 + 省略号，窄屏也不会把更新信息挤出屏幕 -->
                     <TextView
                         android:id="@+id/chipSource"
                         style="@style/HeroChip"
+                        android:maxWidth="160dp"
                         android:background="@drawable/bg_capsule"
                         android:drawableStart="@drawable/dot_acc"
                         android:drawablePadding="6dp"
@@ -171,6 +173,7 @@
                         android:id="@+id/chipUpdate"
                         style="@style/HeroChip"
                         android:layout_marginLeft="8dp"
+                        android:maxWidth="130dp"
                         android:background="@drawable/bg_capsule"
                         android:textColor="@color/accText" />
                 </LinearLayout>
