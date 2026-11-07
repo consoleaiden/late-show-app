@@ -146,6 +146,7 @@ public class FavFragment extends Fragment {
         segFav.setTextColor(getColor(showHist ? R.color.t2 : R.color.accInk));
         segHist.setTextColor(getColor(showHist ? R.color.accInk : R.color.t2));
         render();
+        com.lateshow.app.util.UiAnim.fadeUp(grid, 8);   // 收藏 ↔ 历史：整块内容换掉，淡入一次
     }
 
     private int getColor(int id) {

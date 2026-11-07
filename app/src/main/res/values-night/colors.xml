@@ -21,8 +21,13 @@
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F00A0C0F</color>
-    <!-- 详情页配色（与浅色 themes 里的同名色一一对应，见 values/colors.xml 注释）。
-         详情页始终深色：夜间只是把底色再压暗一点，与 ink900 同色，切页不跳色。 -->
+    <!-- 详情页配色（与浅色同名色一一对应，见 values/colors.xml 注释）。
+         信息带在夜间取 #1F2228：比页底 ink900 略亮一档，形成"信息带 / 内容区"两层，
+         又不至于用 #666666 那样把整块顶得发白发亮。 -->
+    <color name="heroBand">#1F2228</color>
+    <color name="heroBandMid">#B31F2228</color>
+    <color name="heroBandFade">#001F2228</color>
+    <color name="ink900Fade">#000A0C0F</color>
     <color name="heroBg">#0A0C0F</color>
     <color name="heroBgMid">#B30A0C0F</color>
     <color name="heroBgFade">#000A0C0F</color>

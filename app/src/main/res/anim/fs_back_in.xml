@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 详情页在播放页退出时的进入动画：轻放大淡入（与 fs_out 相接，不是硬切） -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:interpolator/decelerate_cubic">
+    <alpha
+        android:fromAlpha="0"
+        android:toAlpha="1"
+        android:duration="200" />
+    <scale
+        android:fromXScale="0.94"
+        android:toXScale="1"
+        android:fromYScale="0.94"
+        android:toYScale="1"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:duration="220" />
+</set>

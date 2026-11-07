@@ -3,9 +3,18 @@
      层级：motionRoot
              ├ scrim          列表之上的压暗层（随 progress 淡入淡出）
              └ detailSurface  整页容器（跟手缩放/位移 + 圆角裁切）
-                  └ playRoot   实际内容（海报 / 信息模块 / 简介 / 选集 / 推荐）
-     详情页整体使用深色配色（heroBg 系）：海报底部的渐变只有落在深色上才不会「切一刀」，
-     明暗主题都是同一套深色，相关令牌见 colors.xml 的 heroBg 注释。 -->
+                  └ playRoot   实际内容
+                       └ scrollPlay
+                            ├ heroBand    信息带：海报 +（源站/片名/分类日期/更新/演员/标签）
+                            └ contentCol  信息带以下：简介/操作/线路/选集/推荐/相同演员
+
+     配色分两段（见 colors.xml 的 heroBand 注释）：
+       · heroBand 固定偏深色，海报底部渐变（bg_hero_fade）落在同一个色上，明暗主题都不"切一刀"；
+       · contentCol 用主题色 ink900（与设置页同底色）+ 主题文字色 t1/t2/t3，随明暗主题切换。
+
+     内嵌播放器 **覆盖** 在 heroWrap 之上（不是替换掉海报）：
+     页面高度因此不变，收起形变的几何关系始终成立；收起过程中播放器淡出，
+     露出下面一直在位的海报，落点与列表卡片像素级衔接。 -->
 <com.lateshow.app.util.HeroMotionLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/motionRoot"
@@ -36,8 +45,7 @@
             android:id="@+id/playRoot"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:background="@color/heroBg">
+            android:orientation="vertical">
 
             <ScrollView
                 android:id="@+id/scrollPlay"
@@ -51,262 +59,276 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
 
-                    <!-- 内嵌播放器（点「播放」在当前页播放，点全屏按钮才进入横屏全屏）。
-                         播放时替换海报区，出现在页面最顶部 -->
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/playerContainer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="#000000"
-                        android:visibility="gone">
-
-                        <androidx.media3.ui.PlayerView
-                            android:id="@+id/playerView"
-                            android:layout_width="0dp"
-                            android:layout_height="0dp"
-                            app:layout_constraintDimensionRatio="16:9"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:surface_type="surface_view"
-                            app:show_buffering="when_playing" />
-
-                        <TextView
-                            android:id="@+id/seekOverlay"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_margin="12dp"
-                            android:gravity="center"
-                            android:paddingLeft="14dp"
-                            android:paddingRight="14dp"
-                            android:paddingTop="7dp"
-                            android:paddingBottom="7dp"
-                            android:background="@drawable/bg_chip_dark"
-                            android:textSize="12sp"
-                            android:textColor="#FFFFFF"
-                            android:fontFamily="monospace"
-                            android:visibility="gone"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent" />
-
-                        <!-- 播放器工具：倍速 + 设置（始终悬浮在右上角） -->
-                        <LinearLayout
-                            android:id="@+id/playerTools"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginTop="6dp"
-                            android:layout_marginEnd="6dp"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent">
-
-                            <TextView
-                                android:id="@+id/btnSpeed"
-                                android:layout_width="wrap_content"
-                                android:layout_height="26dp"
-                                android:gravity="center"
-                                android:paddingLeft="10dp"
-                                android:paddingRight="10dp"
-                                android:background="@drawable/bg_chip_dark"
-                                android:alpha="0.85"
-                                android:text="1.0x"
-                                android:textSize="12sp"
-                                android:textColor="#FFFFFF"
-                                android:fontFamily="monospace"
-                                android:contentDescription="倍速" />
-
-                            <TextView
-                                android:id="@+id/btnGear"
-                                android:layout_width="26dp"
-                                android:layout_height="26dp"
-                                android:layout_marginLeft="6dp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_chip_dark"
-                                android:alpha="0.85"
-                                android:text="⚙"
-                                android:textSize="13sp"
-                                android:textColor="#FFFFFF"
-                                android:contentDescription="播放设置" />
-                        </LinearLayout>
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-
-                    <!-- 海报区：横向满屏、纵向半屏（高度在 DetailFragment 里按屏幕高度的一半设定）。
-                         顶部延伸到状态栏底下（页面是 edge-to-edge 的），
-                         图片 centerCrop 铺满，底部 heroFade 由透明渐变到 @color/heroBg -->
-                    <FrameLayout
-                        android:id="@+id/heroWrap"
-                        android:layout_width="match_parent"
-                        android:layout_height="260dp">
-
-                        <ImageView
-                            android:id="@+id/cover"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:background="@color/ink700"
-                            android:scaleType="centerCrop"
-                            android:contentDescription="海报" />
-
-                        <View
-                            android:id="@+id/heroFade"
-                            android:layout_width="match_parent"
-                            android:layout_height="168dp"
-                            android:layout_gravity="bottom"
-                            android:background="@drawable/bg_hero_fade" />
-
-                        <FrameLayout
-                            android:id="@+id/btnPlayCover"
-                            android:layout_width="52dp"
-                            android:layout_height="52dp"
-                            android:layout_gravity="center"
-                            android:background="@drawable/bg_play_cover">
-
-                            <com.airbnb.lottie.LottieAnimationView
-                                android:id="@+id/imgPlayCover"
-                                android:layout_width="22dp"
-                                android:layout_height="22dp"
-                                android:layout_gravity="center"
-                                android:tag="ic_play" />
-                        </FrameLayout>
-                    </FrameLayout>
-
-                    <!-- 信息模块：源站 / 更新信息 / 片名 / 分类·日期 / 演员 / 标签（一个整体，紧贴渐变落点） -->
+                    <!-- ==================== 信息带（固定偏深底色） ==================== -->
                     <LinearLayout
-                        android:id="@+id/infoModule"
+                        android:id="@+id/heroBand"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:paddingLeft="16dp"
-                        android:paddingRight="16dp"
-                        android:paddingTop="6dp">
+                        android:background="@color/heroBand">
 
-                        <LinearLayout
+                        <!-- 海报区：横向满屏、纵向半屏（高度在 DetailFragment 里按屏幕高度的一半设定），
+                             顶部延伸到状态栏底下（页面是 edge-to-edge 的），图片 centerCrop 铺满 -->
+                        <FrameLayout
+                            android:id="@+id/heroWrap"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
+                            android:layout_height="260dp">
 
-                            <!-- 两个胶囊并排：各自限宽 + 省略号，窄屏也不会把更新信息挤出屏幕 -->
-                            <TextView
-                                android:id="@+id/chipSource"
-                                style="@style/HeroChip"
-                                android:maxWidth="160dp"
-                                android:background="@drawable/bg_hero_chip"
-                                android:drawableStart="@drawable/dot_acc"
-                                android:drawablePadding="6dp"
-                                android:textColor="@color/heroT1" />
+                            <ImageView
+                                android:id="@+id/cover"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:background="@color/ink700"
+                                android:scaleType="centerCrop"
+                                android:contentDescription="海报" />
 
-                            <TextView
-                                android:id="@+id/chipUpdate"
-                                style="@style/HeroChip"
-                                android:layout_marginLeft="8dp"
-                                android:maxWidth="130dp"
-                                android:background="@drawable/bg_hero_chip"
-                                android:textColor="@color/heroAccText" />
-                        </LinearLayout>
+                            <!-- 渐变压在海报之上、播放器之下（见下方 heroFade）：
+                                 海报在场时由渐变过渡到信息带底色；播放器一旦显示就整块盖住它 -->
+                            <View
+                                android:id="@+id/heroFade"
+                                android:layout_width="match_parent"
+                                android:layout_height="168dp"
+                                android:layout_gravity="bottom"
+                                android:background="@drawable/bg_hero_fade" />
 
-                        <TextView
-                            android:id="@+id/tvTitle"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:textSize="21sp"
-                            android:textStyle="bold"
-                            android:textColor="@color/heroT1"
-                            android:lineSpacingMultiplier="1.18"
-                            android:maxLines="2"
-                            android:ellipsize="end" />
+                            <!-- 内嵌播放器：盖在海报之上的一层（海报仍在下面）。
+                                 点「播放」在当前页播放，点全屏按钮才进入横屏全屏。
+                                 PlayerView 填满这一层 + resize_mode=fit：16:9 画面居中，上下留黑边。 -->
+                            <androidx.constraintlayout.widget.ConstraintLayout
+                                android:id="@+id/playerContainer"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:background="#000000"
+                                android:visibility="gone">
 
-                        <TextView
-                            android:id="@+id/tvMeta"
-                            style="@style/MetaLabel"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:textColor="@color/heroT3"
-                            android:text="" />
+                                <androidx.media3.ui.PlayerView
+                                    android:id="@+id/playerView"
+                                    android:layout_width="0dp"
+                                    android:layout_height="0dp"
+                                    app:layout_constraintTop_toTopOf="parent"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintStart_toStartOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent"
+                                    app:resize_mode="fit"
+                                    app:surface_type="surface_view"
+                                    app:show_buffering="when_playing" />
 
-                        <!-- 演员：vod_actor 缺失时用服务端 star_map 命中的明星集兜底，仍为空则整行隐藏 -->
-                        <LinearLayout
-                            android:id="@+id/rowActor"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:orientation="horizontal"
-                            android:visibility="gone">
-
-                            <TextView
-                                style="@style/MetaLabel"
-                                android:layout_width="42dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:textColor="@color/heroT3"
-                                android:text="演员" />
-
-                            <TextView
-                                android:id="@+id/tvActor"
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
-                                android:layout_height="wrap_content"
-                                android:textSize="12.5sp"
-                                android:textColor="@color/heroT2"
-                                android:lineSpacingMultiplier="1.5"
-                                android:maxLines="2"
-                                android:ellipsize="end" />
-                        </LinearLayout>
-
-                        <!-- 标签：横向可滚动（标签数量不定，不换行挤压模块高度） -->
-                        <LinearLayout
-                            android:id="@+id/rowTags"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:orientation="horizontal"
-                            android:visibility="gone">
-
-                            <TextView
-                                style="@style/MetaLabel"
-                                android:layout_width="42dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="5dp"
-                                android:textColor="@color/heroT3"
-                                android:text="标签" />
-
-                            <HorizontalScrollView
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
-                                android:layout_height="wrap_content"
-                                android:scrollbars="none"
-                                android:overScrollMode="never">
-
-                                <LinearLayout
-                                    android:id="@+id/tagRow"
+                                <TextView
+                                    android:id="@+id/seekOverlay"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:orientation="horizontal" />
-                            </HorizontalScrollView>
+                                    android:layout_margin="12dp"
+                                    android:gravity="center"
+                                    android:paddingLeft="14dp"
+                                    android:paddingRight="14dp"
+                                    android:paddingTop="7dp"
+                                    android:paddingBottom="7dp"
+                                    android:background="@drawable/bg_chip_dark"
+                                    android:textSize="12sp"
+                                    android:textColor="#FFFFFF"
+                                    android:fontFamily="monospace"
+                                    android:visibility="gone"
+                                    app:layout_constraintTop_toTopOf="parent"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintStart_toStartOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent" />
+
+                                <!-- 播放器工具：倍速 + 设置（始终悬浮在右上角） -->
+                                <LinearLayout
+                                    android:id="@+id/playerTools"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal"
+                                    android:layout_marginTop="6dp"
+                                    android:layout_marginEnd="6dp"
+                                    app:layout_constraintTop_toTopOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent">
+
+                                    <TextView
+                                        android:id="@+id/btnSpeed"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="26dp"
+                                        android:gravity="center"
+                                        android:paddingLeft="10dp"
+                                        android:paddingRight="10dp"
+                                        android:background="@drawable/bg_chip_dark"
+                                        android:alpha="0.85"
+                                        android:text="1.0x"
+                                        android:textSize="12sp"
+                                        android:textColor="#FFFFFF"
+                                        android:fontFamily="monospace"
+                                        android:contentDescription="倍速" />
+
+                                    <TextView
+                                        android:id="@+id/btnGear"
+                                        android:layout_width="26dp"
+                                        android:layout_height="26dp"
+                                        android:layout_marginLeft="6dp"
+                                        android:gravity="center"
+                                        android:background="@drawable/bg_chip_dark"
+                                        android:alpha="0.85"
+                                        android:text="⚙"
+                                        android:textSize="13sp"
+                                        android:textColor="#FFFFFF"
+                                        android:contentDescription="播放设置" />
+                                </LinearLayout>
+                            </androidx.constraintlayout.widget.ConstraintLayout>
+
+                            <FrameLayout
+                                android:id="@+id/btnPlayCover"
+                                android:layout_width="52dp"
+                                android:layout_height="52dp"
+                                android:layout_gravity="center"
+                                android:background="@drawable/bg_play_cover">
+
+                                <com.airbnb.lottie.LottieAnimationView
+                                    android:id="@+id/imgPlayCover"
+                                    android:layout_width="22dp"
+                                    android:layout_height="22dp"
+                                    android:layout_gravity="center"
+                                    android:tag="ic_play" />
+                            </FrameLayout>
+                        </FrameLayout>
+
+                        <!-- 信息模块：源站 / 更新信息 / 片名 / 分类·日期 / 演员 / 标签
+                             （整块跟着信息带底色，紧贴海报渐变的落点） -->
+                        <LinearLayout
+                            android:id="@+id/infoModule"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
+                            android:paddingTop="6dp"
+                            android:paddingBottom="14dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <!-- 两个胶囊并排：各自限宽 + 省略号，窄屏也不会把更新信息挤出屏幕 -->
+                                <TextView
+                                    android:id="@+id/chipSource"
+                                    style="@style/HeroChip"
+                                    android:maxWidth="160dp"
+                                    android:background="@drawable/bg_hero_chip"
+                                    android:drawableStart="@drawable/dot_acc"
+                                    android:drawablePadding="6dp"
+                                    android:textColor="@color/heroT1" />
+
+                                <TextView
+                                    android:id="@+id/chipUpdate"
+                                    style="@style/HeroChip"
+                                    android:layout_marginLeft="8dp"
+                                    android:maxWidth="130dp"
+                                    android:background="@drawable/bg_hero_chip"
+                                    android:textColor="@color/heroAccText" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/tvTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:textSize="21sp"
+                                android:textStyle="bold"
+                                android:textColor="@color/heroT1"
+                                android:lineSpacingMultiplier="1.18"
+                                android:maxLines="2"
+                                android:ellipsize="end" />
+
+                            <TextView
+                                android:id="@+id/tvMeta"
+                                style="@style/MetaLabel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:textColor="@color/heroT3"
+                                android:text="" />
+
+                            <!-- 演员：vod_actor 缺失时用服务端 star_map 命中的明星集兜底，仍为空则整行隐藏 -->
+                            <LinearLayout
+                                android:id="@+id/rowActor"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:orientation="horizontal"
+                                android:visibility="gone">
+
+                                <TextView
+                                    style="@style/MetaLabel"
+                                    android:layout_width="42dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:textColor="@color/heroT3"
+                                    android:text="演员" />
+
+                                <TextView
+                                    android:id="@+id/tvActor"
+                                    android:layout_width="0dp"
+                                    android:layout_weight="1"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="12.5sp"
+                                    android:textColor="@color/heroT2"
+                                    android:lineSpacingMultiplier="1.5"
+                                    android:maxLines="2"
+                                    android:ellipsize="end" />
+                            </LinearLayout>
+
+                            <!-- 标签：横向可滚动（标签数量不定，不换行挤压模块高度） -->
+                            <LinearLayout
+                                android:id="@+id/rowTags"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:orientation="horizontal"
+                                android:visibility="gone">
+
+                                <TextView
+                                    style="@style/MetaLabel"
+                                    android:layout_width="42dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="5dp"
+                                    android:textColor="@color/heroT3"
+                                    android:text="标签" />
+
+                                <HorizontalScrollView
+                                    android:layout_width="0dp"
+                                    android:layout_weight="1"
+                                    android:layout_height="wrap_content"
+                                    android:scrollbars="none"
+                                    android:overScrollMode="never">
+
+                                    <LinearLayout
+                                        android:id="@+id/tagRow"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:orientation="horizontal" />
+                                </HorizontalScrollView>
+                            </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- ===================== 以下内容与顺序保持原样 ===================== -->
+                    <!-- ==================== 信息带以下：跟随主题 ==================== -->
                     <LinearLayout
                         android:id="@+id/contentCol"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
+                        android:background="@color/ink900"
                         android:paddingLeft="16dp"
                         android:paddingRight="16dp"
-                        android:paddingBottom="16dp">
+                        android:paddingTop="14dp"
+                        android:paddingBottom="20dp">
 
                         <TextView
                             android:id="@+id/tvDesc"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
                             android:textSize="13sp"
-                            android:textColor="@color/heroT2"
+                            android:textColor="@color/t2"
                             android:lineSpacingMultiplier="1.78"
                             android:maxLines="3"
                             android:ellipsize="end" />
@@ -318,7 +340,7 @@
                             android:layout_marginTop="4dp"
                             android:text="展开简介"
                             android:textSize="12sp"
-                            android:textColor="@color/heroAccText" />
+                            android:textColor="@color/accText" />
 
                         <!-- 操作行 -->
                         <LinearLayout
@@ -347,7 +369,7 @@
                                 android:layout_height="46dp"
                                 android:layout_marginLeft="10dp"
                                 android:padding="12dp"
-                                android:background="@drawable/bg_hero_btn"
+                                android:background="@drawable/bg_episode"
                                 android:tag="ic_heart"
                                 android:contentDescription="收藏" />
                         </LinearLayout>
@@ -364,8 +386,9 @@
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:orientation="horizontal">
+                            android:layout_marginTop="16dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
 
                             <TextView
                                 android:layout_width="0dp"
@@ -374,16 +397,34 @@
                                 android:text="选集"
                                 android:textSize="14sp"
                                 android:textStyle="bold"
-                                android:textColor="@color/heroT1" />
+                                android:textColor="@color/t1" />
 
                             <TextView
                                 android:id="@+id/epCount"
                                 style="@style/MetaLabel"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:textColor="@color/heroT3"
+                                android:textColor="@color/t3"
                                 android:text="-- 集" />
                         </LinearLayout>
+
+                        <!-- 选集分页：长剧（700+ 集）不一次性铺开，按 50 集一页切换，
+                             否则整页要测量上千个格子，滑动、收起都会卡 -->
+                        <HorizontalScrollView
+                            android:id="@+id/epPagerScroll"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:scrollbars="none"
+                            android:overScrollMode="never"
+                            android:visibility="gone">
+
+                            <LinearLayout
+                                android:id="@+id/epPagerRow"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal" />
+                        </HorizontalScrollView>
 
                         <androidx.recyclerview.widget.RecyclerView
                             android:id="@+id/epGrid"
@@ -392,7 +433,7 @@
                             android:layout_marginTop="8dp"
                             android:nestedScrollingEnabled="false" />
 
-                        <!-- 相关推荐：横向滚动。数据来自 VodSync v1.9.0 预计算（直连模式用同分类兜底） -->
+                        <!-- 相关推荐：横向滚动。数据来自 VodSync v1.9.0 预计算（直连模式同分类兜底） -->
                         <LinearLayout
                             android:id="@+id/relatedSection"
                             android:layout_width="match_parent"
@@ -414,14 +455,14 @@
                                     android:text="相关推荐"
                                     android:textSize="14sp"
                                     android:textStyle="bold"
-                                    android:textColor="@color/heroT1" />
+                                    android:textColor="@color/t1" />
 
                                 <TextView
                                     android:id="@+id/tvRelatedHint"
                                     style="@style/MetaLabel"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:textColor="@color/heroT3"
+                                    android:textColor="@color/t3"
                                     android:text="" />
                             </LinearLayout>
 
@@ -457,14 +498,14 @@
                                     android:text="相同演员作品"
                                     android:textSize="14sp"
                                     android:textStyle="bold"
-                                    android:textColor="@color/heroT1" />
+                                    android:textColor="@color/t1" />
 
                                 <TextView
                                     android:id="@+id/tvCastHint"
                                     style="@style/MetaLabel"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:textColor="@color/heroT3"
+                                    android:textColor="@color/t3"
                                     android:text="" />
                             </LinearLayout>
 
@@ -492,7 +533,7 @@
 
         <!-- 顶部遮罩（固定在页面之上、不随滚动移动）：
              海报还在状态栏下方时用深色遮罩，白图标才读得清；
-             海报滚出后切成底色遮罩，避免文字压到状态栏还带一层灰 -->
+             海报滚出后切成页底遮罩，避免文字压到状态栏还带一层灰 -->
         <View
             android:id="@+id/topScrim"
             android:layout_width="match_parent"

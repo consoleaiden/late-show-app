@@ -109,6 +109,16 @@ public class MainActivity extends AppCompatActivity {
         // 详情页浮层（配置变更/切主题后由 FragmentManager 自动恢复）
         detailHost = findViewById(R.id.detailHost);
         detailFragment = (DetailFragment) fm.findFragmentByTag(DetailFragment.TAG);
+        // 「详情页内跳详情」会短暂同时存在两张详情页（新的叠在旧的上面，展开后再摘旧的）。
+        // 如果正好在这个窗口里重建（切主题/旋屏），把底下那张清理掉，只保留最上面一张
+        java.util.ArrayList<DetailFragment> details = new java.util.ArrayList<>();
+        for (Fragment f : fm.getFragments()) {
+            if (f instanceof DetailFragment) details.add((DetailFragment) f);
+        }
+        for (int i = 0; i < details.size() - 1; i++) {
+            fm.beginTransaction().remove(details.get(i)).commitNowAllowingStateLoss();
+        }
+        if (!details.isEmpty()) detailFragment = details.get(details.size() - 1);
         detailBack = new OnBackPressedCallback(false) {
             @Override public void handleOnBackPressed() {
                 if (detailFragment != null) detailFragment.requestClose();
@@ -147,17 +157,14 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 打开影片详情（全屏 Fragment 浮层）。
      *
-     * @param source 列表卡片的封面容器；非空时取其屏幕坐标，详情页据此从卡片位置展开、
-     *               收起时再缩回去（一镜到底）。详情页内跳详情传 null，直接展开无转场。
+     * @param source 列表/推荐卡片的封面容器；非空时取其屏幕坐标，详情页据此从卡片位置展开、
+     *               收起时再缩回去（一镜到底）。
      */
     public void openDetail(CardItem item, View source) {
         if (isFinishing() || item == null) return;
-        // 已在详情页：先把旧的摘掉，再以新内容展开（详情页内点相关推荐）
-        if (detailFragment != null) {
-            getSupportFragmentManager().beginTransaction()
-                    .remove(detailFragment).commitNowAllowingStateLoss();
-            detailFragment = null;
-        }
+        final DetailFragment prev = detailFragment;
+        // 已在详情页（点相关推荐/相同演员）：旧页先留着当背景——新页要从被点的那张卡片形变展开，
+        // 如果先把旧页摘掉，形变起点背后会直接露出首页列表，看起来像闪了一下
         int[] card = null;
         if (source != null && source.getWidth() > 0 && source.getHeight() > 0) {
             int[] loc = new int[2];
@@ -172,8 +179,17 @@ public class MainActivity extends AppCompatActivity {
                 .commitNow();
         detailFragment = f;
         detailBack.setEnabled(true);
-        // 详情页整页深色 → 状态栏图标固定白色
+        // 详情页信息带是深色 → 状态栏图标固定白色
         setLightStatusBarIcons(false);
+
+        if (prev != null) {
+            // 新页展开到位后再摘旧页：这一刻两张页面的形变已经接上，摘掉不会被看见
+            f.setOnEnterEnd(() -> {
+                if (!prev.isAdded()) return;
+                getSupportFragmentManager().beginTransaction()
+                        .remove(prev).commitAllowingStateLoss();
+            });
+        }
     }
 
     /** 详情页收起动画结束后回调：隐藏浮层、恢复系统栏图标配色 */
@@ -246,16 +262,22 @@ public class MainActivity extends AppCompatActivity {
     private void switchTab(Fragment target, int tab) {
         if (curTab == tab && active != null) return;
         FragmentManager fm = getSupportFragmentManager();
+        boolean animate = curTab != -1 && active != target;
         FragmentTransaction tx = fm.beginTransaction();
         for (Fragment f : fm.getFragments()) if (f != detailFragment) tx.hide(f);
         if (target.isAdded()) tx.show(target);
         else tx.add(R.id.container, target, TAGS[tab]);
         tx.commit();
+        fm.executePendingTransactions();   // 立刻落地，下面才能对已 attach 的视图做动画
         active = target;
-
-        boolean animate = curTab != -1;
         curTab = tab;
+        if (animate) crossFadeIn(target.getView());
         renderTabs(tab, animate);
+    }
+
+    /** 页面切换：新页从下方 8dp 处淡入（旧页在同一次 commit 里隐藏），避免硬切 */
+    private void crossFadeIn(View v) {
+        com.lateshow.app.util.UiAnim.fadeUp(v, 8);
     }
 
     /** 渲染导航选中态：颜色渐变 + 图标播放一次 + 光斑/指示条展开（无文字标签） */

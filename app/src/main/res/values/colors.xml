@@ -21,15 +21,24 @@
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F7F8FA</color>
-    <!-- ============ 详情页配色（唯一配置项，明暗主题都是一套深色） ============
-         详情页是「看片页」：整页用深色，海报底部的渐变才是从画面自然溶进底色，
-         浅色主题下如果用白底，海报边界会像被切了一刀（亮部海报尤其明显）。
-         海报底部渐变 = heroBgFade(全透明) → heroBgMid → heroBg(不透明)，
-         页面底色同样是 heroBg —— 三者同源，改这里就能整体换掉详情页的过渡色。
-         调色时建议 heroBgMid 取 heroBg 的 ~70% 不透明度，过渡才不会出现色阶断层。 -->
-    <color name="heroBg">#14171E</color>
-    <color name="heroBgMid">#B314171E</color>
-    <color name="heroBgFade">#0014171E</color>
+    <!-- ============ 详情页配色（唯一配置项） ============
+         详情页分两段：
+         ① 信息带 heroBand —— 海报 +（源站 / 片名 / 分类日期 / 更新信息 / 演员 / 标签）。
+            这段固定用偏深底色，海报底部的渐变才有地方落，不会像被切了一刀。
+            浅色主题 #666666；夜间取 #1F2228（夜间再用 #666666 会比整页更亮，观感反转）。
+         ② 信息带以下（简介 / 操作 / 线路 / 选集 / 推荐 / 相同演员）—— 沿用主题底色 ink900，
+            与设置页同色，随明暗主题切换。
+         海报底部渐变 = heroBandFade(全透明) → heroBandMid(半透) → heroBand(不透明)，
+         三者与信息带底色同源，改这里就能整体换掉过渡色。 -->
+    <color name="heroBand">#666666</color>
+    <color name="heroBandMid">#B3666666</color>
+    <color name="heroBandFade">#00666666</color>
+    <!-- 详情页滚动后顶部用的底色遮罩（渐变到透明）：与 ink900 同源 -->
+    <color name="ink900Fade">#00F2F3F6</color>
+    <!-- 页面整体底色（收起时淡出用）：与主题页底一致 -->
+    <color name="heroBg">#F2F3F6</color>
+    <color name="heroBgMid">#B3F2F3F6</color>
+    <color name="heroBgFade">#00F2F3F6</color>
     <!-- 详情页文字/容器令牌：深色底上的三级文字 + 卡片面 + 分隔线 -->
     <color name="heroT1">#F3F5F8</color>
     <color name="heroT2">#A6AEBA</color>

@@ -35,6 +35,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -78,8 +79,9 @@ import java.util.Set;
  * 卡片的屏幕坐标随列表滚动变化，因此 ds_closed 状态在运行时用 ConstraintSet 覆盖
  * （见 {@link #buildClosedState()}）。
  *
- * <p>详情页整页使用深色配色（heroBg 系，明暗主题都是深色）：海报底部的渐变只有落在深色上
- * 才不会像被切了一刀，同时海报可以直接延伸到状态栏下面（edge-to-edge）。
+ * <p>配色分两段（见 colors.xml 的 heroBand 注释）：信息带（海报 + 片名 / 分类 / 演员 / 标签）
+ * 固定用偏深底色 {@code heroBand}，海报底部的渐变才有落点；信息带以下（简介 / 选集 / 推荐）
+ * 用主题页底 {@code ink900}（与设置页同色）和主题文字色，随明暗主题切换。
  */
 public class DetailFragment extends Fragment {
 
@@ -105,6 +107,17 @@ public class DetailFragment extends Fragment {
     /** 收起到底时页面的圆角，对齐列表卡片封面 */
     private static final int CARD_RADIUS_DP = 8;
 
+    /** 兜底解析网页播放页用（只在 ExoPlayer 报错时触发一次，不进主流程） */
+    private static final String UA_MOBILE =
+            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
+                    + "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+    private static final java.util.regex.Pattern M3U8_PATTERN =
+            java.util.regex.Pattern.compile("https?://[^\"'\\s<>\\\\]+\\.m3u8[^\"'\\s<>\\\\]*");
+    private static final okhttp3.OkHttpClient pageHttp = new okhttp3.OkHttpClient.Builder()
+            .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .build();
+
     private String slug, sourceName, title, pic, remark;
     private long vodId;
     private Models.VideoDetail detail;
@@ -114,12 +127,32 @@ public class DetailFragment extends Fragment {
 
     private HeroMotionLayout motion;
     private View scrim, surface, playRoot, topScrim, statusScrim, heroFade;
-    /** 整页底色：收起时淡到全透明，只留海报落到卡片上（否则会出现一块比卡片大的深色板） */
+    /** 整页底色（信息带以下，与主题页底同色）：收起时淡到全透明，只留海报落到卡片上 */
     private ColorDrawable pageBg;
+    /** 信息带底色（海报 + 信息模块）：同样在收起时淡出，否则会留一块比卡片大的灰板 */
+    private ColorDrawable bandBg;
+    private View heroBand;
     private FrameLayout heroWrap;
     private ImageView cover;
-    private LinearLayout infoModule, contentCol, tagRow;
+    private View btnPlayCover;
+    private LinearLayout infoModule, contentCol, tagRow, epPagerRow;
+    private android.widget.HorizontalScrollView epPagerScroll;
     private android.widget.ScrollView scrollPlay;
+
+    /** 选集分页：长剧一次铺 700+ 格会让整页测量卡死，按页切换（见 epPagerRow） */
+    private int epPage = 0;
+    private int epPageSize = 50;
+    private int epSpan = 5;
+    /** 内嵌播放中：收起不再走淡出，而是播放器淡出、露出海报后照常形变 */
+    private boolean inlineActive = false;
+    /** 上次看到的集数（只用来把历史里看过的集数画成弱色，避免每次 bind 都读一遍 SharedPreferences） */
+    private int historyEp = -1;
+    private String curRawUrl;      // 原始地址（可能是网页播放页）
+    private String curPlayUrl;     // 归一化后真正在播的直链
+    private long curStartMs;
+    private boolean triedHtmlResolve;
+    /** 进场动画结束后回调（详情页内跳详情时，宿主靠它摘掉下面的旧页） */
+    private Runnable enterEndAction;
     private int[] cardBounds;
     private boolean closing = false;      // 收起过程（决定末端是否整页淡出）
     private boolean dismissed = false;
@@ -217,10 +250,14 @@ public class DetailFragment extends Fragment {
         statusScrim = v.findViewById(R.id.statusScrim);
         heroFade = v.findViewById(R.id.heroFade);
         scrollPlay = v.findViewById(R.id.scrollPlay);
+        heroBand = v.findViewById(R.id.heroBand);
         heroWrap = v.findViewById(R.id.heroWrap);
         cover = v.findViewById(R.id.cover);
+        btnPlayCover = v.findViewById(R.id.btnPlayCover);
         infoModule = v.findViewById(R.id.infoModule);
         contentCol = v.findViewById(R.id.contentCol);
+        epPagerScroll = v.findViewById(R.id.epPagerScroll);
+        epPagerRow = v.findViewById(R.id.epPagerRow);
 
         tvTitle = v.findViewById(R.id.tvTitle);
         tvMeta = v.findViewById(R.id.tvMeta);
@@ -252,7 +289,10 @@ public class DetailFragment extends Fragment {
         // 封面播放键在深色圆钮上，固定白色
         LottieIcon.tint(v.findViewById(R.id.imgPlayCover), 0xF2FFFFFF);
 
-        pageBg = new ColorDrawable(getColor(R.color.heroBg));
+        // 页面分两段：信息带（固定偏深底）+ 信息带以下（跟随主题的页底）
+        bandBg = new ColorDrawable(getColor(R.color.heroBand));
+        heroBand.setBackground(bandBg);
+        pageBg = new ColorDrawable(getColor(R.color.ink900));
         playRoot.setBackground(pageBg);
 
         // 海报区：横向满屏、纵向半屏（屏幕高度的一半）
@@ -380,17 +420,29 @@ public class DetailFragment extends Fragment {
                 buildClosedState();
                 boolean morph = cardBounds != null && cardBounds.length == 4;
                 if (restore || !morph) {
-                    // 重建，或没有卡片起点（详情页内跳详情）：直接以展开态出现
+                    // 重建，或没有卡片起点（详情页内跳详情且来源卡片已不存在）：直接以展开态出现
                     setP(0f);
+                    fireEnterEnd();
                 } else {
                     closing = false;
                     setP(1f);
-                    animateTo(1f, 0f, ENTER_MS, new DecelerateInterpolator(1.5f), null);
+                    animateTo(1f, 0f, ENTER_MS, new DecelerateInterpolator(1.5f), DetailFragment.this::fireEnterEnd);
                 }
                 surface.setVisibility(View.VISIBLE);
                 return true;
             }
         });
+    }
+
+    /** 进场动画结束（含「无转场直接展开」的情况）：宿主用它来摘掉下面那张旧的详情页 */
+    public void setOnEnterEnd(Runnable r) {
+        this.enterEndAction = r;
+    }
+
+    private void fireEnterEnd() {
+        Runnable r = enterEndAction;
+        enterEndAction = null;
+        if (r != null) r.run();
     }
 
     /**
@@ -445,10 +497,17 @@ public class DetailFragment extends Fragment {
         float contentAlpha = 1f - smooth(0.15f, 0.55f, p);
         infoModule.setAlpha(contentAlpha);
         contentCol.setAlpha(contentAlpha);
-        // 整页底色和海报底部渐变一起淡出（只在下拉收起时）：露出的就是后面的视频列表
+        // 整页底色（信息带 + 下方内容区）和海报底部渐变一起淡出（只在下拉收起时）：
+        // 露出的就是后面的视频列表，最后只剩海报压在卡片上
         float bgAlpha = 1f - smooth(0.45f, 0.88f, p);
         pageBg.setAlpha(Math.round(255 * bgAlpha));
+        bandBg.setAlpha(Math.round(255 * bgAlpha));
         heroFade.setAlpha(bgAlpha);
+        // 内嵌播放中：收起时让播放器先淡出，露出下面一直在位的海报，
+        // 这样落点仍然是海报↔卡片，不会出现「视频缩成一张卡片」的跳变
+        if (inlineActive && playerContainer != null) {
+            playerContainer.setAlpha(1f - smooth(0.52f, 0.90f, p));
+        }
         radiusPx = dp(CARD_RADIUS_DP) * p;
         surface.invalidateOutline();
         heroWrap.invalidateOutline();
@@ -486,11 +545,12 @@ public class DetailFragment extends Fragment {
         if (dismissed || motion == null || getView() == null) return;
         closing = true;
         cancelMotionAnim();
-        // 已经滚离海报 / 没有卡片起点（形变终点不可见）：直接淡出收场
+        // 海报已经被滚出屏幕（或没有卡片起点＝详情页内跳详情）：形变终点看不到，改「缩小 + 淡出」收场
         if (cardBounds == null || cardBounds.length != 4
-                || scrollPlay.getScrollY() > heroWrap.getHeight() / 2) {
+                || scrollPlay.getScrollY() > heroWrap.getHeight()) {
             final View root = getView();
-            root.animate().alpha(0f).setDuration(180).withEndAction(this::dismiss).start();
+            root.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f)
+                    .setDuration(200).withEndAction(this::dismiss).start();
             return;
         }
         animateTo(motion.getProgress(), 1f, CLOSE_MS, new AccelerateInterpolator(1.3f),
@@ -500,6 +560,7 @@ public class DetailFragment extends Fragment {
     private void dismiss() {
         if (dismissed) return;
         dismissed = true;
+        inlineActive = false;
         cancelMotionAnim();
         releasePlayer();
         if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).onDetailClosed();
@@ -549,7 +610,7 @@ public class DetailFragment extends Fragment {
     /** 收藏态：心形描边(未收藏) / 实心(已收藏)，animate=true 时播放描边→实心过渡 */
     private void syncFavState(boolean animate) {
         boolean fav = PrefStore.get().isFav(slug, vodId);
-        LottieIcon.tint(btnFav, getColor(fav ? R.color.acc : R.color.heroT2));
+        LottieIcon.tint(btnFav, getColor(fav ? R.color.acc : R.color.t2));
         if (animate) {
             if (fav) {
                 btnFav.setSpeed(1f);
@@ -756,76 +817,178 @@ public class DetailFragment extends Fragment {
         if (desc == null || desc.isEmpty()) desc = "暂无简介";
         tvDesc.setText(desc);
 
-        // 断点续播：读取历史
+        // 断点续播：读取历史（线路 + 集数都要恢复；只恢复集数会在多线路时对不上集）
         PrefStore.HistItem h = PrefStore.get().getHist(slug, vodId);
-        if (h != null && h.epIndex > 0) curEp = h.epIndex;
+        if (h != null) {
+            historyEp = h.epIndex;
+            if (h.lineIndex > 0) curLine = h.lineIndex;
+            if (h.epIndex > 0) curEp = h.epIndex;
+        }
+        if (curLine >= playList().size()) curLine = 0;
+        epPage = Math.max(0, curEp / Math.max(1, epPageSize));
 
-        // 线路
-        final List<Models.PlayLine> ls = detail.vodPlayList != null ? detail.vodPlayList : new ArrayList<>();
-        if (ls.size() > 1) {
-            lines.setVisibility(View.VISIBLE);
-            lines.setLayoutManager(new LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false));
-            RecyclerView.Adapter<RecyclerView.ViewHolder> la = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-                @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int vt) {
-                    return new RecyclerView.ViewHolder(getLayoutInflater().inflate(R.layout.item_line, p, false)) {};
-                }
-                @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder vh, int pos) {
-                    TextView tv = (TextView) vh.itemView;
-                    Models.PlayLine l = ls.get(pos);
-                    tv.setText(l.name != null ? l.name : "线路" + (pos + 1));
-                    boolean sel = pos == curLine;
-                    tv.setBackgroundResource(sel ? R.drawable.bg_episode_current : R.drawable.bg_hero_btn);
-                    tv.setTextColor(getColor(sel ? R.color.heroAccText : R.color.heroT2));
-                    tv.setOnClickListener(v -> {
-                        curLine = pos;
-                        curEp = 0;
-                        notifyDataSetChanged();
-                        if (epGrid.getAdapter() != null) epGrid.getAdapter().notifyDataSetChanged();
-                        updatePlayLabel();
-                    });
-                }
-                @Override public int getItemCount() { return ls.size(); }
-            };
-            lines.setAdapter(la);
-        } else {
-            lines.setVisibility(View.GONE);
+        renderLines();
+        renderEpisodes();
+
+        if (h != null && h.playedSec > 0) {
+            btnPlay.setText("继续播放 · " + epName(curEp));
         }
 
-        // 选集网格
-        List<Models.Episode> eps = currentEpisodes();
-        epCount.setText(eps.size() + " 集");
-        epGrid.setLayoutManager(new GridLayoutManager(requireContext(), 5));
-        RecyclerView.Adapter<RecyclerView.ViewHolder> ea = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        loadRelated();
+        loadCast();
+    }
+
+    /** 线路选择：多线路才显示；切换线路会把集数归零并重排选集 */
+    private void renderLines() {
+        final List<Models.PlayLine> ls = playList();
+        if (ls.size() <= 1) {
+            lines.setVisibility(View.GONE);
+            return;
+        }
+        lines.setVisibility(View.VISIBLE);
+        lines.setLayoutManager(new LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false));
+        lines.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int vt) {
+                return new RecyclerView.ViewHolder(getLayoutInflater().inflate(R.layout.item_line, p, false)) {};
+            }
+            @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder vh, int pos) {
+                TextView tv = (TextView) vh.itemView;
+                Models.PlayLine l = ls.get(pos);
+                tv.setText(l != null && l.name != null ? l.name : "线路" + (pos + 1));
+                boolean sel = pos == curLine;
+                tv.setBackgroundResource(sel ? R.drawable.bg_episode_current : R.drawable.bg_episode);
+                tv.setTextColor(getColor(sel ? R.color.accText : R.color.t2));
+                tv.setOnClickListener(v -> {
+                    if (curLine == pos) return;
+                    curLine = pos;
+                    curEp = 0;
+                    epPage = 0;
+                    notifyDataSetChanged();
+                    renderEpisodes();
+                });
+            }
+            @Override public int getItemCount() { return ls.size(); }
+        });
+    }
+
+    /**
+     * 选集网格（分页）。
+     *
+     * <p>真实数据里有 700+ 集的长剧：一次性铺开会把整页测量量顶到上千个 View，
+     * 滑动和收起都会卡，所以按 {@link #epPageSize} 分页，页内再按最长集名自适应列数
+     * （综艺类的「第20261030期」在 5 列里会被截成马赛克，自动降到 3 列）。
+     */
+    private void renderEpisodes() {
+        final List<Models.Episode> eps = currentEpisodes();
+        if (!eps.isEmpty()) {
+            if (curEp >= eps.size()) curEp = eps.size() - 1;
+            if (curEp < 0) curEp = 0;
+        }
+
+        // 列数 / 每页条数：先量最长集名，再定列数，页大小 = 列数 × 8 行
+        epSpan = chooseSpan(eps);
+        int pageSize = Math.max(1, epSpan * 8);
+        if (pageSize != epPageSize) {
+            epPageSize = pageSize;
+            epPage = curEp / epPageSize;
+        }
+        int totalPages = Math.max(1, (eps.size() + epPageSize - 1) / epPageSize);
+        if (epPage >= totalPages) epPage = totalPages - 1;
+        if (epPage < 0) epPage = 0;
+
+        final int from = epPage * epPageSize;
+        final int to = Math.min(eps.size(), from + epPageSize);
+        final int base = from;   // lambda 里要用，必须 effectively final
+
+        if (eps.isEmpty()) {
+            epCount.setText("暂无选集");
+        } else if (eps.size() > epPageSize) {
+            epCount.setText("共 " + eps.size() + " 集 · " + (from + 1) + "-" + to);
+        } else {
+            epCount.setText(eps.size() + " 集");
+        }
+
+        buildEpPager(totalPages, eps.size());
+
+        epGrid.setLayoutManager(new GridLayoutManager(requireContext(), epSpan));
+        epGrid.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int vt) {
                 return new RecyclerView.ViewHolder(getLayoutInflater().inflate(R.layout.item_episode, p, false)) {};
             }
             @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder vh, int pos) {
                 TextView tv = (TextView) vh.itemView;
-                Models.Episode e = eps.get(pos);
-                tv.setText(e.name != null ? e.name : "第" + (pos + 1) + "集");
-                boolean cur = pos == curEp;
-                boolean watched = h != null && pos < h.epIndex;
-                tv.setBackgroundResource(cur ? R.drawable.bg_episode_current : R.drawable.bg_hero_episode);
-                tv.setTextColor(getColor(cur ? R.color.heroAccText
-                        : (watched ? R.color.heroT3 : R.color.heroT2)));
+                final int idx = base + pos;
+                Models.Episode e = idx < eps.size() ? eps.get(idx) : null;
+                tv.setText(e != null && e.name != null && !e.name.isEmpty()
+                        ? e.name : "第" + (idx + 1) + "集");
+                boolean cur = idx == curEp;
+                boolean watched = historyEp > 0 && idx < historyEp;
+                tv.setBackgroundResource(cur ? R.drawable.bg_episode_current : R.drawable.bg_episode);
+                tv.setTextColor(getColor(cur ? R.color.accText
+                        : (watched ? R.color.t3 : R.color.t2)));
                 tv.setOnClickListener(v -> {
-                    curEp = pos;
+                    curEp = idx;
                     notifyDataSetChanged();
                     if (lines.getAdapter() != null) lines.getAdapter().notifyDataSetChanged();
                     playCurrent(0);
                 });
             }
-            @Override public int getItemCount() { return eps.size(); }
-        };
-        epGrid.setAdapter(ea);
+            @Override public int getItemCount() { return Math.max(0, to - from); }
+        });
         updatePlayLabel();
+    }
 
-        if (h != null && h.playedSec > 0) {
-            btnPlay.setText("继续播放 · " + (eps.isEmpty() ? "" : epName(curEp)));
+    /** 长剧分页条：每页一个胶囊「1-40 / 41-80 …」，只有一页时整条隐藏 */
+    private void buildEpPager(int totalPages, int total) {
+        if (epPagerScroll == null || epPagerRow == null) return;
+        epPagerRow.removeAllViews();
+        if (totalPages <= 1) {
+            epPagerScroll.setVisibility(View.GONE);
+            return;
         }
+        epPagerScroll.setVisibility(View.VISIBLE);
+        for (int i = 0; i < totalPages; i++) {
+            final int page = i;
+            int start = i * epPageSize + 1;
+            int end = Math.min(total, (i + 1) * epPageSize);
+            TextView tv = new TextView(requireContext());
+            tv.setText(start + "-" + end);
+            tv.setTextSize(11f);
+            tv.setGravity(android.view.Gravity.CENTER);
+            tv.setPadding(dp(10), dp(5), dp(10), dp(5));
+            boolean sel = i == epPage;
+            tv.setBackgroundResource(sel ? R.drawable.bg_episode_current : R.drawable.bg_episode);
+            tv.setTextColor(getColor(sel ? R.color.accText : R.color.t2));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.rightMargin = dp(6);
+            tv.setLayoutParams(lp);
+            tv.setOnClickListener(v -> {
+                if (epPage == page) return;
+                epPage = page;
+                curEp = page * epPageSize;      // 翻页后把「当前集」带到该页第一集
+                renderEpisodes();
+                epGrid.scrollToPosition(0);
+            });
+            epPagerRow.addView(tv);
+        }
+    }
 
-        loadRelated();
-        loadCast();
+    /** 按最长集名挑列数：保证每个格子放得下一个完整集名（不含边距），3~5 列之间钳制 */
+    private int chooseSpan(List<Models.Episode> eps) {
+        android.graphics.Paint paint = new android.graphics.Paint();
+        paint.setTextSize(android.util.TypedValue.applyDimension(
+                android.util.TypedValue.COMPLEX_UNIT_SP, 12f, getResources().getDisplayMetrics()));
+        float max = 0;
+        for (Models.Episode e : eps) {
+            if (e == null || e.name == null) continue;
+            max = Math.max(max, paint.measureText(e.name));
+        }
+        if (max <= 0) max = paint.measureText("第88集");
+        int avail = getResources().getDisplayMetrics().widthPixels - dp(32);  // 内容区左右各 16dp
+        float need = max + dp(16);                                           // 格内留白 + 边距
+        int span = (int) Math.floor(avail / Math.max(need, (float) dp(52)));
+        return Math.max(3, Math.min(5, span));
     }
 
     /** 相关推荐：详情响应里内嵌了就直接用（NAS 模式零额外请求），否则按数据源能力补拉一次 */
@@ -895,7 +1058,7 @@ public class DetailFragment extends Fragment {
                     score.setVisibility(View.GONE);
                 }
                 v.setOnClickListener(x -> openOther(c.source != null && !c.source.isEmpty() ? c.source : slug,
-                        c.vodId, c.vodName, c.vodPic, c.vodRemarks, c.sourceName));
+                        c.vodId, c.vodName, c.vodPic, c.vodRemarks, c.sourceName, cover));
             }
             @Override public int getItemCount() { return list.size(); }
         });
@@ -983,7 +1146,7 @@ public class DetailFragment extends Fragment {
                 boolean sel = t == null ? curStarTab == null : t.equals(curStarTab);
                 tv.setText(t == null ? "全部" : tabLabel(t));
                 tv.setBackgroundResource(sel ? R.drawable.bg_seg_on : R.drawable.bg_seg_off);
-                tv.setTextColor(getColor(sel ? R.color.maskText : R.color.heroT2));
+                tv.setTextColor(getColor(sel ? R.color.maskText : R.color.t2));
                 vh.itemView.setOnClickListener(x -> {
                     boolean same = t == null ? curStarTab == null : t.equals(curStarTab);
                     if (same) return;
@@ -1024,7 +1187,7 @@ public class DetailFragment extends Fragment {
                     tag.setVisibility(View.GONE);
                 }
                 v.setOnClickListener(x -> openOther(c.source != null && !c.source.isEmpty() ? c.source : slug,
-                        c.vodId, c.vodName, c.vodPic, c.vodRemarks, null));
+                        c.vodId, c.vodName, c.vodPic, c.vodRemarks, null, cover));
             }
             @Override public int getItemCount() { return castFiltered().size(); }
         });
@@ -1105,11 +1268,63 @@ public class DetailFragment extends Fragment {
         return total != null && total > 0 ? term + "·" + total : term;
     }
 
+    /**
+     * 统一取播放线路。
+     *
+     * <p>NAS 详情接口会直接给结构化的 vod_play_list；直连模式和一些旧缓存只有
+     * vod_play_url 原始串（"线路$$$线路"，线路内 "集名$地址#集名$地址"）。
+     * 这里统一补齐，避免出现「接口有播放地址但选集是空的、点播放没反应」。
+     */
+    private List<Models.PlayLine> playList() {
+        if (detail == null) return new ArrayList<>();
+        if (detail.vodPlayList != null && !detail.vodPlayList.isEmpty()) return detail.vodPlayList;
+        if (!TextUtils.isEmpty(detail.vodPlayUrl)) {
+            detail.vodPlayList = parsePlayUrl(detail.vodPlayUrl);
+        }
+        return detail.vodPlayList != null ? detail.vodPlayList : new ArrayList<>();
+    }
+
+    /** 客户端兜底解析 vod_play_url（与 VodSync 的 parse_play_url 规则一致） */
+    private static List<Models.PlayLine> parsePlayUrl(String raw) {
+        List<Models.PlayLine> out = new ArrayList<>();
+        if (TextUtils.isEmpty(raw)) return out;
+        int li = 0;
+        for (String line : raw.split("\\$\\$\\$")) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            List<Models.Episode> eps = new ArrayList<>();
+            for (String seg : line.split("#")) {
+                seg = seg.trim();
+                if (seg.isEmpty()) continue;
+                Models.Episode e = new Models.Episode();
+                int cut = seg.indexOf('$');
+                if (cut > 0) {
+                    e.name = seg.substring(0, cut).trim();
+                    e.url = seg.substring(cut + 1).trim();
+                } else {
+                    e.name = "EP" + li;
+                    e.url = seg;
+                }
+                if (!TextUtils.isEmpty(e.url)) eps.add(e);
+            }
+            if (!eps.isEmpty()) {
+                Models.PlayLine pl = new Models.PlayLine();
+                pl.name = "线路" + (li + 1);
+                pl.episodes = eps;
+                out.add(pl);
+            }
+            li++;
+        }
+        return out;
+    }
+
     private List<Models.Episode> currentEpisodes() {
-        if (detail == null || detail.vodPlayList == null || detail.vodPlayList.isEmpty()) return new ArrayList<>();
-        if (curLine >= detail.vodPlayList.size()) curLine = 0;
-        List<Models.Episode> eps = detail.vodPlayList.get(curLine).episodes;
-        return eps != null ? eps : new ArrayList<>();
+        List<Models.PlayLine> ls = playList();
+        if (ls.isEmpty()) return new ArrayList<>();
+        if (curLine < 0 || curLine >= ls.size()) curLine = 0;
+        Models.PlayLine l = ls.get(curLine);
+        if (l == null || l.episodes == null) return new ArrayList<>();
+        return l.episodes;
     }
 
     private String epName(int idx) {
@@ -1120,6 +1335,13 @@ public class DetailFragment extends Fragment {
     }
 
     private void updatePlayLabel() {
+        if (btnPlay == null) return;
+        List<Models.Episode> eps = currentEpisodes();
+        if (eps.isEmpty()) {
+            // 没有可播地址时按钮文案要说清楚，别留一个「播放 · 」让人以为点了没反应
+            btnPlay.setText("暂无可播放的选集");
+            return;
+        }
         PrefStore.HistItem h = PrefStore.get().getHist(slug, vodId);
         String prefix;
         if (player != null) {
@@ -1185,6 +1407,10 @@ public class DetailFragment extends Fragment {
         }
         if (curEp >= eps.size()) curEp = 0;
         Models.Episode e = eps.get(curEp);
+        if (e == null || TextUtils.isEmpty(e.url)) {
+            toast("该集没有播放地址，试试切换线路");
+            return;
+        }
 
         PrefStore.HistItem h = PrefStore.get().getHist(slug, vodId);
         long startMs = seekMs;
@@ -1210,10 +1436,14 @@ public class DetailFragment extends Fragment {
     /** 在详情页内嵌窗口播放（横版 16:9），不进入全屏 */
     private void startInline(String url, long startMs) {
         curUrl = url;
-        // 海报区让位给播放器：信息模块随之上移，页面结构与顺序不变
-        heroWrap.setVisibility(View.GONE);
+        inlineActive = true;
+        triedHtmlResolve = false;
+        // 播放器盖在海报之上（海报不隐藏）：页面高度不变，收起形变的对应关系仍然成立
         playerContainer.setVisibility(View.VISIBLE);
-        // 内嵌播放时整页高度变化，收起动画的卡片对应关系已失效，禁掉下拉关闭更稳
+        playerContainer.setAlpha(1f);
+        btnPlayCover.setVisibility(View.GONE);
+        // 点「播放」时页面通常停在简介/选集处，滚回顶部让画面可见，否则会以为没播
+        scrollPlay.smoothScrollTo(0, 0);
         if (player == null) {
             DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                     .setAllowCrossProtocolRedirects(true)
@@ -1246,15 +1476,109 @@ public class DetailFragment extends Fragment {
                     updatePlayLabel();
                     syncKeepScreenOn();
                 }
+                @Override public void onPlayerError(PlaybackException error) {
+                    // 有些源站的 "播放地址" 其实是一个网页播放页，ExoPlayer 拿到 HTML 必然失败：
+                    // 先尝试从页面里把真正的 m3u8 抠出来重试一次，还不行才提示（并建议换线路）
+                    if (!triedHtmlResolve && curRawUrl != null && !looksLikeMedia(curRawUrl)) {
+                        triedHtmlResolve = true;
+                        resolvePlayPage(curRawUrl, curStartMs);
+                        return;
+                    }
+                    toast("播放失败：" + describe(error) + "，可试试切换线路");
+                }
             });
             attachSeekGesture();
             saveHandler.postDelayed(saveTick, 5000);
         }
-        // 若播放地址由本服务代理转发，补上 token 参数（第三方 CDN 直链原样播放）
-        String playUrl = VodSyncApi.get().decorate(url);
+        playUrl(url, startMs);
+    }
+
+    /** 真正下发给播放器的地址：网页播放页先归一化成直链（见 {@link #guessStreamUrl}） */
+    private void playUrl(String rawUrl, long startMs) {
+        if (player == null) return;
+        curRawUrl = rawUrl;
+        curStartMs = startMs;
+        curPlayUrl = guessStreamUrl(rawUrl);
+        String playUrl = VodSyncApi.get().decorate(curPlayUrl);
         player.setMediaItem(MediaItem.fromUri(playUrl), Math.max(0, startMs));
         player.prepare();
         player.play();
+    }
+
+    private static final String[] MEDIA_EXT =
+            {".m3u8", ".mp4", ".flv", ".mkv", ".ts", ".mov", ".webm"};
+
+    /** 是否已经是可直接播放的媒体地址（按扩展名判断，查询串先去掉） */
+    private static boolean looksLikeMedia(String url) {
+        if (TextUtils.isEmpty(url)) return false;
+        String u = url.toLowerCase();
+        int q = u.indexOf('?');
+        if (q > 0) u = u.substring(0, q);
+        for (String ext : MEDIA_EXT) {
+            if (u.endsWith(ext)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 网页播放页 → 直链。
+     *
+     * <p>真实数据里 {@code https://play.xxx.com/play/AbCd1234} 这类地址占了一小部分，
+     * 但它们正好全是 700+ 集的长剧（点播放必然失败）。这类站点页面里的播放源就是
+     * 同路径下的 {@code index.m3u8}，先按这个规则拼一次，播放器报错再退回去解析 HTML。
+     */
+    private static String guessStreamUrl(String url) {
+        if (TextUtils.isEmpty(url)) return url;
+        if (looksLikeMedia(url)) return url;
+        String s = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+        return s + "/index.m3u8";
+    }
+
+    /** 兜底：抓播放页 HTML，把里面第一个 m3u8 地址抠出来再播一次 */
+    private void resolvePlayPage(final String rawUrl, final long startMs) {
+        new Thread(() -> {
+            String found = null;
+            try {
+                okhttp3.Request req = new okhttp3.Request.Builder()
+                        .url(rawUrl)
+                        .header("User-Agent", UA_MOBILE)
+                        .build();
+                try (okhttp3.Response resp = pageHttp.newCall(req).execute()) {
+                    String body = resp.body() != null ? resp.body().string() : "";
+                    java.util.regex.Matcher m = M3U8_PATTERN.matcher(body);
+                    if (m.find()) found = m.group();
+                }
+            } catch (Exception ignore) {
+                // 抓不到就按失败处理，下面统一提示
+            }
+            final String url = found;
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (!isAdded() || player == null) return;
+                if (url != null) {
+                    triedHtmlResolve = false;   // 换了地址重新给一次机会
+                    playUrl(url, startMs);
+                } else {
+                    toast("该线路只提供网页播放页，无法直接播放，请切换线路");
+                }
+            });
+        }).start();
+    }
+
+    private static String describe(PlaybackException e) {
+        if (e == null) return "未知错误";
+        switch (e.errorCode) {
+            case PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS:
+                return "地址返回异常";
+            case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED:
+                return "网络连接失败";
+            case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT:
+                return "网络超时";
+            case PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED:
+            case PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED:
+                return "该地址不是视频流";
+            default:
+                return "解码失败(" + e.getErrorCodeName() + ")";
+        }
     }
 
     /** 内嵌播放/缓冲期间保持屏幕常亮；暂停、播完、idle 时恢复系统息屏策略 */
@@ -1295,7 +1619,7 @@ public class DetailFragment extends Fragment {
         long pos = player.getCurrentPosition();
         player.pause();
         Intent it = new Intent(requireContext(), PlayerActivity.class);
-        it.putExtra("url", curUrl);
+        it.putExtra("url", curPlayUrl != null ? curPlayUrl : guessStreamUrl(curUrl));
         it.putExtra("title", title + " · " + epName(curEp));
         it.putExtra("slug", slug);
         it.putExtra("vodId", vodId);
@@ -1307,6 +1631,10 @@ public class DetailFragment extends Fragment {
         it.putExtra("sourceName", sourceName);
         it.putExtra("startMs", pos);
         fsLauncher.launch(it);
+        // 进出全屏都用「放大/缩小 + 淡入淡出」接住，不再是系统默认的左右滑
+        if (getActivity() != null) {
+            getActivity().overridePendingTransition(R.anim.fs_in, R.anim.fs_out);
+        }
     }
 
     /** 每 5 秒落一次播放进度（收藏/历史页可实时展示），顺带做「跳过片尾」检查 */
@@ -1357,8 +1685,15 @@ public class DetailFragment extends Fragment {
 
     // ==================== 工具 ====================
 
-    /** 详情页内跳到另一部片：没有列表卡片坐标，直接以展开态打开（无转场） */
-    private void openOther(String s, long id, String t, String p, String r, String srcName) {
+    /**
+     * 详情页内跳到另一部片（相关推荐 / 相同演员）。
+     *
+     * <p>转场：把被点的那张卡片的封面当作「卡片坐标」传给新详情页，新页从这张封面形变展开；
+     * 旧详情页先留着当背景，新页展开完成后由 {@link MainActivity} 摘掉（见 setOnEnterEnd）。
+     *
+     * @param source 被点卡片的封面 ImageView；为 null 时（例如数据里没有封面视图）退化为直接展开
+     */
+    private void openOther(String s, long id, String t, String p, String r, String srcName, View source) {
         if (!(getActivity() instanceof MainActivity)) return;
         final MainActivity act = (MainActivity) getActivity();
         final CardItem item = new CardItem();
@@ -1371,7 +1706,7 @@ public class DetailFragment extends Fragment {
         // 延后一帧再换页：当前这次点击还在这张卡片的 onClick 里，等事件分发结束再拆视图
         new Handler(Looper.getMainLooper()).post(() -> {
             if (act.isFinishing() || act.isDestroyed()) return;
-            act.openDetail(item, null);
+            act.openDetail(item, source);
         });
     }
 

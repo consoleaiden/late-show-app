@@ -107,6 +107,7 @@ public class HomeFragment extends Fragment {
 
         chipAdapter = new ChipAdapter(c -> {
             curCategory = c == null ? null : c.typeName;
+            com.lateshow.app.util.UiAnim.fadeUp(grid, 8);   // 换分类＝整批内容换掉，给一次淡入
             reload();
         });
         chips.setLayoutManager(new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false));
@@ -350,11 +351,12 @@ public class HomeFragment extends Fragment {
         if (histPanel.getVisibility() != View.VISIBLE) histPageNo = 0;
         renderHistory();
         histPanel.setVisibility(View.VISIBLE);
+        com.lateshow.app.util.UiAnim.slideUp(histPanel, 12, 220);
     }
 
     private void hideHistory() {
         if (histPanel != null && histPanel.getVisibility() == View.VISIBLE) {
-            histPanel.setVisibility(View.GONE);
+            com.lateshow.app.util.UiAnim.fadeOut(histPanel, 120, () -> histPanel.setVisibility(View.GONE));
         }
     }
 

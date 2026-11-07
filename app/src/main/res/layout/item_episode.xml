@@ -5,9 +5,9 @@
     android:layout_height="38dp"
     android:gravity="center"
     android:layout_margin="3dp"
-    android:background="@drawable/bg_hero_episode"
+    android:background="@drawable/bg_episode"
     android:textSize="12sp"
-    android:textColor="@color/heroT2"
+    android:textColor="@color/t2"
     android:fontFamily="monospace"
     android:maxLines="1"
     android:ellipsize="end" />

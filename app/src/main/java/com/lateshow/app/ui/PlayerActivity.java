@@ -48,8 +48,7 @@ public class PlayerActivity extends AppCompatActivity {
     };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        PrefStore.init(this);
+    protected void onCreate(Bundle savedInstanceState) {        PrefStore.init(this);
         com.lateshow.app.util.ApiCache.init(this);
         com.lateshow.app.util.OfflineMedia.init(this);
         com.lateshow.app.util.ThemeManager.apply(this);
@@ -271,6 +270,13 @@ public class PlayerActivity extends AppCompatActivity {
         h.totalSec = totalSec;
         h.lastPlayedAt = System.currentTimeMillis();
         PrefStore.get().saveHist(h);
+    }
+
+    /** 退出全屏：与进场对称的缩放淡出，回到详情页内嵌播放器时不会硬切 */
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.fs_back_in, R.anim.fs_out);
     }
 
     @Override

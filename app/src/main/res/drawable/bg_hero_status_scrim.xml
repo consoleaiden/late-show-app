@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 滚动后盖在状态栏下的底色遮罩：由 heroBg 不透明渐变到透明 -->
+<!-- 滚动后盖在状态栏下的底色遮罩：由页底 ink900 不透明渐变到透明。
+     信息带以下的内容区是与设置页同色的 ink900，所以这里不能用信息带的 heroBand 色，
+     否则滚过海报之后，状态栏下面会挂一层和正文不一样的灰。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
         android:angle="270"
-        android:startColor="@color/heroBg"
-        android:endColor="@color/heroBgFade"
+        android:startColor="@color/ink900"
+        android:endColor="@color/ink900Fade"
         android:type="linear" />
 </shape>
