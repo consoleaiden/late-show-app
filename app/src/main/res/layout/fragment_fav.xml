@@ -111,6 +111,16 @@
             android:paddingTop="2dp"
             android:clipToPadding="false" />
 
+        <!-- 首屏骨架屏：收藏/历史都是本地读取，磁盘 stat 较慢时先占位，避免空列表一闪 -->
+        <LinearLayout
+            android:id="@+id/skeletonBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:paddingTop="2dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fabTop"
             android:layout_width="wrap_content"

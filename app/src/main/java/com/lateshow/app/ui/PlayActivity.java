@@ -1,7 +1,10 @@
 package com.lateshow.app.ui;
 
+import android.app.ActivityOptions;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -26,6 +29,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import com.google.android.material.transition.MaterialContainerTransform;
 import com.lateshow.app.MainActivity;
 import com.lateshow.app.R;
 import com.lateshow.app.adapter.VideoAdapter;
@@ -51,6 +55,10 @@ public class PlayActivity extends AppCompatActivity {
     private int curLine = 0, curEp = 0;
     /** true = 详情来自本地缓存（服务器不可达），此时界面标注「离线」 */
     private boolean offlineMode = false;
+
+    // 一镜到底（MaterialContainerTransform）：卡片封面容器 → 整页容器
+    private static final String HERO_NAME = "ls_hero";   // 与 activity_play.xml 里 playRoot 的 transitionName 一致
+    private boolean heroPostponed = false;               // 进入动画是否还在等封面就绪
 
     private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount, badge, breadcrumb;
     private com.airbnb.lottie.LottieAnimationView btnFav;
@@ -105,6 +113,7 @@ public class PlayActivity extends AppCompatActivity {
         applyTheme();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_play);
+        setupHeroTransition(savedInstanceState);
         com.lateshow.app.util.LottieIcon.bindTree(findViewById(android.R.id.content));
         // 封面播放键在深色圆钮上，固定白色
         android.view.View playCover = findViewById(R.id.imgPlayCover);
@@ -145,7 +154,12 @@ public class PlayActivity extends AppCompatActivity {
         breadcrumb.setText("DETAIL / " + (sourceName != null ? sourceName : slug));
         badge.setText(remark != null && !remark.isEmpty() ? remark : "详情");
         if (pic != null) {
-            Glide.with(this).load(pic).placeholder(R.color.ink700).centerCrop().into((android.widget.ImageView) findViewById(R.id.cover));
+            // 封面就绪后再放行进入动画（否则放大的是空占位块）
+            Glide.with(this).load(pic).placeholder(R.color.ink700).centerCrop()
+                    .addListener(heroImageListener())
+                    .into((android.widget.ImageView) findViewById(R.id.cover));
+        } else {
+            startHeroTransition();
         }
 
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
@@ -200,6 +214,69 @@ public class PlayActivity extends AppCompatActivity {
 
     private void applyTheme() {
         com.lateshow.app.util.ThemeManager.apply(this);
+    }
+
+    // ---------- 一镜到底（容器变换） ----------
+
+    /**
+     * 进入/返回统一用 MaterialContainerTransform：
+     * 起始 = 列表卡片的封面容器（8dp 圆角、9:16），结束 = 本页整页容器（playRoot）。
+     * 动画期间整页内容作为一张快照随容器一起缩放，形成「卡片展开成页面」的观感。
+     */
+    private void setupHeroTransition(Bundle st) {
+        if (Build.VERSION.SDK_INT < 21) return;
+        android.view.Window w = getWindow();
+        w.setSharedElementEnterTransition(heroTransform(true));
+        w.setSharedElementReturnTransition(heroTransform(false));
+        // 没有共享元素的入口（详情页内跳详情）退化为淡入，避免瞬切
+        w.setEnterTransition(new android.transition.Fade().setDuration(200));
+        w.setReturnTransition(new android.transition.Fade().setDuration(160));
+        // 封面（Glide）与布局就绪前不启动动画，否则会先闪一帧空页面。
+        // 旋转/主题重建（st != null）时没有共享元素入口，不需要等待。
+        if (st == null) {
+            supportPostponeEnterTransition();
+            heroPostponed = true;
+            // 兜底：封面迟迟不回调（弱网且无缓存）时 900ms 后照常进入，避免卡在空白页
+            new Handler(Looper.getMainLooper()).postDelayed(this::startHeroTransition, 900);
+        }
+    }
+
+    private MaterialContainerTransform heroTransform(boolean entering) {
+        MaterialContainerTransform t = new MaterialContainerTransform(this, entering);
+        t.setDrawingViewId(android.R.id.content);
+        t.setDuration(380);
+        t.setScrimColor(Color.TRANSPARENT);
+        // THROUGH：起止快照交叉淡化，适合「整页内容展开」；IN 会先淡出背景再淡入内容，观感更碎
+        t.setFadeMode(MaterialContainerTransform.FADE_MODE_THROUGH);
+        return t;
+    }
+
+    /** 放行被 postpone 的进入动画（幂等：图片回调与兜底定时器只会生效一次） */
+    private void startHeroTransition() {
+        if (!heroPostponed) return;
+        heroPostponed = false;
+        supportStartPostponedEnterTransition();
+    }
+
+    /** 封面加载完成 / 失败都放行动画：失败时用占位底色展开，不影响功能 */
+    private com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> heroImageListener() {
+        return new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+            @Override public boolean onLoadFailed(
+                    @androidx.annotation.Nullable com.bumptech.glide.load.engine.GlideException e,
+                    Object model,
+                    com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                    boolean isFirstResource) {
+                startHeroTransition();
+                return false;
+            }
+            @Override public boolean onResourceReady(
+                    android.graphics.drawable.Drawable resource, Object model,
+                    com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                    com.bumptech.glide.load.DataSource dataSource, boolean isFirstResource) {
+                startHeroTransition();
+                return false;
+            }
+        };
     }
 
     /** 收藏态：心形描边(未收藏) / 实心(已收藏)，animate=true 时播放描边→实心过渡 */
@@ -910,6 +987,14 @@ public class PlayActivity extends AppCompatActivity {
     }
 
     public static void start(Context ctx, CardItem item) {
+        start(ctx, item, null);
+    }
+
+    /**
+     * 带共享元素的启动：source 为列表卡片的封面容器，进入时由 MaterialContainerTransform
+     * 把卡片展开成本页整页容器；source 为 null（详情页内跳详情）时走普通转场。
+     */
+    public static void start(Context ctx, CardItem item, View source) {
         Intent it = new Intent(ctx, PlayActivity.class);
         it.putExtra("slug", item.slug);
         it.putExtra("vodId", item.vodId);
@@ -917,6 +1002,12 @@ public class PlayActivity extends AppCompatActivity {
         it.putExtra("pic", item.pic);
         it.putExtra("remark", item.remark);
         it.putExtra("sourceName", item.sourceName);
-        ctx.startActivity(it);
+        if (source != null && Build.VERSION.SDK_INT >= 21 && ctx instanceof android.app.Activity) {
+            ActivityOptions opts = ActivityOptions.makeSceneTransitionAnimation(
+                    (android.app.Activity) ctx, source, HERO_NAME);
+            ctx.startActivity(it, opts.toBundle());
+        } else {
+            ctx.startActivity(it);
+        }
     }
 }

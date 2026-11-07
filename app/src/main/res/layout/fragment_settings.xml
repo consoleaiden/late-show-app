@@ -478,6 +478,14 @@
 
                 <!-- 运行概览 -->
                 <LinearLayout
+                    android:id="@+id/statsSkeleton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="vertical"
+                    android:visibility="gone" />
+
+                <LinearLayout
                     android:id="@+id/statsGrid"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -629,6 +637,15 @@
                     android:nestedScrollingEnabled="false"
                     android:layout_marginTop="4dp" />
 
+                <!-- 源站列表骨架：/api/v1/sources 返回前占位，避免控制台一片空白 -->
+                <LinearLayout
+                    android:id="@+id/srcSkeleton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical"
+                    android:visibility="gone" />
+
                 <!-- 最近同步日志 -->
                 <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="最近同步日志" />
 
@@ -638,6 +655,15 @@
                     android:layout_height="wrap_content"
                     android:nestedScrollingEnabled="false"
                     android:layout_marginTop="6dp" />
+
+                <!-- 日志骨架：/api/v1/logs 返回前占位 -->
+                <LinearLayout
+                    android:id="@+id/logSkeleton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="vertical"
+                    android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
 

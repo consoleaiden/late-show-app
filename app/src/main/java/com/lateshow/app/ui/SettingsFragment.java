@@ -1,6 +1,7 @@
 package com.lateshow.app.ui;
 
 import androidx.appcompat.app.AlertDialog;
+import android.animation.ObjectAnimator;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -31,6 +32,7 @@ import com.lateshow.app.api.VodSyncApi;
 import com.lateshow.app.model.Models;
 import com.lateshow.app.store.PrefStore;
 import com.lateshow.app.ui.HomeFragment;
+import com.lateshow.app.util.Skeleton;
 import com.lateshow.app.util.TimeUtil;
 import com.lateshow.app.util.UpdateChecker;
 
@@ -56,6 +58,25 @@ public class SettingsFragment extends Fragment {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean polling = false;
     private Models.PauseState pauseState = new Models.PauseState();
+
+    // 同步控制台骨架屏（stats / sources / logs 三个网络请求返回前的占位）
+    private LinearLayout statsSkeleton, srcSkeleton, logSkeleton;
+    // 每块独立持有一个呼吸动画：同一 Animator 只能绑一个 target，三个动画同时 start 保持同相位
+    private final ObjectAnimator[] animStats = new ObjectAnimator[1];
+    private final ObjectAnimator[] animSrc = new ObjectAnimator[1];
+    private final ObjectAnimator[] animLog = new ObjectAnimator[1];
+    private final Handler skelHandler = new Handler(Looper.getMainLooper());
+    private boolean skelShown = false;          // 是否已经显示过（避免 5 秒轮询反复闪）
+    private final Runnable skelShowTask = new Runnable() {
+        @Override public void run() {
+            if (!isAdded() || statsSkeleton == null) return;
+            if (skelShown) return;
+            skelShown = true;
+            Skeleton.show(statsSkeleton, animStats);
+            Skeleton.show(srcSkeleton, animSrc);
+            Skeleton.show(logSkeleton, animLog);
+        }
+    };
 
     /** 手风琴面板：同一时间只展开一个 */
     private static final int[] PANEL_HEADERS = {
@@ -271,7 +292,45 @@ public class SettingsFragment extends Fragment {
             }, 700);
         });
 
+        setupConsoleSkeleton(v);
         refreshConsole(true);
+    }
+
+    // ---------- 同步控制台骨架屏（仅覆盖异步区域：统计卡 / 源站列表 / 日志） ----------
+
+    /** 构占位块：静态开关与输入框保持原样，只给「网络返回前是空白」的三块区域占位 */
+    private void setupConsoleSkeleton(View v) {
+        statsSkeleton = v.findViewById(R.id.statsSkeleton);
+        srcSkeleton = v.findViewById(R.id.srcSkeleton);
+        logSkeleton = v.findViewById(R.id.logSkeleton);
+        if (getContext() == null) return;
+        if (statsSkeleton != null) statsSkeleton.addView(Skeleton.statCards(requireContext(), 2));
+        if (srcSkeleton != null) srcSkeleton.addView(Skeleton.settingRows(requireContext(), 4));
+        if (logSkeleton != null) logSkeleton.addView(Skeleton.settingRows(requireContext(), 3));
+    }
+
+    /** 延迟 220ms 显示：本地秒回（直连模式 / 已登录且缓存命中）时不闪骨架 */
+    private void showConsoleSkeletonDelayed() {
+        if (skelShown) return;
+        skelHandler.removeCallbacks(skelShowTask);
+        skelHandler.postDelayed(skelShowTask, 220);
+    }
+
+    private void hideConsoleSkeleton() {
+        skelHandler.removeCallbacks(skelShowTask);
+        Skeleton.hide(statsSkeleton, animStats);
+        Skeleton.hide(srcSkeleton, animSrc);
+        Skeleton.hide(logSkeleton, animLog);
+    }
+
+    @Override
+    public void onDestroyView() {
+        skelHandler.removeCallbacks(skelShowTask);
+        hideConsoleSkeleton();
+        statsSkeleton = srcSkeleton = logSkeleton = null;
+        // Fragment 实例在配置变更（切主题）后会被复用，新 view 需要重新允许骨架显示
+        skelShown = false;
+        super.onDestroyView();
     }
 
     /** 顶部状态条：显示服务端是否开启鉴权、Token 是否已配置；连接结果同时驱动模块标题图标的绿/灰 */
@@ -581,7 +640,11 @@ public class SettingsFragment extends Fragment {
     /** 拉取 stats / sources / pause / logs（NAS 专属，直连模式跳过） */
     private void refreshConsole(boolean alsoStats) {
         if (!isAdded()) return;
-        if (com.lateshow.app.api.Catalogs.isStatic()) return;
+        if (com.lateshow.app.api.Catalogs.isStatic()) {
+            hideConsoleSkeleton();
+            return;
+        }
+        showConsoleSkeletonDelayed();
         VodSyncApi.get().get("/api/v1/pause", null, Models.PauseResp.class,
             new VodSyncApi.ApiCb<Models.PauseResp>() {
                 @Override public void onOk(Models.PauseResp r) {
@@ -601,28 +664,38 @@ public class SettingsFragment extends Fragment {
             new VodSyncApi.ApiCb<Models.SyncSourcesResp>() {
                 @Override public void onOk(Models.SyncSourcesResp r) {
                     if (!isAdded()) return;
+                    Skeleton.hide(srcSkeleton, animSrc);
                     srcAdapter.setItems(r.list != null ? r.list : new ArrayList<>());
                     syncSelectionUi();
                 }
-                @Override public void onErr(String m) { }
+                @Override public void onErr(String m) {
+                    // 失败也要收起骨架，否则一直转在占位态看起来像卡死
+                    if (isAdded()) Skeleton.hide(srcSkeleton, animSrc);
+                }
             });
 
         VodSyncApi.get().get("/api/v1/logs", HomeFragment.map("limit", "10"), Models.LogsResp.class,
             new VodSyncApi.ApiCb<Models.LogsResp>() {
                 @Override public void onOk(Models.LogsResp r) {
                     if (!isAdded()) return;
+                    Skeleton.hide(logSkeleton, animLog);
                     logAdapter.setItems(r.list != null ? r.list : new ArrayList<>());
                 }
-                @Override public void onErr(String m) { }
+                @Override public void onErr(String m) {
+                    if (isAdded()) Skeleton.hide(logSkeleton, animLog);
+                }
             });
 
         VodSyncApi.get().get("/api/v1/stats", null, Models.StatsResp.class,
             new VodSyncApi.ApiCb<Models.StatsResp>() {
                 @Override public void onOk(Models.StatsResp r) {
                     if (!isAdded()) return;
+                    Skeleton.hide(statsSkeleton, animStats);
                     renderStats(r);
                 }
-                @Override public void onErr(String m) { }
+                @Override public void onErr(String m) {
+                    if (isAdded()) Skeleton.hide(statsSkeleton, animStats);
+                }
             });
     }
 
@@ -1140,6 +1213,8 @@ public class SettingsFragment extends Fragment {
                 : "已切回 NAS 同步库");
         // 切回 NAS 模式：模块重新可见，立即自动测一次播放源连通性以点亮标题图标
         if (mode == com.lateshow.app.api.Catalog.MODE_SYNC) refreshAuthBadge();
+        // 直连模式不拉控制台数据：收起骨架，避免残留占位
+        if (mode == com.lateshow.app.api.Catalog.MODE_STATIC) hideConsoleSkeleton();
         if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).notifyDataSourceChanged();
         }

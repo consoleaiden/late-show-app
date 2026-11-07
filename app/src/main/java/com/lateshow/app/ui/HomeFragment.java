@@ -114,7 +114,7 @@ public class HomeFragment extends Fragment {
         chips.setHasFixedSize(true);
 
         videoAdapter = new VideoAdapter(new VideoAdapter.OnClick() {
-            @Override public void onCard(CardItem item) { openDetail(item); }
+            @Override public void onCard(CardItem item, View source) { openDetail(item, source); }
             @Override public void onDelete(CardItem item) { /* 首页卡片无删除 */ }
         });
         GridLayoutManager glm = new GridLayoutManager(getContext(), 3);
@@ -183,10 +183,10 @@ public class HomeFragment extends Fragment {
         reload();
     }
 
-    private void openDetail(CardItem item) {
+    private void openDetail(CardItem item, View source) {
         // 关键词检索后点开影片也算一次有效搜索：记录历史（覆盖「打字后直接点卡片」的场景）
         if (keyword != null && !keyword.isEmpty()) PrefStore.get().addSearchHistory(keyword);
-        if (getContext() != null) PlayActivity.start(getContext(), item);
+        if (getContext() != null) PlayActivity.start(getContext(), item, source);
     }
 
     // ---------- 首屏骨架屏 ----------

@@ -30,7 +30,8 @@ import java.util.List;
 public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
 
     public interface OnClick {
-        void onCard(CardItem item);
+        /** source = 封面容器（共享元素，用于「卡片展开成详情页」的容器变换） */
+        void onCard(CardItem item, View source);
         /** 收藏/历史卡片封面上的删除按钮 */
         void onDelete(CardItem item);
     }
@@ -152,7 +153,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
                 .into(h.cover);
 
         h.itemView.setOnClickListener(v -> {
-            if (listener != null) listener.onCard(it);
+            if (listener != null) listener.onCard(it, h.coverBox);
         });
         h.btnDel.setOnClickListener(v -> {
             // 点删除时播放一次垃圾桶盖摇摆

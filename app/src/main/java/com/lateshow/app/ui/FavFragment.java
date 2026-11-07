@@ -1,9 +1,13 @@
 package com.lateshow.app.ui;
 
+import android.animation.ObjectAnimator;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -17,6 +21,7 @@ import com.lateshow.app.adapter.VideoAdapter;
 import com.lateshow.app.model.CardItem;
 import com.lateshow.app.store.PrefStore;
 import com.lateshow.app.util.OfflineMedia;
+import com.lateshow.app.util.Skeleton;
 import com.lateshow.app.util.TimeUtil;
 
 import java.util.ArrayList;
@@ -29,6 +34,18 @@ public class FavFragment extends Fragment {
     private RecyclerView grid;
     private VideoAdapter adapter;
     private boolean showHist = false;
+
+    // 首屏骨架屏（构建在 XML 的 skeletonBox 里，延迟 220ms 仍未出数据才显示）
+    private LinearLayout skeletonBox;
+    private final ObjectAnimator[] skelAnim = new ObjectAnimator[1];
+    private final Handler skelHandler = new Handler(Looper.getMainLooper());
+    private final Runnable skelShowTask = new Runnable() {
+        @Override public void run() {
+            if (!isAdded() || skeletonBox == null || adapter == null) return;
+            if (adapter.getItemCount() > 0) return;   // 已出数据：不显示
+            Skeleton.show(skeletonBox, skelAnim);
+        }
+    };
 
     @Nullable
     @Override
@@ -48,7 +65,7 @@ public class FavFragment extends Fragment {
         grid = v.findViewById(R.id.grid);
 
         adapter = new VideoAdapter(new VideoAdapter.OnClick() {
-            @Override public void onCard(CardItem item) { openDetail(item); }
+            @Override public void onCard(CardItem item, View source) { openDetail(item, source); }
             @Override public void onDelete(CardItem item) { confirmDelete(item); }
         });
         grid.setLayoutManager(new GridLayoutManager(getContext(), 3));
@@ -85,7 +102,36 @@ public class FavFragment extends Fragment {
             toast("播放历史已清空");
         });
 
+        setupSkeleton(v);
         render();
+    }
+
+    // ---------- 首屏骨架屏 ----------
+
+    /** 骨架屏：3×3 海报卡占位（封面 8dp 圆角块 + 标题两行灰条，与首页首屏骨架同款） */
+    private void setupSkeleton(View v) {
+        skeletonBox = v.findViewById(R.id.skeletonBox);
+        if (skeletonBox == null || getContext() == null) return;
+        skeletonBox.addView(Skeleton.posterGrid(requireContext(), 3, 3));
+    }
+
+    /** 延迟 220ms 再显示：本地记录少时渲染在 220ms 内完成，不会闪一下骨架 */
+    private void showSkeletonDelayed() {
+        skelHandler.removeCallbacks(skelShowTask);
+        skelHandler.postDelayed(skelShowTask, 220);
+    }
+
+    private void hideSkeleton() {
+        skelHandler.removeCallbacks(skelShowTask);
+        Skeleton.hide(skeletonBox, skelAnim);
+    }
+
+    @Override
+    public void onDestroyView() {
+        skelHandler.removeCallbacks(skelShowTask);
+        Skeleton.hide(skeletonBox, skelAnim);
+        skeletonBox = null;
+        super.onDestroyView();
     }
 
     private void toast(String s) {
@@ -106,8 +152,8 @@ public class FavFragment extends Fragment {
         return androidx.core.content.ContextCompat.getColor(requireContext(), id);
     }
 
-    private void openDetail(CardItem item) {
-        if (getContext() != null) PlayActivity.start(getContext(), item);
+    private void openDetail(CardItem item, View source) {
+        if (getContext() != null) PlayActivity.start(getContext(), item, source);
     }
 
     /** 封面右上角删除：确认后移除收藏/播放记录（收藏连带清理离线播放数据） */
@@ -149,6 +195,8 @@ public class FavFragment extends Fragment {
     private void render() {
         final boolean hist = showHist;
         if (!isAdded()) return;
+        // 列表为空才可能看到空白：届时先占位（有数据时切换 Tab 直接换内容，不闪骨架）
+        if (adapter.getItemCount() == 0) showSkeletonDelayed();
         CARD_EXEC.execute(() -> {
             final List<CardItem> cards = new ArrayList<>();
             final int[] cachedCount = {0};
@@ -194,6 +242,7 @@ public class FavFragment extends Fragment {
             requireActivity().runOnUiThread(() -> {
                 // 期间用户已切换 Tab 或页面已销毁：丢弃这次结果
                 if (!isAdded() || hist != showHist || getView() == null) return;
+                hideSkeleton();
                 adapter.setItems(cards);
                 if (hist) {
                     subTitle.setText(cards.size() + " 条记录 · 支持断点续播");
