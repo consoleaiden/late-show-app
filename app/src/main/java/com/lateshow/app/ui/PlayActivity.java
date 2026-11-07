@@ -1,14 +1,22 @@
 package com.lateshow.app.ui;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.RectF;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
-
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
@@ -26,7 +34,8 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
-import com.lateshow.app.MainActivity;
+import com.bumptech.glide.load.DecodeFormat;
+import com.bumptech.glide.request.target.CustomTarget;
 import com.lateshow.app.R;
 import com.lateshow.app.adapter.VideoAdapter;
 import com.lateshow.app.api.VodSyncApi;
@@ -35,14 +44,16 @@ import com.lateshow.app.model.Models;
 import com.lateshow.app.store.PrefStore;
 import com.lateshow.app.util.ApiCache;
 import com.lateshow.app.util.GestureSeek;
+import com.lateshow.app.util.HeroMorphView;
 import com.lateshow.app.util.OfflineMedia;
+import com.lateshow.app.util.TimeUtil;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** 播放详情页：竖版海报 + 简介 + 收藏 + 线路/选集网格 + 内嵌播放器（点全屏进横屏） */
+/** 播放详情页：上半屏海报（满宽×半屏，底部渐变到主题底色）+ 信息模块 + 简介/选集/推荐 + 内嵌播放器 */
 public class PlayActivity extends AppCompatActivity {
 
     private String slug, sourceName, title, pic, remark;
@@ -52,16 +63,24 @@ public class PlayActivity extends AppCompatActivity {
     /** true = 详情来自本地缓存（服务器不可达），此时界面标注「离线」 */
     private boolean offlineMode = false;
 
-    // 一镜到底（跨 Activity 手绘转场）：卡片快照放大铺满 → 页面淡入覆盖
+    // 一镜到底（跨 Activity 手绘转场）：卡片海报 → 铺满全屏 → 落到本页上半屏的海报位
     private static final String EXTRA_HERO = "heroBounds";   // [x, y, w, h] 屏幕坐标
-    private static final int HERO_IN_MS = 380;
-    private static final int HERO_OUT_MS = 260;
+    private static final int HERO_EXPAND_MS = 210;   // 第一段：卡片 → 全屏
+    private static final int HERO_SETTLE_MS = 330;   // 第二段：全屏 → 半屏海报位
+    private static final int HERO_OUT_MS = 300;      // 返回：海报位 → 卡片
     private View playRoot;
-    private View heroOverlay;      // 进入动画期间垫在最底层的卡片快照
+    private android.widget.ImageView cover;      // 上半屏海报（满宽 × 半屏）
+    private View heroWrap;                       // 海报区容器（内嵌播放时整体隐藏）
     private int[] heroBounds;
-    private boolean heroAnimating = false;   // 返回动画进行中：拦截重复触发
+    private boolean heroAnimating = false;       // 返回动画进行中：拦截重复触发
+    private android.graphics.Bitmap heroBitmap;  // 转场专用位图（与海报同 URL，命中 Glide 缓存）
+    private HeroMorphView heroMorph;             // 进入动画中的形变层（返回时要先撤销）
+    private final List<ValueAnimator> heroAnims = new ArrayList<>();
 
-    private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount, badge, breadcrumb;
+    private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount,
+            chipSource, chipUpdate, tvActor;
+    private View rowActor, rowTags;
+    private android.widget.LinearLayout tagRow;   // 标签小胶囊的横向容器
     private com.airbnb.lottie.LottieAnimationView btnFav;
     private RecyclerView lines, epGrid;
 
@@ -91,7 +110,7 @@ public class PlayActivity extends AppCompatActivity {
     private ExoPlayer player;
     private PlayerView playerView;
     private TextView seekOverlay;
-    private View playerContainer, posterBox;
+    private View playerContainer;
     private String curUrl;
     private final Handler saveHandler = new Handler(Looper.getMainLooper());
 
@@ -114,6 +133,9 @@ public class PlayActivity extends AppCompatActivity {
         applyTheme();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_play);
+        // 窗口底色跟随详情页主题底色：转场淡入淡出期间不会露出主题里另一套 ink900，
+        // 换 @color/heroBg 时整页过渡保持一致（见 colors.xml 的 heroBg 注释）
+        getWindow().setBackgroundDrawableResource(R.color.heroBg);
         // 整页转场由本页手绘完成，关掉系统 Activity 动画，避免两套动画叠在一起
         overridePendingTransition(0, 0);
         com.lateshow.app.util.LottieIcon.bindTree(findViewById(android.R.id.content));
@@ -136,8 +158,12 @@ public class PlayActivity extends AppCompatActivity {
         btnPlay = findViewById(R.id.btnPlay);
         btnFav = findViewById(R.id.btnFav);
         epCount = findViewById(R.id.epCount);
-        badge = findViewById(R.id.badge);
-        breadcrumb = findViewById(R.id.breadcrumb);
+        chipSource = findViewById(R.id.chipSource);
+        chipUpdate = findViewById(R.id.chipUpdate);
+        tvActor = findViewById(R.id.tvActor);
+        rowActor = findViewById(R.id.rowActor);
+        rowTags = findViewById(R.id.rowTags);
+        tagRow = findViewById(R.id.tagRow);
         lines = findViewById(R.id.lines);
         epGrid = findViewById(R.id.epGrid);
         relatedSection = findViewById(R.id.relatedSection);
@@ -150,20 +176,27 @@ public class PlayActivity extends AppCompatActivity {
         playerView = findViewById(R.id.playerView);
         seekOverlay = findViewById(R.id.seekOverlay);
         playerContainer = findViewById(R.id.playerContainer);
-        posterBox = findViewById(R.id.posterBox);
+        cover = findViewById(R.id.cover);
+        heroWrap = findViewById(R.id.heroWrap);
         playRoot = findViewById(R.id.playRoot);
 
+        // 海报区：横向满屏、纵向半屏（屏幕高度的一半）。转场第二段会以这里的实际位置为终点
+        ViewGroup.LayoutParams hlp = heroWrap.getLayoutParams();
+        hlp.height = getResources().getDisplayMetrics().heightPixels / 2;
+        heroWrap.setLayoutParams(hlp);
+
         tvTitle.setText(title);
-        breadcrumb.setText("DETAIL / " + (sourceName != null ? sourceName : slug));
-        badge.setText(remark != null && !remark.isEmpty() ? remark : "详情");
+        String srcLabel = sourceName != null && !sourceName.isEmpty() ? sourceName : slug;
+        if (srcLabel != null && !srcLabel.isEmpty()) chipSource.setText(srcLabel);
+        else chipSource.setVisibility(View.GONE);
+        if (remark != null && !remark.trim().isEmpty()) chipUpdate.setText(remark.trim());
+        else chipUpdate.setVisibility(View.GONE);
         if (pic != null) {
-            Glide.with(this).load(pic).placeholder(R.color.ink700).centerCrop()
-                    .into((android.widget.ImageView) findViewById(R.id.cover));
+            Glide.with(this).load(pic).placeholder(R.color.ink700).centerCrop().into(cover);
         }
         startHeroEnter(savedInstanceState);
 
-        findViewById(R.id.btnBack).setOnClickListener(v -> finishWithHero());
-        // 系统返回键 / 返回手势走同一套收缩动画
+        // 顶部已无返回按钮：系统返回键 / 侧滑返回手势走同一套「收缩回卡片」动画
         getOnBackPressedDispatcher().addCallback(this,
                 new androidx.activity.OnBackPressedCallback(true) {
                     @Override public void handleOnBackPressed() { finishWithHero(); }
@@ -224,111 +257,186 @@ public class PlayActivity extends AppCompatActivity {
     // ---------- 一镜到底（跨 Activity 手绘转场） ----------
 
     /**
-     * 进入：把列表卡片的封面快照垫在页面最底层，从卡片位置等比放大到全屏；
-     * 页面内容在放大后半段淡入覆盖快照 —— 观感就是「卡片展开成详情页」。
+     * 进入动画分两段，与「点开卡片」的动作语义一致：
+     *   ① 卡片海报 → 铺满全屏（{@link #HERO_EXPAND_MS}）：先放大接管视线；
+     *   ② 全屏 → 本页上半屏的海报位（{@link #HERO_SETTLE_MS}）：画面收缩归位，
+     *      同时页面文字淡入 —— 「海报落位、内容浮现」，比直接整页淡入更柔和。
      *
-     * 这里不用 MaterialContainerTransform：它继承 androidx.transition.Transition，
-     * 只能用于 Fragment 转场；Activity 窗口转场所需的是平台 android.transition.Transition，
-     * 两者类型不兼容。手绘版本还能精确控制起止位置与页面淡入曲线。
+     * 形变由 {@link HeroMorphView} 完成（矩形 + 圆角插值，内部恒为 centerCrop），
+     * 终点帧的裁切结果与海报 ImageView#centerCrop 完全一致，所以撤掉转场层时不会跳变。
+     *
+     * 注：不用 MaterialContainerTransform —— 它继承 androidx.transition.Transition，
+     * 只能用于 Fragment 转场；Activity 窗口转场需要平台 android.transition.Transition。
      */
     private void startHeroEnter(Bundle st) {
         heroBounds = getIntent().getIntArrayExtra(EXTRA_HERO);
-        if (st != null || playRoot == null || heroBounds == null || heroBounds.length != 4) return;
-        // 首帧先藏起页面（快照垫在下面），否则会先闪一下完整页面再开始动画
+        if (st != null || playRoot == null || cover == null || heroBounds == null
+                || heroBounds.length != 4 || pic == null || pic.isEmpty()) return;
+        // 首帧先藏起页面：此刻只有转场层可见，避免先闪一帧完整页面再开始动画
         playRoot.setAlpha(0f);
-        playRoot.post(this::runHeroEnter);
+        final View decor = getWindow().getDecorView();
+        decor.getViewTreeObserver().addOnPreDrawListener(
+                new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override public boolean onPreDraw() {
+                        decor.getViewTreeObserver().removeOnPreDrawListener(this);
+                        runHeroEnter();   // 首次 preDraw：海报已完成布局，能取到真实位置
+                        return true;
+                    }
+                });
     }
 
     private void runHeroEnter() {
-        if (isFinishing() || playRoot == null || heroBounds == null) {
+        final ViewGroup host = findViewById(android.R.id.content);
+        if (isFinishing() || playRoot == null || cover == null || heroBounds == null || host == null) {
             if (playRoot != null) playRoot.setAlpha(1f);   // 早退必须还原，否则页面一直不可见
             return;
         }
-        android.view.ViewGroup host = findViewById(android.R.id.content);
-        if (host == null) { playRoot.setAlpha(1f); return; }
         int[] origin = new int[2];
         host.getLocationOnScreen(origin);
         final int hostW = host.getWidth(), hostH = host.getHeight();
         if (hostW <= 0 || hostH <= 0) { playRoot.setAlpha(1f); return; }
 
-        final int sx = heroBounds[0] - origin[0];
-        final int sy = heroBounds[1] - origin[1];
-        final int sw = Math.max(1, heroBounds[2]);
-        final int sh = Math.max(1, heroBounds[3]);
+        final RectF card = boundsInHost(heroBounds, origin);
+        final RectF full = new RectF(0, 0, hostW, hostH);
+        final RectF hero = coverBoundsInHost(origin);
+        if (hero.width() <= 0 || hero.height() <= 0) { playRoot.setAlpha(1f); return; }
 
-        android.widget.ImageView snap = new android.widget.ImageView(this);
-        snap.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-        // 圆角与列表卡片一致（8dp），放大过程中随缩放自然收边
-        snap.setBackgroundResource(R.drawable.bg_cover_round);
-        snap.setClipToOutline(true);
-        snap.setPivotX(0f);
-        snap.setPivotY(0f);
-        // 用 translation 定位而不是 margin：卡片可能有一半在屏幕外，负 margin 不可靠
-        android.widget.FrameLayout.LayoutParams lp =
-                new android.widget.FrameLayout.LayoutParams(sw, sh);
-        snap.setTranslationX(sx);
-        snap.setTranslationY(sy);
-        // index 0 = 垫在页面之下：页面淡入时自然盖住快照，不需要额外做交叉淡化
-        host.addView(snap, 0, lp);
-        heroOverlay = snap;
-        // 与列表同一 URL，Glide 内存缓存命中，首帧即可画出封面
-        if (pic != null) Glide.with(this).load(pic).centerCrop().into(snap);
+        final HeroMorphView morph = new HeroMorphView(this);
+        morph.setPlaceholderColor(getColor(R.color.ink700));
+        morph.setFrames(card, dp(8), full, 0f);          // 起点：卡片位置 + 8dp 圆角
+        host.addView(morph, new FrameLayout.LayoutParams(hostW, hostH));
+        heroMorph = morph;
+        heroAnims.clear();
+        loadHeroBitmap(hostW, hostH, morph);
 
-        snap.animate()
-                .scaleX(hostW / (float) sw)
-                .scaleY(hostH / (float) sh)
-                .translationX(0f)
-                .translationY(0f)
-                .setDuration(HERO_IN_MS)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f))
-                .start();
-
-        playRoot.animate()
-                .alpha(1f)
-                .setStartDelay(HERO_IN_MS / 2)
-                .setDuration(HERO_IN_MS - HERO_IN_MS / 2)
-                .withEndAction(this::dropHeroOverlay)
-                .start();
+        ValueAnimator expand = ValueAnimator.ofFloat(0f, 1f);
+        expand.setDuration(HERO_EXPAND_MS);
+        expand.setInterpolator(new DecelerateInterpolator(1.6f));
+        expand.addUpdateListener(a -> morph.setProgress((float) a.getAnimatedValue()));
+        expand.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator a) {
+                if (heroMorph != morph) return;          // 已被返回动画撤销
+                morph.setFrames(full, 0f, hero, 0f);     // 第二段：全屏 → 海报位
+                morph.setProgress(0f);
+                ValueAnimator settle = ValueAnimator.ofFloat(0f, 1f);
+                settle.setDuration(HERO_SETTLE_MS);
+                settle.setInterpolator(new DecelerateInterpolator(1.2f));
+                settle.addUpdateListener(x -> morph.setProgress((float) x.getAnimatedValue()));
+                settle.addListener(new AnimatorListenerAdapter() {
+                    @Override public void onAnimationEnd(Animator x) {
+                        if (heroMorph != morph) return;
+                        heroMorph = null;
+                        heroAnims.clear();
+                        playRoot.setAlpha(1f);
+                        host.removeView(morph);              // 此刻画面已与真实海报像素级重合
+                    }
+                });
+                heroAnims.add(settle);
+                settle.start();
+                // 内容在第二段前 70ms 后才淡入：海报收缩时文字浮现，收尾刚好完全清晰
+                playRoot.animate().alpha(1f).setStartDelay(70)
+                        .setDuration(HERO_SETTLE_MS - 70).start();
+            }
+        });
+        heroAnims.add(expand);
+        expand.start();
     }
 
-    private void dropHeroOverlay() {
-        if (heroOverlay == null) return;
-        android.view.ViewGroup host = findViewById(android.R.id.content);
-        if (host != null) host.removeView(heroOverlay);
-        heroOverlay = null;
-    }
-
-    /** 返回：整页以卡片位置为缩放中心收缩淡出，动画结束再 finish（卡片原位露出，视觉连续） */
+    /** 返回：海报位 → 原卡片位置（圆角 8dp 渐显），结束时 finish，列表卡片原位露出 */
     private void finishWithHero() {
         if (heroAnimating) return;
-        android.view.ViewGroup host = findViewById(android.R.id.content);
-        if (playRoot == null || heroBounds == null || heroBounds.length != 4 || host == null) {
+        final ViewGroup host = findViewById(android.R.id.content);
+        if (playRoot == null || cover == null || heroBounds == null
+                || heroBounds.length != 4 || host == null || host.getWidth() <= 0) {
             finish();
+            overridePendingTransition(0, 0);
             return;
         }
-        heroAnimating = true;
-        // 进入动画可能还在跑：先收尾，避免 alpha/scale 两组动画互相打架
-        playRoot.animate().cancel();
-        playRoot.setAlpha(1f);
         int[] origin = new int[2];
         host.getLocationOnScreen(origin);
-        final int sx = heroBounds[0] - origin[0];
-        final int sy = heroBounds[1] - origin[1];
-        final int sw = Math.max(1, heroBounds[2]);
-        // 以卡片位置为缩放中心：收缩后正好落回卡片所在位置
-        playRoot.setPivotX(sx);
-        playRoot.setPivotY(sy);
-        playRoot.animate()
-                .scaleX(sw / (float) Math.max(1, host.getWidth()))
-                .scaleY(sw / (float) Math.max(1, host.getWidth()))
-                .alpha(0f)
-                .setDuration(HERO_OUT_MS)
-                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.6f))
-                .withEndAction(() -> {
-                    finish();
-                    overridePendingTransition(0, 0);
-                })
-                .start();
+        final RectF hero = coverBoundsInHost(origin);
+        // 海报已滚出可视区 / 正在内嵌播放（海报被播放器替换）：不做形变，直接返回
+        if (hero.width() <= 0 || hero.bottom <= 0 || hero.top >= host.getHeight()
+                || heroWrap.getVisibility() != View.VISIBLE) {
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
+        final RectF card = boundsInHost(heroBounds, origin);
+        heroAnimating = true;
+        // 进入动画可能还在跑：先撤销转场层，避免两组动画互相打架
+        cancelHeroEnter();
+        playRoot.animate().cancel();
+        playRoot.setAlpha(1f);
+
+        final HeroMorphView morph = new HeroMorphView(this);
+        morph.setPlaceholderColor(getColor(R.color.ink700));
+        morph.setFrames(hero, 0f, card, dp(8));
+        host.addView(morph, new FrameLayout.LayoutParams(host.getWidth(), host.getHeight()));
+        loadHeroBitmap(host.getWidth(), host.getHeight(), morph);
+
+        playRoot.animate().alpha(0f).setDuration(HERO_OUT_MS - 100).start();
+        ValueAnimator shrink = ValueAnimator.ofFloat(0f, 1f);
+        shrink.setDuration(HERO_OUT_MS);
+        shrink.setInterpolator(new AccelerateDecelerateInterpolator());
+        shrink.addUpdateListener(a -> morph.setProgress((float) a.getAnimatedValue()));
+        shrink.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator a) {
+                finish();
+                overridePendingTransition(0, 0);
+            }
+        });
+        shrink.start();
+    }
+
+    /** 中止进行中的进入动画：取消动画并摘掉形变层（返回 / 快速返回时调用） */
+    private void cancelHeroEnter() {
+        HeroMorphView morph = heroMorph;
+        heroMorph = null;                 // 先置空：动画的 end 回调据此判断「已撤销」
+        for (ValueAnimator a : new ArrayList<>(heroAnims)) a.cancel();
+        heroAnims.clear();
+        if (morph != null) {
+            ViewGroup parent = (ViewGroup) morph.getParent();
+            if (parent != null) parent.removeView(morph);
+        }
+    }
+
+    /** 海报（满宽 × 半屏）在 content 坐标系里的位置 */
+    private RectF coverBoundsInHost(int[] origin) {
+        int[] loc = new int[2];
+        cover.getLocationOnScreen(loc);
+        return new RectF(loc[0] - origin[0], loc[1] - origin[1],
+                loc[0] - origin[0] + cover.getWidth(), loc[1] - origin[1] + cover.getHeight());
+    }
+
+    /** Intent 里带的 [x,y,w,h]（屏幕坐标）→ content 坐标 */
+    private static RectF boundsInHost(int[] b, int[] origin) {
+        float x = b[0] - origin[0], y = b[1] - origin[1];
+        return new RectF(x, y, x + Math.max(1, b[2]), y + Math.max(1, b[3]));
+    }
+
+    /** 取转场位图：与海报同一 URL，Glide 命中缓存；解码尺寸限制在视口内，避免大图占内存 */
+    private void loadHeroBitmap(int w, int h, final HeroMorphView morph) {
+        if (heroBitmap != null && !heroBitmap.isRecycled()) {
+            morph.setBitmap(heroBitmap);
+            return;
+        }
+        if (pic == null || pic.isEmpty()) return;
+        Glide.with(this).asBitmap().load(pic)
+                .override(Math.max(1, w), Math.max(1, h))
+                .format(DecodeFormat.PREFER_RGB_565)
+                .into(new CustomTarget<Bitmap>() {
+                    @Override public void onResourceReady(@NonNull Bitmap r,
+                            com.bumptech.glide.request.transition.Transition<? super Bitmap> t) {
+                        heroBitmap = r;
+                        if (!isDestroyed() && morph.getParent() != null) morph.setBitmap(r);
+                    }
+                    @Override public void onLoadCleared(android.graphics.drawable.Drawable p) { }
+                });
+    }
+
+    private int dp(int v) {
+        return Math.round(getResources().getDisplayMetrics().density * v);
     }
 
     /** 收藏态：心形描边(未收藏) / 实心(已收藏)，animate=true 时播放描边→实心过渡 */
@@ -400,28 +508,107 @@ public class PlayActivity extends AppCompatActivity {
         return max;
     }
 
-    private void renderDetail() {
-        tvTitle.setText(detail.vodName);
+    /** 信息模块（海报渐变落点下方的一个整体）：源站 / 更新信息 / 片名 / 分类·日期 / 演员 / 标签 */
+    private void renderInfoModule() {
+        if (detail == null) return;
+        tvTitle.setText(detail.vodName != null ? detail.vodName : title);
         if (detail.vodPic != null && !detail.vodPic.isEmpty()) {
-            Glide.with(this).load(detail.vodPic).placeholder(R.color.ink700).centerCrop().into((android.widget.ImageView) findViewById(R.id.cover));
+            Glide.with(this).load(detail.vodPic).placeholder(R.color.ink700).centerCrop().into(cover);
         }
 
-        // 元信息：类型 · 来源 · 更新时间
-        StringBuilder meta = new StringBuilder();
-        if (detail.typeName != null && !detail.typeName.isEmpty()) meta.append(detail.typeName);
-        if (sourceName != null && !sourceName.isEmpty()) {
-            if (meta.length() > 0) meta.append(" · ");
-            meta.append(sourceName);
+        // 源站：显示名优先，回落 slug
+        String srcLabel = sourceName != null && !sourceName.isEmpty() ? sourceName
+                : (detail.sourceName != null && !detail.sourceName.isEmpty() ? detail.sourceName : slug);
+        if (srcLabel != null && !srcLabel.isEmpty()) {
+            chipSource.setText(srcLabel);
+            chipSource.setVisibility(View.VISIBLE);
+        } else {
+            chipSource.setVisibility(View.GONE);
         }
-        if (detail.vodTime != null && !detail.vodTime.isEmpty()) {
+
+        // 更新信息：vod_remarks（如「更新至 20 集」/「高清」/「已完结」）
+        String upd = detail.vodRemarks != null && !detail.vodRemarks.trim().isEmpty()
+                ? detail.vodRemarks.trim() : (remark != null ? remark.trim() : null);
+        if (upd != null && !upd.isEmpty()) {
+            chipUpdate.setText(upd);
+            chipUpdate.setVisibility(View.VISIBLE);
+        } else {
+            chipUpdate.setVisibility(View.GONE);
+        }
+
+        // 分类 · 日期（离线时补标记）
+        StringBuilder meta = new StringBuilder();
+        if (!TextUtils.isEmpty(detail.typeName)) meta.append(detail.typeName);
+        if (!TextUtils.isEmpty(detail.vodTime)) {
             if (meta.length() > 0) meta.append(" · ");
-            meta.append(com.lateshow.app.util.TimeUtil.stamp(detail.vodTime));
+            meta.append(TimeUtil.stamp(detail.vodTime));
         }
         if (offlineMode) {
             if (meta.length() > 0) meta.append(" · ");
             meta.append("离线缓存");
         }
         tvMeta.setText(meta);
+        tvMeta.setVisibility(meta.length() > 0 ? View.VISIBLE : View.GONE);
+
+        renderActorTags();
+    }
+
+    /** 演员 / 标签：数据源没给就整行隐藏（不占位、不出现空标签） */
+    private void renderActorTags() {
+        if (detail == null) return;
+        setActor(splitNames(detail.vodActor));
+        setTags(splitNames(detail.vodTag));
+    }
+
+    private void setActor(List<String> actors) {
+        if (rowActor == null || tvActor == null) return;
+        if (actors == null || actors.isEmpty()) {
+            rowActor.setVisibility(View.GONE);
+            return;
+        }
+        tvActor.setText(TextUtils.join(" / ", actors));
+        rowActor.setVisibility(View.VISIBLE);
+    }
+
+    private void setTags(List<String> tags) {
+        if (tagRow == null || rowTags == null) return;
+        tagRow.removeAllViews();
+        if (tags == null || tags.isEmpty()) {
+            rowTags.setVisibility(View.GONE);
+            return;
+        }
+        int padH = dp(9), padV = dp(4);
+        for (String t : tags) {
+            TextView chip = new TextView(this);
+            chip.setText(t);
+            chip.setTextSize(11f);
+            chip.setTextColor(getColor(R.color.t2));
+            chip.setBackgroundResource(R.drawable.bg_tag);
+            chip.setPadding(padH, padV, padH, padV);
+            chip.setMaxLines(1);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.rightMargin = dp(6);
+            tagRow.addView(chip, lp);
+        }
+        rowTags.setVisibility(View.VISIBLE);
+    }
+
+    /** 「张三,李四 / 王五」→ [张三, 李四, 王五]：去空、去重、最多 12 个（防超长撑爆模块） */
+    private static List<String> splitNames(String raw) {
+        List<String> out = new ArrayList<>();
+        if (raw == null) return out;
+        for (String part : raw.split("[,，、/|;；\\n]")) {
+            String v = part.trim();
+            if (v.isEmpty() || out.contains(v)) continue;
+            out.add(v);
+            if (out.size() >= 12) break;
+        }
+        return out;
+    }
+
+    private void renderDetail() {
+        renderInfoModule();
 
         String desc = detail.vodContent;
         if (desc != null) {
@@ -609,6 +796,10 @@ public class PlayActivity extends AppCompatActivity {
                             && r.list != null && !r.list.isEmpty();
                     starResp = usable ? r : null;
                     curStarTab = null;
+                    // 详情没有演员字段时，用 star_map 命中的明星集补进信息模块
+                    if (starResp != null && detail != null && TextUtils.isEmpty(detail.vodActor)) {
+                        setActor(starResp.stars);
+                    }
                     if (starResp == null) {
                         castSection.setVisibility(View.GONE);
                         return;
@@ -874,15 +1065,9 @@ public class PlayActivity extends AppCompatActivity {
     /** 在详情页内嵌窗口播放（横版 16:9），不进入全屏 */
     private void startInline(String url, long startMs) {
         curUrl = url;
-        posterBox.setVisibility(View.GONE);
+        // 海报区让位给播放器：信息模块随之上移，页面结构与顺序不变
+        heroWrap.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
-        // 海报隐藏后，徽章/标题/元信息列与下方简介左对齐（去掉原有 14dp 间距）
-        View infoCol = findViewById(R.id.infoCol);
-        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) infoCol.getLayoutParams();
-        if (lp.leftMargin != 0) {
-            lp.leftMargin = 0;
-            infoCol.requestLayout();
-        }
         if (player == null) {
             DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                     .setAllowCrossProtocolRedirects(true)

@@ -103,6 +103,22 @@
         <item name="android:textColor">@color/t1</item>
     </style>
 
+    <!-- 详情页信息模块的胶囊：源站 / 更新信息。高度与原来的 badge 一致（26dp），
+         底色由使用处指定（bg_capsule + 描边），这里只管度量与字色基调 -->
+    <style name="HeroChip">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">26dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingLeft">10dp</item>
+        <item name="android:paddingRight">10dp</item>
+        <item name="android:textSize">10.5sp</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxWidth">190dp</item>
+    </style>
+
     <style name="SettingsCard">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

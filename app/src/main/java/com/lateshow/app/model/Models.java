@@ -35,6 +35,13 @@ public final class Models {
         @SerializedName("vod_play_url") public String vodPlayUrl;
         @SerializedName("vod_play_from") public String vodPlayFrom;
         @SerializedName("vod_play_list") public List<PlayLine> vodPlayList;
+        /** 演员（逗号分隔；直连模式取自源站原始字段，NAS 模式待服务端详情接口透出，缺失时用 star_map 明星集兜底） */
+        @SerializedName("vod_actor") public String vodActor;
+        /** 标签（逗号分隔，题材/地区等） */
+        @SerializedName("vod_tag") public String vodTag;
+        @SerializedName("vod_area") public String vodArea;
+        @SerializedName("vod_year") public String vodYear;
+        @SerializedName("vod_director") public String vodDirector;
         /** 相关推荐（VodSync v1.9.0 预计算结果，详情接口内嵌；直连模式为空，需自行拉取） */
         @SerializedName("related") public List<RelatedCard> related;
         /** true = 该批推荐来自服务端兜底链（同分类/同地区年代/最新收录），无真实相关度 */

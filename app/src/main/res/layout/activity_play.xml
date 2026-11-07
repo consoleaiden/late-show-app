@@ -1,57 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 详情页：顶部海报（满宽 × 半屏，底部渐变到主题底色）+ 信息模块 + 简介/选集/推荐。
+     返回按钮已移除，返回统一走系统侧滑 / 返回键（PlayActivity 的 OnBackPressedCallback 接管动画）。
+     整页底色用 @color/heroBg（海报渐变落点），换肤时只需改这一个色值，渐变与页面永远同色。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/playRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/ink900">
-
-    <!-- 返回栏：箭头图形在 ic_back 素材 24x24 画布里从 x=7 开始（36dp 内容盒中占 10.5dp），
-         左内边距 5.5dp 让箭头视觉左缘落在 16dp，与下方海报（16dp）精确对齐；
-         右内边距 26.5dp 保持内容盒仍为 36dp，箭头不缩放，触控区仍是整块 68dp -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingLeft="0dp"
-        android:paddingRight="16dp"
-        android:paddingTop="0dp"
-        android:paddingBottom="0dp">
-
-        <com.airbnb.lottie.LottieAnimationView
-            android:id="@+id/btnBack"
-            android:layout_width="68dp"
-            android:layout_height="68dp"
-            android:paddingLeft="5.5dp"
-            android:paddingTop="16dp"
-            android:paddingRight="26.5dp"
-            android:paddingBottom="16dp"
-            android:background="@null"
-            android:tag="ic_back"
-            android:contentDescription="返回" />
-
-        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-
-        <TextView
-            android:id="@+id/breadcrumb"
-            style="@style/MetaLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="DETAIL" />
-    </LinearLayout>
+    android:background="@color/heroBg">
 
     <ScrollView
+        android:id="@+id/scrollPlay"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:overScrollMode="never"
+        android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 内嵌播放器（点「播放」在当前页播放，点全屏按钮才进入横屏全屏） -->
+            <!-- 内嵌播放器（点「播放」在当前页播放，点全屏按钮才进入横屏全屏）。
+                 播放时替换海报区，出现在页面最顶部 -->
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/playerContainer"
                 android:layout_width="match_parent"
@@ -132,104 +104,158 @@
                 </LinearLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
 
-            <!-- 竖版海报 + 标题信息 -->
+            <!-- 海报区：横向满屏、纵向半屏（高度在 PlayActivity 里按屏幕高度的一半设定）。
+                 图片 centerCrop 铺满，底部 heroFade 由透明渐变到 @color/heroBg，
+                 与下方信息模块同色衔接，没有硬边 -->
+            <FrameLayout
+                android:id="@+id/heroWrap"
+                android:layout_width="match_parent"
+                android:layout_height="260dp">
+
+                <ImageView
+                    android:id="@+id/cover"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/ink700"
+                    android:scaleType="centerCrop"
+                    android:contentDescription="海报" />
+
+                <View
+                    android:id="@+id/heroFade"
+                    android:layout_width="match_parent"
+                    android:layout_height="168dp"
+                    android:layout_gravity="bottom"
+                    android:background="@drawable/bg_hero_fade" />
+
+                <FrameLayout
+                    android:id="@+id/btnPlayCover"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_play_cover">
+
+                    <com.airbnb.lottie.LottieAnimationView
+                        android:id="@+id/imgPlayCover"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_gravity="center"
+                        android:tag="ic_play" />
+                </FrameLayout>
+            </FrameLayout>
+
+            <!-- 信息模块：源站 / 更新信息 / 片名 / 分类·日期 / 演员 / 标签（一个整体，紧贴渐变落点） -->
             <LinearLayout
+                android:id="@+id/infoModule"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:paddingLeft="16dp"
                 android:paddingRight="16dp"
-                android:paddingTop="14dp">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/posterBox"
-                    android:layout_width="132dp"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_cover_round_lg"
-                    android:clipToOutline="true"
-                    android:outlineProvider="background">
-
-                    <com.google.android.material.imageview.ShapeableImageView
-                        android:id="@+id/cover"
-                        android:layout_width="0dp"
-                        android:layout_height="0dp"
-                        android:scaleType="centerCrop"
-                        app:shapeAppearanceOverlay="@style/ShapeAppearance.LateShow.CoverLg"
-                        app:layout_constraintDimensionRatio="9:16"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent" />
-
-                    <View
-                        android:layout_width="0dp"
-                        android:layout_height="46dp"
-                        android:background="@drawable/cover_fade_round"
-                        app:layout_constraintBottom_toBottomOf="@id/cover"
-                        app:layout_constraintStart_toStartOf="@id/cover"
-                        app:layout_constraintEnd_toEndOf="@id/cover" />
-
-                    <FrameLayout
-                        android:id="@+id/btnPlayCover"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:background="@drawable/bg_play_cover"
-                        app:layout_constraintTop_toTopOf="@id/cover"
-                        app:layout_constraintBottom_toBottomOf="@id/cover"
-                        app:layout_constraintStart_toStartOf="@id/cover"
-                        app:layout_constraintEnd_toEndOf="@id/cover">
-
-                        <com.airbnb.lottie.LottieAnimationView
-                            android:id="@+id/imgPlayCover"
-                            android:layout_width="22dp"
-                            android:layout_height="22dp"
-                            android:layout_gravity="center"
-                            android:tag="ic_play" />
-                    </FrameLayout>
-                </androidx.constraintlayout.widget.ConstraintLayout>
+                android:paddingTop="6dp">
 
                 <LinearLayout
-                    android:id="@+id/infoCol"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginLeft="14dp"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
                     <TextView
-                        android:id="@+id/badge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="26dp"
-                        android:gravity="center_vertical"
-                        android:paddingLeft="10dp"
-                        android:paddingRight="10dp"
+                        android:id="@+id/chipSource"
+                        style="@style/HeroChip"
                         android:background="@drawable/bg_capsule"
                         android:drawableStart="@drawable/dot_acc"
                         android:drawablePadding="6dp"
-                        style="@style/MetaLabel"
-                        android:text="详情" />
+                        android:textColor="@color/t1" />
 
                     <TextView
-                        android:id="@+id/tvTitle"
-                        android:layout_width="match_parent"
+                        android:id="@+id/chipUpdate"
+                        style="@style/HeroChip"
+                        android:layout_marginLeft="8dp"
+                        android:background="@drawable/bg_capsule"
+                        android:textColor="@color/accText" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textSize="21sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/t1"
+                    android:lineSpacingMultiplier="1.18"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/tvMeta"
+                    style="@style/MetaLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="" />
+
+                <!-- 演员：vod_actor 缺失时用服务端 star_map 命中的明星集兜底，仍为空则整行隐藏 -->
+                <LinearLayout
+                    android:id="@+id/rowActor"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <TextView
+                        style="@style/MetaLabel"
+                        android:layout_width="42dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/t1"
-                        android:maxLines="3"
+                        android:layout_marginTop="2dp"
+                        android:text="演员" />
+
+                    <TextView
+                        android:id="@+id/tvActor"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:textSize="12.5sp"
+                        android:textColor="@color/t2"
+                        android:lineSpacingMultiplier="1.5"
+                        android:maxLines="2"
                         android:ellipsize="end" />
+                </LinearLayout>
+
+                <!-- 标签：横向可滚动（标签数量不定，不换行挤压模块高度） -->
+                <LinearLayout
+                    android:id="@+id/rowTags"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
 
                     <TextView
-                        android:id="@+id/tvMeta"
                         style="@style/MetaLabel"
-                        android:layout_width="match_parent"
+                        android:layout_width="42dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="" />
+                        android:layout_marginTop="5dp"
+                        android:text="标签" />
+
+                    <HorizontalScrollView
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none"
+                        android:overScrollMode="never">
+
+                        <LinearLayout
+                            android:id="@+id/tagRow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ===================== 以下内容与顺序保持原样 ===================== -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -242,7 +268,7 @@
                     android:id="@+id/tvDesc"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="16dp"
                     android:textSize="13sp"
                     android:textColor="@color/t2"
                     android:lineSpacingMultiplier="1.78"

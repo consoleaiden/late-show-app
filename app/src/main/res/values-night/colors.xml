@@ -21,6 +21,10 @@
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F00A0C0F</color>
+    <!-- 详情页主题底色（与浅色 themes 里的同名色一一对应，见 values/colors.xml 注释） -->
+    <color name="heroBg">#0A0C0F</color>
+    <color name="heroBgMid">#B30A0C0F</color>
+    <color name="heroBgFade">#000A0C0F</color>
     <color name="accText">#FF7A5C</color>
     <color name="ripple">#33FFFFFF</color>
     <color name="rippleOnAcc">#33000000</color>

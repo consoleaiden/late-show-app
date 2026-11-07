@@ -351,6 +351,11 @@ public final class StaticCatalog implements Catalog {
                 d.vodContent = stripHtml(it.optString("vod_content", ""));
                 d.vodPlayFrom = it.optString("vod_play_from", "");
                 d.vodPlayUrl = it.optString("vod_play_url", "");
+                // 演员/标签/地区/年代：源站原始字段，直连模式可直接拿到（详情页信息模块用）
+                d.vodActor = it.optString("vod_actor", "");
+                d.vodTag = it.optString("vod_tag", "");
+                d.vodArea = it.optString("vod_area", "");
+                d.vodYear = it.optString("vod_year", "");
                 d.vodPlayList = parsePlayList(d.vodPlayFrom, d.vodPlayUrl);
                 if (d.vodPlayList.isEmpty()) {
                     cb.onErr("该源站未提供可播放地址");

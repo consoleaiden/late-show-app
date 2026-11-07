@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 海报底部渐变：顶部全透明 → 中部半透明 → 底部完全不透明，落点 = 页面底色 @color/heroBg。
+     angle=270 = 从上到下；三个色值都定义在 values/values-night 的 colors.xml（heroBg*）。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/heroBgFade"
+        android:centerColor="@color/heroBgMid"
+        android:endColor="@color/heroBg"
+        android:type="linear" />
+</shape>

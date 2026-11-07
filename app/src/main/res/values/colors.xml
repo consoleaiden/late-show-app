@@ -21,6 +21,13 @@
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F7F8FA</color>
+    <!-- ============ 详情页主题底色（唯一配置项） ============
+         海报底部渐变 = heroBgFade(全透明) → heroBgMid → heroBg(不透明)，
+         页面底色同样是 heroBg —— 三者同源，改这里就能整体换掉详情页顶部的过渡色。
+         调色时建议 heroBgMid 取 heroBg 的 ~70% 不透明度，过渡才不会出现色阶断层。 -->
+    <color name="heroBg">#F2F3F6</color>
+    <color name="heroBgMid">#B3F2F3F6</color>
+    <color name="heroBgFade">#00F2F3F6</color>
     <!-- 浅色主题专用「橙色文本」：acc 作为小字正文对比度仅 3.1，此色对白底 5.41 / 页面底 4.87 -->
     <color name="accText">#C13A17</color>
     <!-- 按压波纹：浅底用深色 13% 透明度 -->
