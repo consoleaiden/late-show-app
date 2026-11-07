@@ -1477,6 +1477,40 @@ public class DetailFragment extends Fragment {
     }
 
     /** 内嵌播放窗口的高度：横向满屏的 16:9（比「屏幕一半」的海报矮） */
+    /**
+     * 状态栏高度（px）。
+     *
+     * <p>本页是边到边（{@code setDecorFitsSystemWindows(false)}）：海报态要铺到屏幕最上沿，
+     * 所以不能给根布局加 padding；只有播放态才把播放器顶部让出这块高度。
+     */
+    private int statusBarInsetPx() {
+        View root = getView();
+        if (root != null) {
+            WindowInsetsCompat ins = ViewCompat.getRootWindowInsets(root);
+            if (ins != null) {
+                int top = ins.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+                if (top > 0) return top;
+            }
+        }
+        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return id > 0 ? getResources().getDimensionPixelSize(id) : dp(24);
+    }
+
+    /**
+     * 播放器容器距顶边距。容器在 heroWrap 里上下都贴着父容器，
+     * 所以把 topMargin 设成状态栏高度、bottomMargin 保持 0，
+     * 画面高度就会自动变成「海报区高度 - 状态栏」，随高度动画一起收敛，不需要额外插值。
+     */
+    private void setPlayerTopInset(int inset) {
+        if (playerContainer == null) return;
+        ViewGroup.LayoutParams lp = playerContainer.getLayoutParams();
+        if (!(lp instanceof ViewGroup.MarginLayoutParams)) return;
+        ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+        if (mlp.topMargin == inset) return;
+        mlp.topMargin = inset;
+        playerContainer.setLayoutParams(mlp);
+    }
+
     private int playerHeightPx() {
         int w = motion != null && motion.getWidth() > 0
                 ? motion.getWidth() : getResources().getDisplayMetrics().widthPixels;
@@ -1526,6 +1560,12 @@ public class DetailFragment extends Fragment {
             playerContainer.setAlpha(1f);
         }
         if (btnPlayCover != null) btnPlayCover.setVisibility(View.VISIBLE);
+        // 海报立刻回来（播放器下面一直是它，不淡入就不会闪白）
+        if (cover != null) {
+            cover.animate().cancel();
+            cover.setAlpha(1f);
+        }
+        setPlayerTopInset(0);   // 下次播放重新按状态栏让位
         int delta = posterH - heroWrap.getHeight();
         setHeroHeight(posterH, false);
         if (delta != 0 && scrollPlay != null) scrollPlay.scrollBy(0, delta);
@@ -1542,9 +1582,17 @@ public class DetailFragment extends Fragment {
         // 确保盖在海报与渐变之上（某些 ROM 上子 View 的合成顺序不完全按布局顺序）
         playerContainer.bringToFront();
         btnPlayCover.setVisibility(View.GONE);
-        // 视频是 16:9，比「屏幕一半」的海报矮：把海报区收到 16:9，下面的信息/选集跟着上移，
+        // 播放态：播放器顶部让出状态栏高度（画面不压状态栏），海报随即淡出，
+        // 让位露出的那条由 heroBand 底色填充（深色，状态栏图标仍可读）。
+        // 高度 = 状态栏 + 16:9 画面：比「屏幕一半」的海报矮，下面的信息/选集跟着上移，
         // 不会在播放器下面留一块空白（视觉上就是点播放后内容上弹一截）
-        setHeroHeight(playerHeightPx(), true);
+        int inset = statusBarInsetPx();
+        setPlayerTopInset(inset);
+        setHeroHeight(inset + playerHeightPx(), true);
+        if (cover != null) {
+            cover.animate().cancel();
+            cover.animate().alpha(0f).setDuration(180).start();
+        }
         // 点「播放」时页面通常停在简介/选集处，滚回顶部让画面可见，否则会以为没播
         scrollPlay.smoothScrollTo(0, 0);
         if (player == null) {
