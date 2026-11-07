@@ -704,17 +704,40 @@ public class DetailFragment extends Fragment {
         rowTags.setVisibility(View.VISIBLE);
     }
 
-    /** 「张三,李四 / 王五」→ [张三, 李四, 王五]：去空、去重、最多 12 个（防超长撑爆模块） */
+    /**
+     * 演员 / 标签分词：去空、去重、最多 12 个（防超长撑爆模块）。
+     *
+     * <p>真实数据里三种写法都有：逗号分隔（"金智媛,李姃垠,孙贤周"）、空格分隔
+     * （"井柏然 孙艺洲 张颂文"）、标签用间隔号分组（"中国·2026·悬疑"）。
+     * 空格只在「该段全是中文名」时才拆 —— 西文名（"Tom Hanks"）本身带空格，不能拆。
+     */
     private static List<String> splitNames(String raw) {
         List<String> out = new ArrayList<>();
         if (raw == null) return out;
-        for (String part : raw.split("[,，、/|;；\\n]")) {
+        for (String part : raw.split("[,，、/|;；·\n]")) {
             String v = part.trim();
-            if (v.isEmpty() || out.contains(v)) continue;
-            out.add(v);
+            if (v.isEmpty()) continue;
+            if (v.indexOf(' ') > 0 && hasCjk(v)) {
+                for (String sub : v.split("\\s+")) addName(out, sub.trim());
+            } else {
+                addName(out, v);
+            }
             if (out.size() >= 12) break;
         }
         return out;
+    }
+
+    private static void addName(List<String> out, String v) {
+        if (v.isEmpty() || out.size() >= 12 || out.contains(v)) return;
+        out.add(v);
+    }
+
+    private static boolean hasCjk(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c >= 0x4E00 && c <= 0x9FFF) return true;
+        }
+        return false;
     }
 
     // ==================== 详情渲染 ====================
