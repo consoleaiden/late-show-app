@@ -125,6 +125,13 @@ public class DetailFragment extends Fragment {
     private int curLine = 0, curEp = 0;
     /** true = 详情来自本地缓存（服务器不可达），此时界面标注「离线」 */
     private boolean offlineMode = false;
+    /** 详情/分集加载态：骨架 + 呼吸动画 + 失败重试 */
+    private View loadingLayer, loadingSpinner, loadingSkeleton, btnRetry;
+    private TextView loadingText;
+    private android.animation.ObjectAnimator skeletonAnim;
+    private final Handler loadHandler = new Handler(Looper.getMainLooper());
+    private Runnable showLoadingTask;
+    private boolean detailShown = false;
 
     private HeroMotionLayout motion;
     private View scrim, surface, playRoot, topScrim, statusScrim, heroFade;
@@ -271,6 +278,12 @@ public class DetailFragment extends Fragment {
         btnPlayCover = v.findViewById(R.id.btnPlayCover);
         infoModule = v.findViewById(R.id.infoModule);
         contentCol = v.findViewById(R.id.contentCol);
+        loadingLayer = v.findViewById(R.id.loadingLayer);
+        loadingSpinner = v.findViewById(R.id.loadingSpinner);
+        loadingText = v.findViewById(R.id.loadingText);
+        loadingSkeleton = v.findViewById(R.id.loadingSkeleton);
+        btnRetry = v.findViewById(R.id.btnRetry);
+        btnRetry.setOnClickListener(x -> retryLoadDetail());
         epPagerScroll = v.findViewById(R.id.epPagerScroll);
         epPagerRow = v.findViewById(R.id.epPagerRow);
 
@@ -544,6 +557,8 @@ public class DetailFragment extends Fragment {
         float contentAlpha = 1f - smooth(0.15f, 0.55f, p);
         infoModule.setAlpha(contentAlpha);
         contentCol.setAlpha(contentAlpha);
+        // 加载/失败态还没切到内容时，下拉收起也要一起淡出（否则会留一块不透明的占位板）
+        if (loadingLayer != null && !detailShown) loadingLayer.setAlpha(contentAlpha);
         // 整页底色（信息带 + 下方内容区）和海报底部渐变一起淡出（只在下拉收起时）：
         // 露出的就是后面的视频列表，最后只剩海报压在卡片上
         float bgAlpha = 1f - smooth(0.45f, 0.88f, p);
@@ -679,18 +694,124 @@ public class DetailFragment extends Fragment {
         }
     }
 
+    // ==================== 详情加载态 ====================
+
+    /**
+     * 慢网络才显示加载态：延迟 420ms 是两全 —— 详情接口 P95 通常几百毫秒内回来，
+     * 立刻盖骨架会闪一下；同时这个时间也覆盖了「一镜到底」420ms 进场动画，
+     * 不会在卡片放大到整页的过程中突然糊一层占位。
+     */
+    private void scheduleLoading() {
+        if (detailShown || loadingLayer == null) return;
+        cancelLoadingTask();
+        showLoadingTask = () -> {
+            showLoadingTask = null;
+            showLoading();
+        };
+        loadHandler.postDelayed(showLoadingTask, 420);
+    }
+
+    private void cancelLoadingTask() {
+        if (showLoadingTask != null) {
+            loadHandler.removeCallbacks(showLoadingTask);
+            showLoadingTask = null;
+        }
+    }
+
+    /** 加载中：海报与信息带保持可见（列表卡片已有数据），只把下方内容区换成骨架 */
+    private void showLoading() {
+        if (detailShown || loadingLayer == null) return;
+        contentCol.setVisibility(View.GONE);
+        contentCol.setAlpha(0f);
+        loadingLayer.setVisibility(View.VISIBLE);
+        loadingLayer.setAlpha(1f);
+        loadingSpinner.setVisibility(View.VISIBLE);
+        loadingText.setText("正在加载影片详情与分集…");
+        loadingSkeleton.setVisibility(View.VISIBLE);
+        btnRetry.setVisibility(View.GONE);
+        startSkeletonAnim();
+    }
+
+    /** 成功：骨架淡出、真实内容淡入，两条动画并行 200~240ms，切换不跳 */
+    private void hideLoading() {
+        cancelLoadingTask();
+        stopSkeletonAnim();
+        detailShown = true;
+        if (loadingLayer == null) return;
+        boolean wasShown = loadingLayer.getVisibility() == View.VISIBLE;
+        contentCol.setVisibility(View.VISIBLE);
+        if (!wasShown) {
+            contentCol.setAlpha(1f);
+            loadingLayer.setVisibility(View.GONE);
+            return;
+        }
+        contentCol.animate().cancel();
+        contentCol.setAlpha(0f);
+        contentCol.animate().alpha(1f).setDuration(240)
+                .setInterpolator(new DecelerateInterpolator(1.4f)).start();
+        loadingLayer.animate().cancel();
+        loadingLayer.animate().alpha(0f).setDuration(200)
+                .withEndAction(() -> {
+                    if (loadingLayer != null) {
+                        loadingLayer.setVisibility(View.GONE);
+                        loadingLayer.setAlpha(1f);
+                    }
+                }).start();
+    }
+
+    /** 失败：同一块区域切成明确文案 + 重新加载按钮（保留重试入口，不只是 toast） */
+    private void showLoadError(String msg) {
+        cancelLoadingTask();
+        stopSkeletonAnim();
+        if (loadingLayer == null) return;
+        contentCol.setVisibility(View.GONE);
+        loadingLayer.animate().cancel();
+        loadingLayer.setVisibility(View.VISIBLE);
+        loadingLayer.setAlpha(1f);
+        loadingSpinner.setVisibility(View.GONE);
+        loadingSkeleton.setVisibility(View.GONE);
+        loadingText.setText(msg);
+        btnRetry.setVisibility(View.VISIBLE);
+    }
+
+    private void retryLoadDetail() {
+        showLoading();
+        loadDetail();
+    }
+
+    private void startSkeletonAnim() {
+        stopSkeletonAnim();
+        skeletonAnim = android.animation.ObjectAnimator.ofFloat(
+                loadingSkeleton, View.ALPHA, 0.35f, 0.9f);
+        skeletonAnim.setDuration(760);
+        skeletonAnim.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        skeletonAnim.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+        skeletonAnim.start();
+    }
+
+    private void stopSkeletonAnim() {
+        if (skeletonAnim != null) {
+            skeletonAnim.cancel();
+            skeletonAnim = null;
+        }
+        if (loadingSkeleton != null) loadingSkeleton.setAlpha(1f);
+    }
+
     private void loadDetail() {
+        scheduleLoading();   // 慢网络才显示（延迟 420ms），快网络不闪、进场动画不受影响
         com.lateshow.app.api.Catalogs.get().detail(slug, vodId,
             new VodSyncApi.ApiCb<Models.DetailResp>() {
                 @Override public void onOk(Models.DetailResp r) {
                     if (!isAdded()) return;
                     if (r.detail == null) {
+                        showLoadError("资源不可用，可返回首页重新选择");
                         toast("资源不可用，可返回首页重新选择");
                         return;
                     }
                     detail = r.detail;
                     offlineMode = false;
                     renderDetail();
+                    hideLoading();
                     // 已收藏 / 有播放历史 → 刷新离线播放数据（覆盖旧线路与地址）
                     if (PrefStore.get().isFav(slug, vodId) || PrefStore.get().getHist(slug, vodId) != null) {
                         OfflineMedia.saveDetail(detail);
@@ -706,15 +827,20 @@ public class DetailFragment extends Fragment {
                         detail = cached;
                         offlineMode = true;
                         renderDetail();
+                        hideLoading();
                         toast("离线模式：使用本地缓存的播放数据");
                         return;
                     }
                     if (com.lateshow.app.util.AuthGate.handleApiError(requireActivity(), m,
                             DetailFragment.this::loadDetail)) {
+                        showLoadError("需要 API Token，请在设置页填写后重试");
                         toast("需要 API Token，请在设置页填写后重试");
                         return;
                     }
-                    toast("详情加载失败：" + m + (PrefStore.get().isFav(slug, vodId) ? "（该片未缓存播放数据）" : ""));
+                    String msg = "详情加载失败：" + m
+                            + (PrefStore.get().isFav(slug, vodId) ? "（该片未缓存播放数据）" : "");
+                    showLoadError(msg);
+                    toast(msg);
                 }
             });
     }
@@ -1444,6 +1570,10 @@ public class DetailFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
+        cancelLoadingTask();
+        stopSkeletonAnim();
+        if (loadingLayer != null) loadingLayer.animate().cancel();
+        if (contentCol != null) contentCol.animate().cancel();
         cancelMotionAnim();
         releasePlayer();
         super.onDestroyView();

@@ -367,7 +367,7 @@
                                 android:text="播放 · 第 1 集"
                                 android:textSize="13sp"
                                 android:textStyle="bold"
-                                android:textColor="@color/accInk"
+                                android:textColor="@color/btnPlayInk"
                                 android:letterSpacing="0.06" />
 
                             <com.airbnb.lottie.LottieAnimationView
@@ -538,6 +538,102 @@
                                 android:nestedScrollingEnabled="false" />
                         </LinearLayout>
                     </LinearLayout>
+                        <!-- 详情/分集异步加载态：海报与信息带仍可见，只替换下方内容区。
+                             延迟 420ms 才显示（网络快时不闪、也不打断进场的一镜到底动画）；
+                             失败时同一块区域切成错误文案 + 重新加载按钮。 -->
+                        <LinearLayout
+                            android:id="@+id/loadingLayer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:gravity="center_horizontal"
+                            android:paddingLeft="20dp"
+                            android:paddingRight="20dp"
+                            android:paddingTop="34dp"
+                            android:paddingBottom="44dp"
+                            android:background="@color/ink900"
+                            android:clickable="true"
+                            android:visibility="gone">
+
+                            <ProgressBar
+                                android:id="@+id/loadingSpinner"
+                                android:layout_width="34dp"
+                                android:layout_height="34dp"
+                                android:indeterminate="true"
+                                android:indeterminateTint="@color/acc" />
+
+                            <TextView
+                                android:id="@+id/loadingText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:gravity="center"
+                                android:text="正在加载影片详情与分集…"
+                                android:textColor="@color/t2"
+                                android:textSize="13sp" />
+
+                            <!-- 骨架占位：简介三行 + 选集格子两行；整体做呼吸动画 -->
+                            <LinearLayout
+                                android:id="@+id/loadingSkeleton"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="26dp"
+                                android:orientation="vertical">
+
+                                <View android:layout_width="match_parent" android:layout_height="13dp"
+                                    android:background="@color/ink600" />
+                                <View android:layout_width="match_parent" android:layout_height="13dp"
+                                    android:layout_marginTop="10dp" android:background="@color/ink600" />
+                                <View android:layout_width="170dp" android:layout_height="13dp"
+                                    android:layout_marginTop="10dp" android:background="@color/ink600" />
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="26dp"
+                                    android:orientation="horizontal">
+                                    <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp"
+                                        android:layout_marginRight="4dp" android:background="@drawable/bg_episode" />
+                                    <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp"
+                                        android:layout_marginLeft="4dp" android:layout_marginRight="4dp" android:background="@drawable/bg_episode" />
+                                    <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp"
+                                        android:layout_marginLeft="4dp" android:layout_marginRight="4dp" android:background="@drawable/bg_episode" />
+                                    <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp"
+                                        android:layout_marginLeft="4dp" android:background="@drawable/bg_episode" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:orientation="horizontal">
+                                    <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp"
+                                        android:layout_marginRight="4dp" android:background="@drawable/bg_episode" />
+                                    <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp"
+                                        android:layout_marginLeft="4dp" android:layout_marginRight="4dp" android:background="@drawable/bg_episode" />
+                                    <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp"
+                                        android:layout_marginLeft="4dp" android:layout_marginRight="4dp" android:background="@drawable/bg_episode" />
+                                    <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp"
+                                        android:layout_marginLeft="4dp" android:background="@drawable/bg_episode" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/btnRetry"
+                                android:layout_width="wrap_content"
+                                android:layout_height="40dp"
+                                android:layout_marginTop="20dp"
+                                android:gravity="center"
+                                android:paddingLeft="22dp"
+                                android:paddingRight="22dp"
+                                android:background="@drawable/bg_btn_main"
+                                android:text="重新加载"
+                                android:textColor="@color/btnPlayInk"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
                 </LinearLayout>
             </ScrollView>
         </LinearLayout>

@@ -12,6 +12,8 @@
     <color name="t3">#66707D</color>
     <color name="acc">#FF5A36</color>
     <color name="accInk">#170A05</color>
+    <!-- 详情页主播放按钮的文字色：橙底上用白字（仅浅色主题覆盖；values-night 仍为 accInk） -->
+    <color name="btnPlayInk">#FFFFFF</color>
     <color name="accSoft">#21FF5A36</color>
     <color name="ok">#2E7D52</color>
     <color name="okSoft">#1A5FBF8E</color>

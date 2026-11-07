@@ -12,6 +12,8 @@
     <color name="t3">#7C8593</color>
     <color name="acc">#FF5A36</color>
     <color name="accInk">#170A05</color>
+    <!-- 深色主题：播放按钮文字沿用原深色，不受浅色主题调整影响 -->
+    <color name="btnPlayInk">#170A05</color>
     <color name="accSoft">#21FF5A36</color>
     <color name="ok">#7FD6A8</color>
     <color name="okSoft">#1A5FBF8E</color>
