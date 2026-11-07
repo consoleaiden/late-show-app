@@ -54,6 +54,10 @@
     <color name="heroTopScrim">#B3000000</color>
     <color name="heroTopScrimEnd">#00000000</color>
     <color name="heroRipple">#26FFFFFF</color>
+    <!-- 播放态胶囊（源站 / 更新信息）落在页面底色 ink900 上：
+         白卡面 + 12% 描边，与简介/选集区同一套「浅底深字」语言（对 #F2F3F6 对比度 4.9+） -->
+    <color name="chipSurfaceOnInk">#FFFFFF</color>
+    <color name="chipLineOnInk">#1F1B2026</color>
     <!-- 浅色主题专用「橙色文本」：acc 作为小字正文对比度仅 3.1，此色对白底 5.41 / 页面底 4.87 -->
     <color name="accText">#C13A17</color>
     <!-- 按压波纹：浅底用深色 13% 透明度 -->

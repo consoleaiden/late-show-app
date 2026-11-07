@@ -6,6 +6,7 @@ import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.graphics.Outline;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -133,6 +134,8 @@ public class DetailFragment extends Fragment {
     private ColorDrawable bandBg;
     /** 信息模块自己的底色：海报态 = heroBand 深色，播放态 = ink900（与内容区同色） */
     private ColorDrawable infoBg;
+    /** 源站 / 更新信息两颗胶囊的底色（代码绘制，随播放态一起过渡；原 XML ripple 仅按压反馈，胶囊不可点） */
+    private GradientDrawable chipBgSource, chipBgUpdate;
     /** 信息带配色过渡（0 海报态 → 1 播放态），与海报区高度动画同参同步 */
     private ValueAnimator bandAnim;
     private float bandTint;
@@ -308,6 +311,13 @@ public class DetailFragment extends Fragment {
         // 白图标压在浅底上就看不见了）。两态之间由 applyBandTint 做颜色过渡。
         infoBg = new ColorDrawable(getColor(R.color.heroBand));
         infoModule.setBackground(infoBg);
+        // 胶囊底色改为代码绘制：海报态沿用 heroSurface/heroLine（与 bg_hero_chip 一致），
+        // 播放态插值到 chipSurfaceOnInk/chipLineOnInk（浅底上的白卡 + 细描边）。
+        // 胶囊没有点击行为，ripple 的按压反馈不会被触发，替换无副作用
+        chipBgSource = chipGradient();
+        chipBgUpdate = chipGradient();
+        chipSource.setBackground(chipBgSource);
+        chipUpdate.setBackground(chipBgUpdate);
         applyBandTint(0f);
         pageBg = new ColorDrawable(getColor(R.color.ink900));
         playRoot.setBackground(pageBg);
@@ -1489,6 +1499,16 @@ public class DetailFragment extends Fragment {
     }
 
     /** 内嵌播放窗口的高度：横向满屏的 16:9（比「屏幕一半」的海报矮） */
+    /** 胶囊底：深色卡面 + 细描边的圆角胶囊，颜色由 applyBandTint 按播放态写入 */
+    private GradientDrawable chipGradient() {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.RECTANGLE);
+        g.setCornerRadius(dp(999));   // 与 bg_hero_chip 的 999dp 一致，高度一半即全圆
+        g.setColor(getColor(R.color.heroSurface));
+        g.setStroke(dp(1), getColor(R.color.heroLine));
+        return g;
+    }
+
     /**
      * 信息带配色：t = 0 海报态（固定深色底 + 浅色文字），t = 1 播放态（与内容区同底 + 主题文字）。
      *
@@ -1514,6 +1534,16 @@ public class DetailFragment extends Fragment {
                 if (c instanceof TextView) ((TextView) c).setTextColor(value);
             }
         }
+        // 「源站 / 更新信息」两颗胶囊：底色、描边、文字随播放态一起过渡，
+        // 与信息带底色同一条 240ms 曲线，不会出现浅底上还压着深色胶囊的中间帧
+        if (chipBgSource != null && chipBgUpdate != null) {
+            int solid = colorLerp(t, R.color.heroSurface, R.color.chipSurfaceOnInk);
+            int stroke = colorLerp(t, R.color.heroLine, R.color.chipLineOnInk);
+            chipBgSource.setColor(solid);   chipBgSource.setStroke(dp(1), stroke);
+            chipBgUpdate.setColor(solid);   chipBgUpdate.setStroke(dp(1), stroke);
+        }
+        if (chipSource != null) chipSource.setTextColor(colorLerp(t, R.color.heroT1, R.color.t1));
+        if (chipUpdate != null) chipUpdate.setTextColor(colorLerp(t, R.color.heroAccText, R.color.accText));
     }
 
     private void setFirstChildTextColor(View row, int color) {

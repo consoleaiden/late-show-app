@@ -40,6 +40,9 @@
     <color name="heroTopScrim">#B3000000</color>
     <color name="heroTopScrimEnd">#00000000</color>
     <color name="heroRipple">#26FFFFFF</color>
+    <!-- 播放态胶囊落在暗色页底上：卡面比页底略亮一档（与海报态几乎一致，暗色下本就差异小） -->
+    <color name="chipSurfaceOnInk">#171B21</color>
+    <color name="chipLineOnInk">#14FFFFFF</color>
     <color name="accText">#FF7A5C</color>
     <color name="ripple">#33FFFFFF</color>
     <color name="rippleOnAcc">#33000000</color>
