@@ -6,7 +6,7 @@
                   └ playRoot   实际内容（海报 / 信息模块 / 简介 / 选集 / 推荐）
      详情页整体使用深色配色（heroBg 系）：海报底部的渐变只有落在深色上才不会「切一刀」，
      明暗主题都是同一套深色，相关令牌见 colors.xml 的 heroBg 注释。 -->
-<androidx.constraintlayout.motion.widget.MotionLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.lateshow.app.util.HeroMotionLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/motionRoot"
     android:layout_width="match_parent"
@@ -512,4 +512,4 @@
             android:clickable="false"
             android:focusable="false" />
     </FrameLayout>
-</androidx.constraintlayout.motion.widget.MotionLayout>
+</com.lateshow.app.util.HeroMotionLayout>
