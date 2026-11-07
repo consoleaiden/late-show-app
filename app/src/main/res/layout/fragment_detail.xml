@@ -203,8 +203,7 @@
                             android:orientation="vertical"
                             android:paddingLeft="16dp"
                             android:paddingRight="16dp"
-                            android:paddingTop="6dp"
-                            android:paddingBottom="14dp">
+                            android:paddingTop="6dp">
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -313,6 +312,17 @@
                                 </HorizontalScrollView>
                             </LinearLayout>
                         </LinearLayout>
+
+                        <!-- 信息带 → 内容区的收口渐变：上端正好是 heroBand 底色、下端正好是 ink900，
+                             两条边都和相邻区域同色，中间平滑过渡，不再出现一道色块硬边。
+                             浅色主题下 heroBand(#666666) 与 ink900(#F2F3F6) 反差大，没有这层会很"切一刀"。
+                             渐变在代码里按主题色现建（DetailFragment#setupBandFade），
+                             收起动画时与信息带一起淡出。 -->
+                        <View
+                            android:id="@+id/bandFade"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="12dp" />
                     </LinearLayout>
 
                     <!-- ==================== 信息带以下：跟随主题 ==================== -->

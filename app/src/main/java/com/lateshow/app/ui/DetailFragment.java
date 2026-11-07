@@ -6,6 +6,7 @@ import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.graphics.Outline;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -131,6 +132,8 @@ public class DetailFragment extends Fragment {
     private ColorDrawable pageBg;
     /** 信息带底色（海报 + 信息模块）：同样在收起时淡出，否则会留一块比卡片大的灰板 */
     private ColorDrawable bandBg;
+    /** 信息带 → 内容区的收口渐变（heroBand → ink900），收起时随信息带一起淡出 */
+    private View bandFade;
     private View heroBand;
     private FrameLayout heroWrap;
     private ImageView cover;
@@ -298,6 +301,14 @@ public class DetailFragment extends Fragment {
         // 页面分两段：信息带（固定偏深底）+ 信息带以下（跟随主题的页底）
         bandBg = new ColorDrawable(getColor(R.color.heroBand));
         heroBand.setBackground(bandBg);
+        // 信息带底部收口：上端 = heroBand、下端 = ink900，与下方选集区无缝衔接
+        // （浅色主题两者反差大，没有这层渐变会是一道生硬的色块分界）
+        bandFade = v.findViewById(R.id.bandFade);
+        if (bandFade != null) {
+            bandFade.setBackground(new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{getColor(R.color.heroBand), getColor(R.color.ink900)}));
+        }
         pageBg = new ColorDrawable(getColor(R.color.ink900));
         playRoot.setBackground(pageBg);
 
@@ -528,6 +539,7 @@ public class DetailFragment extends Fragment {
         float bgAlpha = 1f - smooth(0.45f, 0.88f, p);
         pageBg.setAlpha(Math.round(255 * bgAlpha));
         bandBg.setAlpha(Math.round(255 * bgAlpha));
+        if (bandFade != null) bandFade.setAlpha(bgAlpha);
         heroFade.setAlpha(bgAlpha);
         lastBgAlpha = bgAlpha;
         applyScrimAlpha(bgAlpha);
@@ -1621,6 +1633,7 @@ public class DetailFragment extends Fragment {
                     } else if (state == Player.STATE_ENDED) {
                         long d = player.getDuration() / 1000;
                         saveProgress(Math.max(0, d), d);
+                        playNextAuto();
                     }
                 }
                 @Override public void onIsPlayingChanged(boolean p) {
@@ -1746,6 +1759,25 @@ public class DetailFragment extends Fragment {
     }
 
     /** 内嵌播放/缓冲期间保持屏幕常亮；暂停、播完、idle 时恢复系统息屏策略 */
+    /**
+     * 多集视频：一集播完自动接下一集。
+     *
+     * <p>最后一集停住（不回到第一集），单集视频直接结束；
+     * 换集时同步刷新选集高亮与分页位置，避免高亮还停在上集。
+     */
+    private void playNextAuto() {
+        List<Models.Episode> eps = currentEpisodes();
+        if (eps.size() <= 1) return;
+        int next = curEp + 1;
+        if (next >= eps.size()) return;
+        curEp = next;
+        epPage = curEp / Math.max(1, epPageSize);
+        renderEpisodes();
+        if (lines.getAdapter() != null) lines.getAdapter().notifyDataSetChanged();
+        toast("自动播放第" + (next + 1) + "集");
+        playCurrent(0);
+    }
+
     private void syncKeepScreenOn() {
         if (playerView == null) return;
         boolean on = player != null && player.getPlayWhenReady()
