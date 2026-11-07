@@ -635,6 +635,8 @@ public final class StaticCatalog implements Catalog {
             Models.PlayLine line = new Models.PlayLine();
             line.name = g < names.length && !TextUtils.isEmpty(names[g].trim())
                     ? names[g].trim() : ("线路" + (g + 1));
+            // 直连模式没有服务端过滤/重排，但同样用上游下标做稳定的线路记忆键
+            line.originalIndex = g;
             line.episodes = new ArrayList<>();
             for (String seg : groups[g].split("#")) {
                 if (TextUtils.isEmpty(seg)) continue;

@@ -28,6 +28,8 @@ public class PlayerActivity extends AppCompatActivity {
     private String slug, epName, title, pic, remarks, sourceName;
     private long vodId;
     private int epIndex, lineIndex;
+    /** VodSync v1.11.0：线路稳定标识（original_index），null = 老版本详情页未传 */
+    private Integer lineKey;
     private long lastSavedSec = 0;
 
     /** 周期检查「跳过片尾」 */
@@ -71,6 +73,8 @@ public class PlayerActivity extends AppCompatActivity {
         vodId = it.getLongExtra("vodId", -1);
         epIndex = it.getIntExtra("epIndex", 0);
         lineIndex = it.getIntExtra("lineIndex", 0);
+        int lk = it.getIntExtra("lineKey", -1);
+        lineKey = lk >= 0 ? Integer.valueOf(lk) : null;
         epName = it.getStringExtra("epName");
         pic = it.getStringExtra("pic");
         remarks = it.getStringExtra("remarks");
@@ -263,8 +267,17 @@ public class PlayerActivity extends AppCompatActivity {
         h.title = title != null && title.contains(" · ") ? title.substring(0, title.lastIndexOf(" · ")) : title;
         h.pic = pic;
         h.remarks = remarks;
-        h.lineIndex = lineIndex;
+        h.lineIndex = lineIndex;   // 兼容字段
+        h.lineKey = lineKey;       // 稳定键：回到详情页/下次进入时按它恢复线路
         h.epIndex = epIndex;
+        // saveHist 是整条替换：把详情页/历史里已有的离线展示字段带过来，避免退出全屏后被清空
+        PrefStore.HistItem old = PrefStore.get().getHist(slug, vodId);
+        if (old != null) {
+            h.typeName = old.typeName;
+            h.content = old.content;
+            h.epCount = old.epCount;
+            h.cached = old.cached;
+        }
         h.epName = epName;
         h.playedSec = playedSec;
         h.totalSec = totalSec;

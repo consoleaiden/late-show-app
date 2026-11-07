@@ -999,7 +999,7 @@ public class DetailFragment extends Fragment {
         PrefStore.HistItem h = PrefStore.get().getHist(slug, vodId);
         if (h != null) {
             historyEp = h.epIndex;
-            if (h.lineIndex > 0) curLine = h.lineIndex;
+            curLine = resolveLineFromHistory(h);
             if (h.epIndex > 0) curEp = h.epIndex;
         }
         if (curLine >= playList().size()) curLine = 0;
@@ -1014,6 +1014,36 @@ public class DetailFragment extends Fragment {
 
         loadRelated();
         loadCast();
+    }
+
+    /**
+     * 断点续播恢复线路。
+     *
+     * <p>VodSync v1.11.0 会剔除分享页线路并按直链优先重排，线路数组下标不再稳定，
+     * 历史里改存稳定标识 original_index，这里按它回查当前位置。查不到说明用户上次选的
+     * 那条线路已被服务端剔除，回到第一条（现在的可播线路）；升级前的老历史没有该字段，
+     * 回退到旧的数组下标并做边界检查。
+     */
+    private int resolveLineFromHistory(PrefStore.HistItem h) {
+        List<Models.PlayLine> ls = playList();
+        if (ls.isEmpty()) return 0;
+        if (h != null && h.lineKey != null && h.lineKey >= 0) {
+            for (int i = 0; i < ls.size(); i++) {
+                Models.PlayLine l = ls.get(i);
+                if (l != null && l.stableKey(i) == h.lineKey) return i;
+            }
+            return 0;
+        }
+        int legacy = h != null ? h.lineIndex : 0;
+        return legacy >= 0 && legacy < ls.size() ? legacy : 0;
+    }
+
+    /** 当前线路的稳定标识（写历史 / 传全屏播放器时用）；-1 表示当前无线路 */
+    private int lineStableKey(int position) {
+        List<Models.PlayLine> ls = playList();
+        if (position < 0 || position >= ls.size()) return -1;
+        Models.PlayLine l = ls.get(position);
+        return l == null ? -1 : l.stableKey(position);
     }
 
     /** 线路选择：多线路才显示；切换线路会把集数归零并重排选集 */
@@ -1210,7 +1240,14 @@ public class DetailFragment extends Fragment {
             });
     }
 
-    /** 渲染横向推荐卡：排除自身；score>0 且非兜底条目才显示相关度百分比 */
+    /**
+     * 渲染横向推荐卡：排除自身。
+     *
+     * <p>VodSync v1.10.0 起相关度算法换了口径（证据先验 + 权重回归 + 演员余弦），
+     * score 整体下调且不再是「相似度百分比」（真命中常见 0.2~0.5，兜底恒为 0）。
+     * 继续显示成 86% / 69% 会被误读成评分，所以本版起不再展示具体数值；
+     * 推荐语义改由区标题（「按类型 · 主演匹配」/「同类热门」）表达。
+     */
     private void renderRelated(final List<Models.RelatedCard> raw, boolean fallback) {
         final List<Models.RelatedCard> list = new ArrayList<>();
         for (Models.RelatedCard c : raw) {
@@ -1243,12 +1280,8 @@ public class DetailFragment extends Fragment {
                         .dontAnimate()
                         .into(cover);
                 name.setText(c.vodName != null ? c.vodName : "");
-                if (c.score > 0.005 && !"fallback".equals(c.mode)) {
-                    score.setText(Math.round(c.score * 100) + "%");
-                    score.setVisibility(View.VISIBLE);
-                } else {
-                    score.setVisibility(View.GONE);
-                }
+                // score 只用于排序，不再换算成百分比展示（见方法注释：v1.10.0 口径变更）
+                score.setVisibility(View.GONE);
                 v.setOnClickListener(x -> openOther(c.source != null && !c.source.isEmpty() ? c.source : slug,
                         c.vodId, c.vodName, c.vodPic, c.vodRemarks, c.sourceName, cover));
             }
@@ -1481,7 +1514,9 @@ public class DetailFragment extends Fragment {
         List<Models.PlayLine> out = new ArrayList<>();
         if (TextUtils.isEmpty(raw)) return out;
         int li = 0;
+        int srcIdx = 0;
         for (String line : raw.split("\\$\\$\\$")) {
+            final int upstream = srcIdx++;   // 上游原始下标：空段也占位，保证跨版本稳定
             line = line.trim();
             if (line.isEmpty()) continue;
             List<Models.Episode> eps = new ArrayList<>();
@@ -1502,6 +1537,7 @@ public class DetailFragment extends Fragment {
             if (!eps.isEmpty()) {
                 Models.PlayLine pl = new Models.PlayLine();
                 pl.name = "线路" + (li + 1);
+                pl.originalIndex = upstream;
                 pl.episodes = eps;
                 out.add(pl);
             }
@@ -2033,7 +2069,8 @@ public class DetailFragment extends Fragment {
         it.putExtra("slug", slug);
         it.putExtra("vodId", vodId);
         it.putExtra("epIndex", curEp);
-        it.putExtra("lineIndex", curLine);
+        it.putExtra("lineIndex", curLine);                    // 兼容字段（旧版全屏播放器）
+        it.putExtra("lineKey", lineStableKey(curLine));      // 稳定键：退出全屏写历史时用它
         it.putExtra("epName", epName(curEp));
         it.putExtra("pic", pic != null ? pic : (detail != null ? detail.vodPic : null));
         it.putExtra("remarks", remark);
@@ -2083,7 +2120,9 @@ public class DetailFragment extends Fragment {
         item.content = detail != null ? detail.vodContent : null;
         item.epCount = epCountOf(detail);
         item.cached = detail != null; // 播放数据在 playCurrent 时已落盘
-        item.lineIndex = curLine;
+        item.lineIndex = curLine;     // 兼容字段
+        int key = lineStableKey(curLine);
+        item.lineKey = key >= 0 ? Integer.valueOf(key) : null;  // v1.11.0 稳定线路键
         item.epIndex = curEp;
         item.epName = e != null ? e.name : null;
         item.playedSec = playedSec;

@@ -45,7 +45,14 @@ public final class PrefStore {
         public String content;
         public int epCount;
         public boolean cached;
+        /** 旧字段：线路在当次列表里的数组下标。仅用于兼容升级前的历史，不再作为主判断 */
         public int lineIndex;
+        /**
+         * VodSync v1.11.0：线路稳定标识（vod_play_list[].original_index）。
+         * 服务端会剔除分享页线路并做直链优先排序，数组下标会错位，必须按原始下标记忆。
+         * null = 升级前的老历史或服务端未提供该字段，此时回退到 lineIndex。
+         */
+        public Integer lineKey;
         public int epIndex;
         public String epName;
         public long playedSec;

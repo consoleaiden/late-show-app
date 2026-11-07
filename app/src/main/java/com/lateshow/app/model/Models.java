@@ -28,6 +28,17 @@ public final class Models {
     public static class PlayLine {
         public String name;
         public List<Episode> episodes;
+        /**
+         * VodSync v1.11.0：该线路在上游原始串里的下标（0 基）。
+         * 服务端会剔除分享页线路并按直链优先重排，数组下标会变，只有这个值跨策略/版本稳定；
+         * 用它做「用户上次选的是哪条线路」的持久化键。旧服务端 / 直连模式为 null。
+         */
+        @SerializedName("original_index") public Integer originalIndex;
+
+        /** 线路的稳定标识：优先服务端 original_index，缺失时退回当前列表位置（兼容旧数据） */
+        public int stableKey(int position) {
+            return originalIndex != null && originalIndex >= 0 ? originalIndex : position;
+        }
     }
 
     public static class VideoDetail extends VideoSummary {
@@ -50,7 +61,9 @@ public final class Models {
 
     /**
      * 相关推荐卡片。结构与视频卡片对齐，额外带 source/source_name（支持跨站跳转）与 score。
-     * score ∈ [0,1]；mode = match | fallback；score<=0 表示无相关度（客户端不展示百分比）。
+     * score ∈ [0,1]；mode = match | fallback；score<=0 表示无相关度。
+     * VodSync v1.10.0 起算法口径变更（整体下调、不再是相似度百分比），
+     * 客户端只用它理解排序语义，不展示具体数值或百分比。
      */
     public static class RelatedCard {
         @SerializedName("vod_id") public long vodId;

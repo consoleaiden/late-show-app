@@ -55,7 +55,12 @@ public class HomeFragment extends Fragment {
     private String curCategory = null; // null = 全部
     private String keyword = "";
 
-    private int page = 1, pagecount = 1;
+    /** 列表每页条数：翻页终止条件要拿它和本页实际返回条数比 */
+    private static final int PAGE_SIZE = 18;
+
+    private int page = 1;
+    /** 到底标记：VodSync v1.10.0 起全站列表 total/pagecount 是估值，不再用它判断翻页结束 */
+    private boolean noMore = false;
     private boolean loading = false;
     private boolean catFailed = false; // 分类接口失败时用列表数据兜底
     private List<Models.VideoSummary> lastRawList = new ArrayList<>();
@@ -136,7 +141,9 @@ public class HomeFragment extends Fragment {
                     boolean show = lm.findFirstVisibleItemPosition() > 8;
                     fabTop.setVisibility(show ? View.VISIBLE : View.GONE);
                 }
-                if (loading || page >= pagecount) return;
+                // 终止条件按「本页不足一页」而不是 page >= pagecount：
+                // 服务端无筛选时 total 是 SUM(sources.total_videos) 估值，pagecount 可能多算 1~2 页
+                if (loading || noMore) return;
                 if (lm == null) return;
                 int last = lm.findLastVisibleItemPosition();
                 int total = lm.getItemCount();
@@ -840,6 +847,7 @@ public class HomeFragment extends Fragment {
 
     private void reload() {
         page = 1;
+        noMore = false;   // 换源站 / 分类 / 关键词后重新允许翻页
         videoAdapter.setItems(new ArrayList<>());
         emptyView.setVisibility(View.GONE);
         loadPage(1);
@@ -867,7 +875,7 @@ public class HomeFragment extends Fragment {
         // 走网络且当前无数据：首屏显示骨架屏占位（延迟显示，避免快响应闪屏）
         if (reqPage == 1 && videoAdapter.getItemCount() == 0) showSkeletonDelayed();
 
-        com.lateshow.app.api.Catalogs.get().videos(p, 18, curSlug, type, kw,
+        com.lateshow.app.api.Catalogs.get().videos(p, PAGE_SIZE, curSlug, type, kw,
             new VodSyncApi.ApiCb<Models.VideoListResp>() {
                 @Override public void onOk(Models.VideoListResp r) {
                     if (!isAdded()) return;
@@ -912,7 +920,9 @@ public class HomeFragment extends Fragment {
     private void applyList(Models.VideoListResp r, int reqPage, boolean fromCache) {
         hideSkeleton();
         page = reqPage;
-        pagecount = Math.max(1, r.pagecount);
+        // 本页不足一页 = 已经到底。r.pagecount 只作参考，不再参与终止判断
+        // （全站列表的 total 是估值，pagecount 可能比真实页数多 1~2 页）
+        noMore = r.list == null || r.list.size() < PAGE_SIZE;
         if (r.list != null) lastRawList = r.list;
         List<CardItem> cards = new ArrayList<>();
         if (r.list != null) {
