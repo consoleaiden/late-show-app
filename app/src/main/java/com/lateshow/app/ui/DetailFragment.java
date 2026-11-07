@@ -45,6 +45,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.lateshow.app.MainActivity;
 import com.lateshow.app.R;
 import com.lateshow.app.adapter.VideoAdapter;
 import com.lateshow.app.api.VodSyncApi;
