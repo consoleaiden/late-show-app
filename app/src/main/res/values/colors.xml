@@ -27,14 +27,14 @@
          详情页分两段：
          ① 信息带 heroBand —— 海报 +（源站 / 片名 / 分类日期 / 更新信息 / 演员 / 标签）。
             这段固定用偏深底色，海报底部的渐变才有地方落，不会像被切了一刀。
-            浅色主题 #666666；夜间取 #1F2228（夜间再用 #666666 会比整页更亮，观感反转）。
+            浅色主题 #444444；夜间取 #1F2228（夜间再用浅色的中性灰会比整页更亮，观感反转）。
          ② 信息带以下（简介 / 操作 / 线路 / 选集 / 推荐 / 相同演员）—— 沿用主题底色 ink900，
             与设置页同色，随明暗主题切换。
          海报底部渐变 = heroBandFade(全透明) → heroBandMid(半透) → heroBand(不透明)，
          三者与信息带底色同源，改这里就能整体换掉过渡色。 -->
-    <color name="heroBand">#666666</color>
-    <color name="heroBandMid">#B3666666</color>
-    <color name="heroBandFade">#00666666</color>
+    <color name="heroBand">#444444</color>
+    <color name="heroBandMid">#B3444444</color>
+    <color name="heroBandFade">#00444444</color>
     <!-- 详情页滚动后顶部用的底色遮罩（渐变到透明）：与 ink900 同源 -->
     <color name="ink900Fade">#00F2F3F6</color>
     <!-- 页面整体底色（收起时淡出用）：与主题页底一致 -->
@@ -42,15 +42,15 @@
     <color name="heroBgMid">#B3F2F3F6</color>
     <color name="heroBgFade">#00F2F3F6</color>
     <!-- 信息带内的文字/容器令牌。这套令牌只在信息带（heroBand）里用：
-         浅色主题的带底是 #666666（中性灰），所以三级文字必须往亮的一侧压——
-         原来给 #14171E 配的 #A6AEBA 放在灰底上对比度只有 2.4，演员/标签会糊掉。
-         下面三档对 #666666 的对比度分别约 5.7 / 4.9 / 4.5，正文与 11sp 小字都达标。 -->
+         浅色主题的带底是 #444444（深中性灰），所以三级文字必须往亮的一侧压——
+         原来给 #14171E 配的 #A6AEBA 放在深灰底上对比度不够，演员/标签会糊掉。
+         下面三档对 #444444 的对比度分别约 9.7 / 8.6 / 7.6，正文与 11sp 小字都达标。 -->
     <color name="heroT1">#FFFFFF</color>
     <color name="heroT2">#F0F2F5</color>
     <color name="heroT3">#DFE4EA</color>
     <color name="heroSurface">#1C212A</color>
     <color name="heroLine">#2A313C</color>
-    <!-- 灰底上的橙色小字：纯橙(FF5A36)对 #666666 只有 2.1，这里用浅橙保证可读 -->
+    <!-- 深灰底上的橙色小字：纯橙(FF5A36)对 #444444 约 3.1，这里用浅橙保证可读 -->
     <color name="heroAccText">#FFD3C4</color>
     <!-- 详情页顶部状态栏遮罩：海报顶部的深色过渡 + 滚动后盖住文字的底色 -->
     <color name="heroTopScrim">#B3000000</color>
