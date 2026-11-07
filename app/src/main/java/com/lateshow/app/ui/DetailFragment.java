@@ -1517,8 +1517,10 @@ public class DetailFragment extends Fragment {
     }
 
     private void setFirstChildTextColor(View row, int color) {
-        if (row == null || row.getChildCount() == 0) return;
-        View c = row.getChildAt(0);
+        if (!(row instanceof ViewGroup)) return;
+        ViewGroup g = (ViewGroup) row;
+        if (g.getChildCount() == 0) return;
+        View c = g.getChildAt(0);
         if (c instanceof TextView) ((TextView) c).setTextColor(color);
     }
 
