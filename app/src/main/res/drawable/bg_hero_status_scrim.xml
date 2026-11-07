@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 滚动后盖在状态栏下的底色遮罩：由 heroBg 不透明渐变到透明 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/heroBg"
+        android:endColor="@color/heroBgFade"
+        android:type="linear" />
+</shape>

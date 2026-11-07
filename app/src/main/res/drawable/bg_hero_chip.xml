@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 详情页胶囊底（源站 / 更新信息）：深色卡面 + 细描边，按压波纹裁在胶囊内 -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/heroRipple">
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFFFF" />
+            <corners android:radius="999dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/heroSurface" />
+            <stroke android:width="1dp" android:color="@color/heroLine" />
+            <corners android:radius="999dp" />
+        </shape>
+    </item>
+</ripple>

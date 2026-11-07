@@ -186,7 +186,10 @@ public class HomeFragment extends Fragment {
     private void openDetail(CardItem item, View source) {
         // 关键词检索后点开影片也算一次有效搜索：记录历史（覆盖「打字后直接点卡片」的场景）
         if (keyword != null && !keyword.isEmpty()) PrefStore.get().addSearchHistory(keyword);
-        if (getContext() != null) PlayActivity.start(getContext(), item, source);
+        // 详情页改为同窗口的 Fragment 浮层：卡片坐标交给它做跟手一镜到底
+        if (getActivity() instanceof com.lateshow.app.MainActivity) {
+            ((com.lateshow.app.MainActivity) getActivity()).openDetail(item, source);
+        }
     }
 
     // ---------- 首屏骨架屏 ----------

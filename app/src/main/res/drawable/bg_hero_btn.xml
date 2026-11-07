@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 详情页次级按钮底（收藏 / 线路）：深色卡面 + 8dp 圆角 -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/heroRipple">
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFFFF" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/heroSurface" />
+            <stroke android:width="1dp" android:color="@color/heroLine" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</ripple>

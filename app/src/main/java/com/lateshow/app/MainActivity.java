@@ -2,19 +2,28 @@ package com.lateshow.app;
 
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
+import com.lateshow.app.model.CardItem;
 import com.lateshow.app.store.PrefStore;
+import com.lateshow.app.ui.DetailFragment;
 import com.lateshow.app.ui.FavFragment;
 import com.lateshow.app.ui.HomeFragment;
 import com.lateshow.app.ui.SettingsFragment;
@@ -41,6 +50,11 @@ public class MainActivity extends AppCompatActivity {
     private SettingsFragment settingsFragment;
     private Fragment active;
 
+    /** 详情页（Fragment）：全屏浮层，与列表在同一窗口，才能做出跟手一镜到底 */
+    private DetailFragment detailFragment;
+    private View detailHost;
+    private OnBackPressedCallback detailBack;
+
     private final com.airbnb.lottie.LottieAnimationView[] icons = new com.airbnb.lottie.LottieAnimationView[TAB_COUNT];
     private final View[] glows = new View[TAB_COUNT];
     private final View[] inds = new View[TAB_COUNT];
@@ -54,7 +68,12 @@ public class MainActivity extends AppCompatActivity {
         com.lateshow.app.util.OfflineMedia.init(this);
         applyTheme();
         super.onCreate(savedInstanceState);
+        // edge-to-edge：内容画到系统栏下面，详情页海报才能真正盖住状态栏
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
         setContentView(R.layout.activity_main);
+        applySystemBarInsets();
 
         int off = getColor(R.color.t3);
         for (int i = 0; i < TAB_COUNT; i++) {
@@ -87,6 +106,20 @@ public class MainActivity extends AppCompatActivity {
         if (startTab < 0 || startTab >= TAB_COUNT) startTab = 0;
         switchTab(fragmentAt(startTab), startTab);
 
+        // 详情页浮层（配置变更/切主题后由 FragmentManager 自动恢复）
+        detailHost = findViewById(R.id.detailHost);
+        detailFragment = (DetailFragment) fm.findFragmentByTag(DetailFragment.TAG);
+        detailBack = new OnBackPressedCallback(false) {
+            @Override public void handleOnBackPressed() {
+                if (detailFragment != null) detailFragment.requestClose();
+            }
+        };
+        getOnBackPressedDispatcher().addCallback(this, detailBack);
+        if (detailFragment != null) {
+            detailHost.setVisibility(View.VISIBLE);
+            detailBack.setEnabled(true);
+        }
+
         if (!sUpdateChecked) {
             sUpdateChecked = true;
             maybeCheckUpdate();
@@ -94,6 +127,66 @@ public class MainActivity extends AppCompatActivity {
 
         // 服务端开启访问控制且本地没有 API Token 时，引导填写（不阻塞进入 App）
         com.lateshow.app.util.AuthGate.checkStartup(this);
+    }
+
+    /**
+     * 内容区补系统栏内边距：详情页浮层是它的兄弟节点，不受影响（海报要顶到状态栏）。
+     * 用监听而不是 fitsSystemWindows，是因为键盘弹起时还要让出 IME 高度。
+     */
+    private void applySystemBarInsets() {
+        final View content = findViewById(R.id.mainContent);
+        ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(0, bars.top, 0, Math.max(bars.bottom, ime.bottom));
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(content);
+    }
+
+    /**
+     * 打开影片详情（全屏 Fragment 浮层）。
+     *
+     * @param source 列表卡片的封面容器；非空时取其屏幕坐标，详情页据此从卡片位置展开、
+     *               收起时再缩回去（一镜到底）。详情页内跳详情传 null，直接展开无转场。
+     */
+    public void openDetail(CardItem item, View source) {
+        if (isFinishing() || item == null) return;
+        // 已在详情页：先把旧的摘掉，再以新内容展开（详情页内点相关推荐）
+        if (detailFragment != null) {
+            getSupportFragmentManager().beginTransaction()
+                    .remove(detailFragment).commitNowAllowingStateLoss();
+            detailFragment = null;
+        }
+        int[] card = null;
+        if (source != null && source.getWidth() > 0 && source.getHeight() > 0) {
+            int[] loc = new int[2];
+            source.getLocationOnScreen(loc);
+            card = new int[]{loc[0], loc[1], source.getWidth(), source.getHeight()};
+        }
+        DetailFragment f = DetailFragment.newInstance(item, card);
+        detailHost.setVisibility(View.VISIBLE);
+        getSupportFragmentManager().beginTransaction()
+                .setReorderingAllowed(true)
+                .add(R.id.detailHost, f, DetailFragment.TAG)
+                .commitNow();
+        detailFragment = f;
+        detailBack.setEnabled(true);
+        // 详情页整页深色 → 状态栏图标固定白色
+        setLightStatusBarIcons(false);
+    }
+
+    /** 详情页收起动画结束后回调：隐藏浮层、恢复系统栏图标配色 */
+    public void onDetailClosed() {
+        detailFragment = null;
+        if (detailHost != null) detailHost.setVisibility(View.GONE);
+        if (detailBack != null) detailBack.setEnabled(false);
+        setLightStatusBarIcons(!com.lateshow.app.util.ThemeManager.actualNight(this));
+    }
+
+    private void setLightStatusBarIcons(boolean light) {
+        WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        c.setAppearanceLightStatusBars(light);
     }
 
     /** 跳转到设置页（401 引导用） */
@@ -154,7 +247,7 @@ public class MainActivity extends AppCompatActivity {
         if (curTab == tab && active != null) return;
         FragmentManager fm = getSupportFragmentManager();
         FragmentTransaction tx = fm.beginTransaction();
-        for (Fragment f : fm.getFragments()) tx.hide(f);
+        for (Fragment f : fm.getFragments()) if (f != detailFragment) tx.hide(f);
         if (target.isAdded()) tx.show(target);
         else tx.add(R.id.container, target, TAGS[tab]);
         tx.commit();

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 详情页跟手一镜到底的 MotionScene。
+     progress 0 = 展开（整页铺满），1 = 收起（缩到列表卡片位置）。
+     【关键】ds_closed 里的缩放/位移在运行时被 DetailFragment 用 ConstraintSet 覆盖，
+     因为卡片位置随列表滚动而变，XML 里写死没有意义（见 DetailFragment#buildClosedState）。
+     这里只要求：两个状态都约束到父容器左上角、铺满；其余只有 scrim 的透明度差。 -->
+<MotionScene xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Transition
+        android:id="@+id/ds_transition"
+        app:constraintSetStart="@+id/ds_open"
+        app:constraintSetEnd="@+id/ds_closed"
+        app:duration="420"
+        app:motionInterpolator="decelerate" />
+
+    <ConstraintSet android:id="@+id/ds_open">
+        <Constraint
+            android:id="@+id/scrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="1"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <Constraint
+            android:id="@+id/detailSurface"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="1"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </ConstraintSet>
+
+    <ConstraintSet android:id="@+id/ds_closed">
+        <Constraint
+            android:id="@+id/scrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <Constraint
+            android:id="@+id/detailSurface"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="1"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </ConstraintSet>
+</MotionScene>

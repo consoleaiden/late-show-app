@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 详情页顶部遮罩（盖在海报上）：状态栏区域压暗，白图标才读得清；
+     海报滚出后淡出，换成 bg_hero_status_scrim（底色遮罩）保证文字清晰 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/heroTopScrim"
+        android:endColor="@color/heroTopScrimEnd"
+        android:type="linear" />
+</shape>

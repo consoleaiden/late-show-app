@@ -153,7 +153,9 @@ public class FavFragment extends Fragment {
     }
 
     private void openDetail(CardItem item, View source) {
-        if (getContext() != null) PlayActivity.start(getContext(), item, source);
+        if (getActivity() instanceof com.lateshow.app.MainActivity) {
+            ((com.lateshow.app.MainActivity) getActivity()).openDetail(item, source);
+        }
     }
 
     /** 封面右上角删除：确认后移除收藏/播放记录（收藏连带清理离线播放数据） */

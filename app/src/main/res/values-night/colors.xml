@@ -21,10 +21,20 @@
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F00A0C0F</color>
-    <!-- 详情页主题底色（与浅色 themes 里的同名色一一对应，见 values/colors.xml 注释） -->
+    <!-- 详情页配色（与浅色 themes 里的同名色一一对应，见 values/colors.xml 注释）。
+         详情页始终深色：夜间只是把底色再压暗一点，与 ink900 同色，切页不跳色。 -->
     <color name="heroBg">#0A0C0F</color>
     <color name="heroBgMid">#B30A0C0F</color>
     <color name="heroBgFade">#000A0C0F</color>
+    <color name="heroT1">#ECEDEF</color>
+    <color name="heroT2">#98A0AA</color>
+    <color name="heroT3">#7C8593</color>
+    <color name="heroSurface">#171B21</color>
+    <color name="heroLine">#14FFFFFF</color>
+    <color name="heroAccText">#FF7A5C</color>
+    <color name="heroTopScrim">#B3000000</color>
+    <color name="heroTopScrimEnd">#00000000</color>
+    <color name="heroRipple">#26FFFFFF</color>
     <color name="accText">#FF7A5C</color>
     <color name="ripple">#33FFFFFF</color>
     <color name="rippleOnAcc">#33000000</color>

@@ -1,57 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- 主界面：底层是三个 Tab 的内容，detailHost 是详情页（Fragment）的全屏浮层。
+     详情页和列表在同一窗口里，才能做出「手指拖着页面缩小、松手露出列表卡片」的跟手感。
+     页面是 edge-to-edge 的（状态栏透明），所以内容区由代码补系统栏内边距，
+     详情页则故意不补顶部内边距 —— 海报要盖住状态栏。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@color/ink900">
 
-    <FrameLayout
-        android:id="@+id/container"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/line" />
-
-    <!-- 底部导航：48dp 纯图标（无文字），选中项带光斑 / 指示条 / 图标播放一次 -->
     <LinearLayout
-        android:id="@+id/tabbar"
+        android:id="@+id/mainContent"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:orientation="horizontal"
-        android:background="@color/barBg">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@color/ink900">
 
-        <FrameLayout android:id="@+id/tab_home" style="@style/TabItem">
-            <FrameLayout style="@style/TabIconBox">
-                <View android:id="@+id/tab_home_glow" style="@style/TabGlow" />
-                <com.airbnb.lottie.LottieAnimationView
-                    android:id="@+id/tab_home_icon"
-                    android:tag="ic_home"
-                    style="@style/TabIcon" />
-            </FrameLayout>
-            <View android:id="@+id/tab_home_ind" style="@style/TabIndicator" />
-        </FrameLayout>
+        <FrameLayout
+            android:id="@+id/container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
-        <FrameLayout android:id="@+id/tab_fav" style="@style/TabItem">
-            <FrameLayout style="@style/TabIconBox">
-                <View android:id="@+id/tab_fav_glow" style="@style/TabGlow" />
-                <com.airbnb.lottie.LottieAnimationView
-                    android:id="@+id/tab_fav_icon"
-                    android:tag="ic_heart"
-                    style="@style/TabIcon" />
-            </FrameLayout>
-            <View android:id="@+id/tab_fav_ind" style="@style/TabIndicator" />
-        </FrameLayout>
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/line" />
 
-        <FrameLayout android:id="@+id/tab_settings" style="@style/TabItem">
-            <FrameLayout style="@style/TabIconBox">
-                <View android:id="@+id/tab_settings_glow" style="@style/TabGlow" />
-                <com.airbnb.lottie.LottieAnimationView
-                    android:id="@+id/tab_settings_icon"
-                    android:tag="ic_settings"
-                    style="@style/TabIcon" />
+        <!-- 底部导航：48dp 纯图标（无文字），选中项带光斑 / 指示条 / 图标播放一次 -->
+        <LinearLayout
+            android:id="@+id/tabbar"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:orientation="horizontal"
+            android:background="@color/barBg">
+
+            <FrameLayout android:id="@+id/tab_home" style="@style/TabItem">
+                <FrameLayout style="@style/TabIconBox">
+                    <View android:id="@+id/tab_home_glow" style="@style/TabGlow" />
+                    <com.airbnb.lottie.LottieAnimationView
+                        android:id="@+id/tab_home_icon"
+                        android:tag="ic_home"
+                        style="@style/TabIcon" />
+                </FrameLayout>
+                <View android:id="@+id/tab_home_ind" style="@style/TabIndicator" />
             </FrameLayout>
-            <View android:id="@+id/tab_settings_ind" style="@style/TabIndicator" />
-        </FrameLayout>
+
+            <FrameLayout android:id="@+id/tab_fav" style="@style/TabItem">
+                <FrameLayout style="@style/TabIconBox">
+                    <View android:id="@+id/tab_fav_glow" style="@style/TabGlow" />
+                    <com.airbnb.lottie.LottieAnimationView
+                        android:id="@+id/tab_fav_icon"
+                        android:tag="ic_heart"
+                        style="@style/TabIcon" />
+                </FrameLayout>
+                <View android:id="@+id/tab_fav_ind" style="@style/TabIndicator" />
+            </FrameLayout>
+
+            <FrameLayout android:id="@+id/tab_settings" style="@style/TabItem">
+                <FrameLayout style="@style/TabIconBox">
+                    <View android:id="@+id/tab_settings_glow" style="@style/TabGlow" />
+                    <com.airbnb.lottie.LottieAnimationView
+                        android:id="@+id/tab_settings_icon"
+                        android:tag="ic_settings"
+                        style="@style/TabIcon" />
+                </FrameLayout>
+                <View android:id="@+id/tab_settings_ind" style="@style/TabIndicator" />
+            </FrameLayout>
+        </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+
+    <!-- 详情页浮层：为空时不占位、不吃触摸 -->
+    <FrameLayout
+        android:id="@+id/detailHost"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+</FrameLayout>
