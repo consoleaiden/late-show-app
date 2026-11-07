@@ -165,7 +165,11 @@ public class DetailFragment extends Fragment {
             chipSource, chipUpdate, tvActor;
     private View rowActor, rowTags;
     private com.airbnb.lottie.LottieAnimationView btnFav;
-    private RecyclerView lines, epGrid;
+    private RecyclerView lines;
+    /** 选集网格：普通 LinearLayout 按行手动铺（一页 32~40 格，见 renderEpisodes 注释） */
+    private LinearLayout epGrid;
+    /** 海报区原始高度（屏幕一半）：内嵌播放时收成 16:9，收起/退出播放时恢复 */
+    private int posterH;
 
     // 相关推荐（VodSync v1.9.0 预计算，直连模式为同分类兜底）
     private View relatedSection;
@@ -298,8 +302,9 @@ public class DetailFragment extends Fragment {
         playRoot.setBackground(pageBg);
 
         // 海报区：横向满屏、纵向半屏（屏幕高度的一半）
+        posterH = getResources().getDisplayMetrics().heightPixels / 2;
         ViewGroup.LayoutParams hlp = heroWrap.getLayoutParams();
-        hlp.height = getResources().getDisplayMetrics().heightPixels / 2;
+        hlp.height = posterH;
         heroWrap.setLayoutParams(hlp);
 
         tvTitle.setText(title);
@@ -419,6 +424,9 @@ public class DetailFragment extends Fragment {
             }
             @Override public void onRelease(float progress, float vy) {
                 if (progress > CLOSE_THRESHOLD || vy > FLING_VELOCITY) {
+                    // 确定要收起：这时才收掉播放器、恢复海报高度（形变落点按海报本体算）。
+                    // 不能放在 onDragStart —— 半途松手回弹时视频就再也回不来了
+                    leaveInline();
                     animateTo(progress, 1f, CLOSE_MS, new AccelerateInterpolator(1.3f),
                             DetailFragment.this::dismiss);
                 } else {
@@ -480,14 +488,17 @@ public class DetailFragment extends Fragment {
 
         int[] cl = new int[2];
         cover.getLocationOnScreen(cl);
-        float posterCX = cl[0] - origin[0] + cover.getWidth() / 2f;
-        float posterCY = cl[1] - origin[1] + cover.getHeight() / 2f;
 
         // 缩放按「海报 → 卡片」对齐（宽、高分别算）：
         // 收起到底时海报正好铺满卡片，页面其余部分已经淡到全透明，所以撤掉浮层是像素级衔接，
         // 不会出现「比卡片大一圈的深色板」或者收完再跳一下。
+        //
+        // 高度用海报区原始高度（posterH）而不是 cover.getHeight()：内嵌播放时海报区被收成
+        // 16:9，若按当时的高度算，收起终点会窄一圈；而收起前会先恢复海报高度，两者必须一致。
         float posterW = Math.max(1, cover.getWidth());
-        float posterH = Math.max(1, cover.getHeight());
+        float posterH = Math.max(1, this.posterH > 0 ? this.posterH : cover.getHeight());
+        float posterCX = cl[0] - origin[0] + posterW / 2f;
+        float posterCY = cl[1] - origin[1] + posterH / 2f;
         float sx = cardW / posterW;
         float sy = cardH / posterH;
         float cx = rootW / 2f, cy = rootH / 2f;
@@ -563,6 +574,7 @@ public class DetailFragment extends Fragment {
         closing = true;
         cancelMotionAnim();
         fireEnterEnd();
+        leaveInline();   // 播放中返回：视频先变回海报，再走形变
         // 海报已经被滚出屏幕（或没有卡片起点＝详情页内跳详情）：形变终点看不到，改「缩小 + 淡出」收场
         if (cardBounds == null || cardBounds.length != 4
                 || scrollPlay.getScrollY() > heroWrap.getHeight()) {
@@ -916,8 +928,6 @@ public class DetailFragment extends Fragment {
 
         final int from = epPage * epPageSize;
         final int to = Math.min(eps.size(), from + epPageSize);
-        final int base = from;   // lambda 里要用，必须 effectively final
-
         if (eps.isEmpty()) {
             epCount.setText("暂无选集");
         } else if (eps.size() > epPageSize) {
@@ -928,15 +938,30 @@ public class DetailFragment extends Fragment {
 
         buildEpPager(totalPages, eps.size());
 
-        epGrid.setLayoutManager(new GridLayoutManager(requireContext(), epSpan));
-        epGrid.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int vt) {
-                return new RecyclerView.ViewHolder(getLayoutInflater().inflate(R.layout.item_episode, p, false)) {};
-            }
-            @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder vh, int pos) {
-                TextView tv = (TextView) vh.itemView;
-                final int idx = base + pos;
-                Models.Episode e = idx < eps.size() ? eps.get(idx) : null;
+        // 手动铺行：一页最多 epSpan × 8 = 32~40 格，没有虚拟化需求；
+        // 换 RecyclerView 反而会被 ScrollView 的 UNSPECIFIED 测量截成两行高（实测 296px），
+        // 剩下的格子和滑动一起失效。占位 View 保证最后一行的格子宽度与上面一致。
+        epGrid.removeAllViews();
+        final int cell = dp(38), gap = dp(3);
+        for (int rowStart = from; rowStart < to; rowStart += epSpan) {
+            LinearLayout row = new LinearLayout(requireContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (int c = 0; c < epSpan; c++) {
+                final int idx = rowStart + c;
+                if (idx >= to) {
+                    View ph = new View(requireContext());
+                    LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(0, cell, 1f);
+                    plp.setMargins(gap, gap, gap, gap);
+                    ph.setLayoutParams(plp);
+                    row.addView(ph);
+                    continue;
+                }
+                TextView tv = (TextView) getLayoutInflater()
+                        .inflate(R.layout.item_episode, row, false);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, cell, 1f);
+                lp.setMargins(gap, gap, gap, gap);
+                tv.setLayoutParams(lp);
+                Models.Episode e = eps.get(idx);
                 tv.setText(e != null && e.name != null && !e.name.isEmpty()
                         ? e.name : "第" + (idx + 1) + "集");
                 boolean cur = idx == curEp;
@@ -946,13 +971,15 @@ public class DetailFragment extends Fragment {
                         : (watched ? R.color.t3 : R.color.t2)));
                 tv.setOnClickListener(v -> {
                     curEp = idx;
-                    notifyDataSetChanged();
+                    renderEpisodes();
                     if (lines.getAdapter() != null) lines.getAdapter().notifyDataSetChanged();
                     playCurrent(0);
                 });
+                row.addView(tv);
             }
-            @Override public int getItemCount() { return Math.max(0, to - from); }
-        });
+            epGrid.addView(row, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
         updatePlayLabel();
     }
 
@@ -986,7 +1013,6 @@ public class DetailFragment extends Fragment {
                 epPage = page;
                 curEp = page * epPageSize;      // 翻页后把「当前集」带到该页第一集
                 renderEpisodes();
-                epGrid.scrollToPosition(0);
             });
             epPagerRow.addView(tv);
         }
@@ -1378,9 +1404,8 @@ public class DetailFragment extends Fragment {
         // 详情页整页深色 → 状态栏图标固定白色（离开时由 MainActivity 还原）
         setLightStatusBarIcons(false);
         // 从播放器返回后刷新继续播放标签与选集状态
-        if (detail != null && epGrid.getAdapter() != null) {
-            epGrid.getAdapter().notifyDataSetChanged();
-            updatePlayLabel();
+        if (detail != null && epGrid.getChildCount() > 0) {
+            renderEpisodes();
         }
     }
 
@@ -1451,15 +1476,75 @@ public class DetailFragment extends Fragment {
         startInline(e.url, startMs);
     }
 
-    /** 在详情页内嵌窗口播放（横版 16:9），不进入全屏 */
+    /** 内嵌播放窗口的高度：横向满屏的 16:9（比「屏幕一半」的海报矮） */
+    private int playerHeightPx() {
+        int w = motion != null && motion.getWidth() > 0
+                ? motion.getWidth() : getResources().getDisplayMetrics().widthPixels;
+        return Math.round(w * 9f / 16f);
+    }
+
+    /**
+     * 改海报区高度。
+     *
+     * <p>播放时收到 16:9、退出播放时恢复成海报高度，两种情况下 heroBand 以下的
+     * 信息模块 / 简介 / 选集都会跟着重新排版，视觉上就是“内容自动上弹 / 回落”。
+     */
+    private void setHeroHeight(int target, boolean animate) {
+        if (heroWrap == null) return;
+        ViewGroup.LayoutParams lp = heroWrap.getLayoutParams();
+        if (lp == null || lp.height == target) return;
+        if (!animate) {
+            lp.height = target;
+            heroWrap.setLayoutParams(lp);
+            return;
+        }
+        final int from = lp.height;
+        ValueAnimator va = ValueAnimator.ofInt(from, target);
+        va.setDuration(240);
+        va.setInterpolator(new DecelerateInterpolator(1.6f));
+        va.addUpdateListener(a -> {
+            ViewGroup.LayoutParams p = heroWrap.getLayoutParams();
+            if (p == null) return;
+            p.height = (int) a.getAnimatedValue();
+            heroWrap.setLayoutParams(p);
+        });
+        va.start();
+    }
+
+    /**
+     * 退出内嵌播放：播放器收起、海报区恢复原高度。
+     *
+     * <p>恢复高度会让下面的内容整体下沉 delta 像素，所以同时把 ScrollView 前滚同样的距离，
+     * 内容在屏幕上原地不动 —— 看起来只是“视频变回海报”，不会整页跳一下。
+     * 恢复后再重算收起终点（收起形变按海报高度对齐，两者必须一致）。
+     */
+    private void leaveInline() {
+        if (!inlineActive) return;
+        inlineActive = false;
+        if (playerContainer != null) {
+            playerContainer.setVisibility(View.GONE);
+            playerContainer.setAlpha(1f);
+        }
+        if (btnPlayCover != null) btnPlayCover.setVisibility(View.VISIBLE);
+        int delta = posterH - heroWrap.getHeight();
+        setHeroHeight(posterH, false);
+        if (delta != 0 && scrollPlay != null) scrollPlay.scrollBy(0, delta);
+        buildClosedState();
+    }
+
     private void startInline(String url, long startMs) {
         curUrl = url;
         inlineActive = true;
         triedHtmlResolve = false;
-        // 播放器盖在海报之上（海报不隐藏）：页面高度不变，收起形变的对应关系仍然成立
+        // 播放器盖在海报之上（海报不隐藏在下面）：收起时播放器淡出，露出的仍是那面海报
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.setAlpha(1f);
+        // 确保盖在海报与渐变之上（某些 ROM 上子 View 的合成顺序不完全按布局顺序）
+        playerContainer.bringToFront();
         btnPlayCover.setVisibility(View.GONE);
+        // 视频是 16:9，比「屏幕一半」的海报矮：把海报区收到 16:9，下面的信息/选集跟着上移，
+        // 不会在播放器下面留一块空白（视觉上就是点播放后内容上弹一截）
+        setHeroHeight(playerHeightPx(), true);
         // 点「播放」时页面通常停在简介/选集处，滚回顶部让画面可见，否则会以为没播
         scrollPlay.smoothScrollTo(0, 0);
         if (player == null) {

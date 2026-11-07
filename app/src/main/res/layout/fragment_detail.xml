@@ -101,6 +101,10 @@
                                 android:background="#000000"
                                 android:visibility="gone">
 
+                                <!-- surface_type 用 texture_view：SurfaceView 靠"挖洞"贴在窗口后面绘制，
+                                     页面又对 heroWrap / detailSurface 开了 setClipToOutline + alpha，
+                                     这种情况下 SurfaceView 会退到海报后面 —— 表现就是"有声音没画面"。
+                                     TextureView 参与正常视图合成，缩放/裁切/淡出都随父容器走。 -->
                                 <androidx.media3.ui.PlayerView
                                     android:id="@+id/playerView"
                                     android:layout_width="0dp"
@@ -110,7 +114,7 @@
                                     app:layout_constraintStart_toStartOf="parent"
                                     app:layout_constraintEnd_toEndOf="parent"
                                     app:resize_mode="fit"
-                                    app:surface_type="surface_view"
+                                    app:surface_type="texture_view"
                                     app:show_buffering="when_playing" />
 
                                 <TextView
@@ -426,12 +430,16 @@
                                 android:orientation="horizontal" />
                         </HorizontalScrollView>
 
-                        <androidx.recyclerview.widget.RecyclerView
+                        <!-- 选集网格：用普通 LinearLayout 按行铺（不用 RecyclerView）。
+                             原因：RecyclerView 的 wrap_content 在 ScrollView + MotionLayout 里
+                             只被测量出两行高（实测 296px），其余格子和滚动都失效；
+                             一页只有 32~40 格，手动铺行反而更稳、也没有嵌套滚动冲突。 -->
+                        <LinearLayout
                             android:id="@+id/epGrid"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:nestedScrollingEnabled="false" />
+                            android:orientation="vertical" />
 
                         <!-- 相关推荐：横向滚动。数据来自 VodSync v1.9.0 预计算（直连模式同分类兜底） -->
                         <LinearLayout
