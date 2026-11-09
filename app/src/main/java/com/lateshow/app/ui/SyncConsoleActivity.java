@@ -762,8 +762,11 @@ public class SyncConsoleActivity extends AppCompatActivity {
                     JsonObject o = e.getAsJsonObject();
                     String name = str(o, "name");
                     if (name.isEmpty()) continue;
+                    // v1.12.1：vod_* 表带 label（源站中文名），显示更友好；请求仍用 name
+                    String label = str(o, "label");
                     tableNames.add(name);
-                    labels.add(name + "（" + intOf(o, "rows") + " 行）");
+                    labels.add((label.isEmpty() ? name : label + " · " + name)
+                            + "（" + intOf(o, "rows") + " 行）");
                 }
                 ArrayAdapter<String> ad = new ArrayAdapter<>(SyncConsoleActivity.this,
                         android.R.layout.simple_spinner_item, labels);
@@ -914,11 +917,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 int shown = 0;
                 for (JsonElement e : arr) {
                     if (!e.isJsonObject() || shown >= 30) continue;
-                    JsonObject o = e.getAsJsonObject();
-                    addResult(starList, str(o, "term"),
-                            (o.has("enabled") && o.get("enabled").getAsBoolean() ? "启用" : "停用")
-                                    + (str(o, "aliases").isEmpty() ? "" : " · 别名 " + str(o, "aliases"))
-                                    + (str(o, "note").isEmpty() ? "" : " · " + str(o, "note")));
+                    addStarRow(e.getAsJsonObject());
                     shown++;
                 }
                 if (arr.size() > shown) addResult(starList, "… 还有 " + (arr.size() - shown) + " 条", "仅显示前 30 条");
@@ -926,6 +925,75 @@ public class SyncConsoleActivity extends AppCompatActivity {
             }
             @Override public void onErr(String m) { tvStarStatus.setText("读取失败：" + m); }
         });
+    }
+
+    /** 明星词库单行：名称 / 状态 + 面板同款的单条操作（停用、改别名、删除） */
+    private void addStarRow(JsonObject o) {
+        final int id = intOf(o, "id");
+        final boolean enabled = o.has("enabled") && o.get("enabled").getAsBoolean();
+        LinearLayout box = addResult(starList, str(o, "term"),
+                (enabled ? "启用" : "停用")
+                        + (str(o, "aliases").isEmpty() ? "" : " · 别名 " + str(o, "aliases"))
+                        + (str(o, "note").isEmpty() ? "" : " · " + str(o, "note")));
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(smallBtn(enabled ? "停用" : "启用", v ->
+                patchTerm(id, "{\"enabled\":" + (!enabled) + "}")));
+        row.addView(smallBtn("改别名", v -> editTermAlias(id, str(o, "aliases"))));
+        row.addView(smallBtn("删除", v -> new MaterialAlertDialogBuilder(this)
+                .setTitle("删除词条")
+                .setMessage("确认删除「" + str(o, "term") + "」？")
+                .setPositiveButton("删除", (d, w) -> VodSyncApi.get().delete(
+                        "/api/v1/star-terms/" + id, null, JsonObject.class,
+                        new VodSyncApi.ApiCb<JsonObject>() {
+                    @Override public void onOk(JsonObject r) { toast("已删除"); loadStarTerms(); }
+                    @Override public void onErr(String m) { toast(m); }
+                }))
+                .setNegativeButton("取消", null).show()));
+        box.addView(row);
+    }
+
+    private void patchTerm(int id, String body) {
+        VodSyncApi.get().patchJson("/api/v1/star-terms/" + id, body, JsonObject.class,
+                new VodSyncApi.ApiCb<JsonObject>() {
+            @Override public void onOk(JsonObject r) { toast("已更新"); loadStarTerms(); }
+            @Override public void onErr(String m) { toast(m); }
+        });
+    }
+
+    private void editTermAlias(int id, String current) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(current);
+        input.setHint("逗号 / 顿号 / 竖线分隔");
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        input.setPadding(pad, pad / 2, pad, pad / 2);
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("修改别名")
+                .setView(input)
+                .setPositiveButton("保存", (d, w) -> {
+                    try {
+                        patchTerm(id, new org.json.JSONObject()
+                                .put("aliases", input.getText().toString()).toString());
+                    } catch (Exception e) { toast("请求构造失败"); }
+                })
+                .setNegativeButton("取消", null).show();
+    }
+
+    private TextView smallBtn(String text, View.OnClickListener listener) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(10.5f);
+        t.setTextColor(color(R.color.t2));
+        t.setBackgroundResource(R.drawable.bg_smbtn);
+        int dp = (int) (8 * getResources().getDisplayMetrics().density);
+        t.setPadding(dp, dp / 2, dp, dp / 2);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp / 2, dp, 0);
+        t.setLayoutParams(lp);
+        t.setOnClickListener(listener);
+        return t;
     }
 
     private void addStarTerms() {
@@ -1047,7 +1115,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
     // ==================== 工具 ====================
 
     /** 往结果容器追加一条「主标题 + 副标题」，样式沿用设置页小字/卡片 */
-    private void addResult(LinearLayout parent, String title, String sub) {
+    private LinearLayout addResult(LinearLayout parent, String title, String sub) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (8 * getResources().getDisplayMetrics().density);
@@ -1073,6 +1141,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
             box.addView(d);
         }
         parent.addView(box);
+        return box;
     }
 
     private void hideKeyboard() {
