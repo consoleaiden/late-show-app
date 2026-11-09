@@ -20,8 +20,6 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -63,8 +61,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
     private TextView tvConsoleStatus, autoCount, selCount, tvRuntime, pauseWarn, searchInfo,
             tvTablePage, tvAuthState, tvTokenValue, tvStarStatus, tvMaintOutput, tvLineHint;
     private LinearLayout statsGrid, pauseRows, statsSkeleton, srcSkeleton, logSkeleton,
-            searchResults, tableResults, starList;
-    private RecyclerView srcList, logList;
+            searchResults, tableResults, starList, srcList, logList;
     private CheckBox chkAll;
     private Switch swAuthEnable;
     private Spinner spTable, spLineSource, spLinePolicy;
@@ -241,15 +238,14 @@ public class SyncConsoleActivity extends AppCompatActivity {
             @Override public void onEditCustom(Models.SyncSource s) { showCustomSourceDialog(s); }
             @Override public void onDeleteCustom(Models.SyncSource s) { confirmDeleteCustom(s); }
         });
-        srcList.setLayoutManager(new LinearLayoutManager(this));
-        srcList.setAdapter(srcAdapter);
-
+        // 不再接 RecyclerView：控制台外层是 ScrollView(fillViewport=true)，
+        // 内嵌 wrap_content RecyclerView 只会测量出 1 行（源站 57 条被裁成 1 条）。
+        // 数据在 refreshAll 里用 renderInto() 直接铺进 LinearLayout。
         logAdapter = new LogAdapter();
-        logList.setLayoutManager(new LinearLayoutManager(this));
-        logList.setAdapter(logAdapter);
 
         chkAll.setOnCheckedChangeListener((bv, on) -> {
             srcAdapter.setAllPicked(on);
+            srcAdapter.renderInto(srcList);
             syncSelectionUi();
         });
     }
@@ -341,6 +337,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
             @Override public void onOk(Models.SyncSourcesResp r) {
                 Skeleton.hide(srcSkeleton, animSrc);
                 srcAdapter.setItems(r.list != null ? r.list : new ArrayList<>());
+                srcAdapter.renderInto(srcList);
                 syncSelectionUi();
                 refreshLineSourceSpinner();
                 tvConsoleStatus.setText("● 已连接 · 源站 " + srcAdapter.getItemCount() + " 个 · 5 秒自动刷新");
@@ -358,6 +355,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
             @Override public void onOk(Models.LogsResp r) {
                 Skeleton.hide(logSkeleton, animLog);
                 logAdapter.setItems(r.list != null ? r.list : new ArrayList<>());
+                logAdapter.renderInto(logList);
             }
             @Override public void onErr(String m) { Skeleton.hide(logSkeleton, animLog); }
         });
@@ -508,7 +506,11 @@ public class SyncConsoleActivity extends AppCompatActivity {
         if (total > 0) {
             chkAll.setOnCheckedChangeListener(null);
             chkAll.setChecked(picked == total);
-            chkAll.setOnCheckedChangeListener((bv, c) -> { srcAdapter.setAllPicked(c); syncSelectionUi(); });
+            chkAll.setOnCheckedChangeListener((bv, c) -> {
+                srcAdapter.setAllPicked(c);
+                srcAdapter.renderInto(srcList);
+                syncSelectionUi();
+            });
         }
     }
 

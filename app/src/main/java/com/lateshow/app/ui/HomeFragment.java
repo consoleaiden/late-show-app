@@ -55,6 +55,9 @@ public class HomeFragment extends Fragment {
     private String curCategory = null; // null = 全部
     private String keyword = "";
 
+    /** 首页视图还没建好时收到「详情页标签快捷搜索」：先存下，onViewCreated 里补上 */
+    private String pendingTagKeyword, pendingTagSlug, pendingTagName;
+
     /** 列表每页条数：翻页终止条件要拿它和本页实际返回条数比 */
     private static final int PAGE_SIZE = 18;
 
@@ -187,8 +190,55 @@ public class HomeFragment extends Fragment {
             }
         });
 
+        // 详情页标签跳转可能发生在首页视图创建之前：这里补上关键词与源站，
+        // 下面 refreshSources()/reload() 就会直接按该条件加载，不会多发一次请求
+        boolean tagPending = pendingTagKeyword != null;
+        if (tagPending) {
+            curSlug = pendingTagSlug != null ? pendingTagSlug : "";
+            curName = pendingTagName != null ? pendingTagName : "全部源站";
+            curCategory = null;
+            keyword = pendingTagKeyword;
+            inputSearch.setText(keyword);   // 触发 afterTextChanged → reload
+            inputSearch.setSelection(keyword.length());
+            inputSearch.clearFocus();
+            pendingTagKeyword = null;
+        }
+
         refreshSources();
-        reload();
+        if (!tagPending) reload();
+    }
+
+    /**
+     * 详情页点标签 → 快速搜索：切到该影片所在源站，把标签值当关键词检索。
+     * 复用首页的搜索框 / 分类芯片 / 海报墙，不新建页面；关键词同时记入搜索历史。
+     */
+    public void searchFromTag(String word, String slug, String sourceName) {
+        final String k = word == null ? "" : word.trim();
+        if (k.isEmpty()) return;
+        final String s = slug == null ? "" : slug;
+        final String n = sourceName == null || sourceName.isEmpty()
+                ? (s.isEmpty() ? "全部源站" : s) : sourceName;
+        curSlug = s;
+        curName = n;
+        curCategory = null;
+        PrefStore.get().setCurrentSource(s, n);
+        PrefStore.get().addSearchHistory(k);
+        if (inputSearch == null) {
+            pendingTagKeyword = k;
+            pendingTagSlug = s;
+            pendingTagName = n;
+            return;
+        }
+        hideHistory();
+        hideKeyboard();
+        keyword = k;
+        if (!k.equals(inputSearch.getText().toString().trim())) {
+            inputSearch.setText(k);          // afterTextChanged → reload()
+        } else {
+            reload();                        // 同关键词也要重新按新源站加载
+        }
+        inputSearch.setSelection(k.length());
+        toastShort("在「" + n + "」中搜索：" + k);
     }
 
     private void openDetail(CardItem item, View source) {

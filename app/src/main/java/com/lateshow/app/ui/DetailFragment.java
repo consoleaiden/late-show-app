@@ -4,9 +4,11 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Outline;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -180,6 +182,8 @@ public class DetailFragment extends Fragment {
     private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount,
             chipSource, chipUpdate, tvActor;
     private View rowActor, rowTags;
+    /** 标签胶囊的程序化底：随播放态一起改色，避免浅底上压一块深色（见 applyTagChipTint） */
+    private final List<GradientDrawable> tagChipBg = new ArrayList<>();
     private com.airbnb.lottie.LottieAnimationView btnFav;
     private RecyclerView lines;
     /** 选集网格：普通 LinearLayout 按行手动铺（一页 32~40 格，见 renderEpisodes 注释） */
@@ -922,6 +926,7 @@ public class DetailFragment extends Fragment {
     private void setTags(List<String> tags) {
         if (tagRow == null || rowTags == null) return;
         tagRow.removeAllViews();
+        tagChipBg.clear();
         if (tags == null || tags.isEmpty()) {
             rowTags.setVisibility(View.GONE);
             return;
@@ -931,16 +936,61 @@ public class DetailFragment extends Fragment {
             TextView chip = new TextView(requireContext());
             chip.setText(t);
             chip.setTextSize(11f);
-            chip.setTextColor(getColor(R.color.heroT2));
-            chip.setBackgroundResource(R.drawable.bg_hero_tag);
+            // 胶囊底改成程序化 Drawable：原 bg_hero_tag 固定深色，播放态信息带变浅后
+            // 会留下一块突兀的深色块（文字还被刷成深色），这里让它跟「源站/更新」胶囊同款过渡。
+            GradientDrawable bg = new GradientDrawable();
+            bg.setShape(GradientDrawable.RECTANGLE);
+            bg.setCornerRadius(dp(6));
+            bg.setColor(getColor(R.color.heroSurface));
+            bg.setStroke(dp(1), getColor(R.color.heroLine));
+            tagChipBg.add(bg);
+            chip.setBackground(new RippleDrawable(
+                    ColorStateList.valueOf(getColor(R.color.ripple)), bg, null));
             chip.setPadding(padH, padV, padH, padV);
             chip.setMaxLines(1);
+            chip.setClickable(true);
+            chip.setFocusable(true);
+            // 点标签＝用标签值在「当前影片所在源站」检索，复用首页的搜索结构
+            final String word = t;
+            chip.setOnClickListener(x -> searchTag(word));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             lp.rightMargin = dp(6);
             tagRow.addView(chip, lp);
         }
         rowTags.setVisibility(View.VISIBLE);
+        applyTagChipTint(bandTint);
+    }
+
+    /**
+     * 标签快捷搜索：把标签值交给宿主 Activity，由它收起详情页并切回首页。
+     * 源站用「本片所在的源站」，而不是用户当前在首页选中的源站——
+     * 否则从收藏/相关推荐跨站跳进来的影片，点标签会搜错站。
+     */
+    private void searchTag(String word) {
+        if (word == null || word.trim().isEmpty()) return;
+        if (!(getActivity() instanceof MainActivity)) return;
+        String name = sourceName != null && !sourceName.isEmpty() ? sourceName
+                : (detail != null && detail.sourceName != null && !detail.sourceName.isEmpty()
+                    ? detail.sourceName : slug);
+        ((MainActivity) getActivity()).searchFromTag(word.trim(), slug, name);
+    }
+
+    /** 标签胶囊配色：海报态深色卡面（与源站胶囊一致）→ 播放态白卡面 + 橙色字（提示可点） */
+    private void applyTagChipTint(float t) {
+        int solid = colorLerp(t, R.color.heroSurface, R.color.chipSurfaceOnInk);
+        int stroke = colorLerp(t, R.color.heroLine, R.color.chipLineOnInk);
+        int ink = colorLerp(t, R.color.heroT2, R.color.accText);
+        for (GradientDrawable g : tagChipBg) {
+            g.setColor(solid);
+            g.setStroke(dp(1), stroke);
+        }
+        if (tagRow != null) {
+            for (int i = 0; i < tagRow.getChildCount(); i++) {
+                View c = tagRow.getChildAt(i);
+                if (c instanceof TextView) ((TextView) c).setTextColor(ink);
+            }
+        }
     }
 
     /**
@@ -1694,17 +1744,11 @@ public class DetailFragment extends Fragment {
         if (tvTitle != null) tvTitle.setTextColor(colorLerp(t, R.color.heroT1, R.color.t1));
         if (tvMeta != null) tvMeta.setTextColor(colorLerp(t, R.color.heroT3, R.color.t3));
         if (tvActor != null) tvActor.setTextColor(colorLerp(t, R.color.heroT2, R.color.t2));
-        // 演员/标签两行的行首小字 + 标签胶囊文字（多数片源为空、行是 GONE，有数据时一并过渡）
+        // 演员/标签两行的行首小字 + 标签胶囊（多数片源为空、行是 GONE，有数据时一并过渡）
         int label = colorLerp(t, R.color.heroT3, R.color.t3);
-        int value = colorLerp(t, R.color.heroT2, R.color.t2);
         setFirstChildTextColor(rowActor, label);
         setFirstChildTextColor(rowTags, label);
-        if (tagRow != null) {
-            for (int i = 0; i < tagRow.getChildCount(); i++) {
-                View c = tagRow.getChildAt(i);
-                if (c instanceof TextView) ((TextView) c).setTextColor(value);
-            }
-        }
+        applyTagChipTint(t);
         // 「源站 / 更新信息」两颗胶囊：底色、描边、文字随播放态一起过渡，
         // 与信息带底色同一条 240ms 曲线，不会出现浅底上还压着深色胶囊的中间帧
         if (chipBgSource != null && chipBgUpdate != null) {

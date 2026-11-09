@@ -6,6 +6,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -51,6 +52,28 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
 
     public List<Models.SyncSource> getItems() {
         return items;
+    }
+
+    /**
+     * 同步控制台专用：把全部行铺进普通 LinearLayout。
+     *
+     * <p>控制台页面是 ScrollView(fillViewport=true)，里面再放 wrap_content 的 RecyclerView 时，
+     * 测量阶段只会算出 1 行高度，57 个源站被裁成 1 个（线上 /api/v1/sources 实测 57 条）。
+     * 这里直接把行挂到 LinearLayout，行数由容器正常测量，不受嵌套滚动容器影响。
+     * 行数不变时复用已有行视图（5 秒轮询只是重新绑定，不反复 inflate）。
+     */
+    public void renderInto(LinearLayout host) {
+        if (host == null) return;
+        if (host.getChildCount() != items.size()) {
+            host.removeAllViews();
+            LayoutInflater inf = LayoutInflater.from(host.getContext());
+            for (int i = 0; i < items.size(); i++) {
+                host.addView(inf.inflate(R.layout.item_sync_source, host, false));
+            }
+        }
+        for (int i = 0; i < items.size(); i++) {
+            onBindViewHolder(new VH(host.getChildAt(i)), i);
+        }
     }
 
     public void setAllPicked(boolean picked) {

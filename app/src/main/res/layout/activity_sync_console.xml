@@ -274,8 +274,11 @@
                         <TextView android:id="@+id/btnSelOn" style="@style/Smbtn" android:text="开启所选" />
                         <TextView android:id="@+id/btnSelOff" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="暂停所选" />
                     </LinearLayout>
-                    <androidx.recyclerview.widget.RecyclerView android:id="@+id/srcList" android:layout_width="match_parent"
-                        android:layout_height="wrap_content" android:nestedScrollingEnabled="false" android:layout_marginTop="4dp" />
+                    <!-- 源站列表：ScrollView(fillViewport) 内嵌 wrap_content RecyclerView 只测量出 1 行，
+                         57 个源站会被裁成 1 个。改成普通 LinearLayout 手工铺行（见 SyncSourceAdapter#renderInto），
+                         行数不再依赖嵌套滚动容器的测量；轮询时复用已有行视图，不反复 inflate。 -->
+                    <LinearLayout android:id="@+id/srcList" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="4dp" />
                     <LinearLayout android:id="@+id/srcSkeleton" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="4dp" android:orientation="vertical" android:visibility="gone" />
                 </LinearLayout>
@@ -298,8 +301,8 @@
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                         android:text="最多显示 20 条；每次自动刷新同步更新。"
                         android:textSize="10.5sp" android:textColor="@color/t2" />
-                    <androidx.recyclerview.widget.RecyclerView android:id="@+id/logList" android:layout_width="match_parent"
-                        android:layout_height="wrap_content" android:nestedScrollingEnabled="false" android:layout_marginTop="6dp" />
+                    <LinearLayout android:id="@+id/logList" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="6dp" />
                     <LinearLayout android:id="@+id/logSkeleton" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="6dp" android:orientation="vertical" android:visibility="gone" />
                 </LinearLayout>

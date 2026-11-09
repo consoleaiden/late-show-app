@@ -4,6 +4,7 @@ import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
@@ -24,6 +25,21 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.VH> {
         items.clear();
         items.addAll(list);
         notifyDataSetChanged();
+    }
+
+    /** 控制台内是 ScrollView 套 wrap_content 容器，用 LinearLayout 手工铺行保证全部日志可见 */
+    public void renderInto(LinearLayout host) {
+        if (host == null) return;
+        if (host.getChildCount() != items.size()) {
+            host.removeAllViews();
+            LayoutInflater inf = LayoutInflater.from(host.getContext());
+            for (int i = 0; i < items.size(); i++) {
+                host.addView(inf.inflate(R.layout.item_log, host, false));
+            }
+        }
+        for (int i = 0; i < items.size(); i++) {
+            onBindViewHolder(new VH(host.getChildAt(i)), i);
+        }
     }
 
     @NonNull

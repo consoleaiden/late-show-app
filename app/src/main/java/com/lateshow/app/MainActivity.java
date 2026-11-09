@@ -366,6 +366,17 @@ public class MainActivity extends AppCompatActivity {
         switchTab(homeFragment, 0);
     }
 
+    /**
+     * 详情页点标签的快捷搜索：收起详情浮层 → 回到首页 → 用标签值在「该影片所在源站」检索。
+     * 检索、分类、海报墙全部复用首页现有结构（见 HomeFragment#searchFromTag），不另建页面。
+     */
+    public void searchFromTag(String keyword, String slug, String sourceName) {
+        if (keyword == null || keyword.trim().isEmpty()) return;
+        if (detailFragment != null) detailFragment.requestClose();
+        switchTab(homeFragment, 0);
+        if (homeFragment != null) homeFragment.searchFromTag(keyword, slug, sourceName);
+    }
+
     /** 设置页切换数据源后调用：首页清空筛选并重新加载 */
     public void notifyDataSourceChanged() {
         if (homeFragment != null) homeFragment.onDataSourceChanged();
