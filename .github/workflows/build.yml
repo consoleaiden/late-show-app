@@ -27,24 +27,64 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+      # 审计 A-02/A-03：正式签名只来自仓库 Secrets，绝不入库、绝不使用 debug 包发布。
+      # 缺少任一 Secret 时直接失败，避免再次产出未签名/可被仿冒的 Release 制品。
+      - name: Decode release signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          STORE_PW: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$STORE_PW" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PW" ]; then
+            echo "::error::缺少发布签名 Secrets。请在仓库 Settings -> Secrets and variables -> Actions 配置 SIGNING_KEYSTORE_BASE64 / SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS / SIGNING_KEY_PASSWORD（可用 make-keystore.yml 生成）。拒绝分发未签名包。"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/lateshow-release.jks"
+          echo "SIGNING_STORE_FILE=$RUNNER_TEMP/lateshow-release.jks" >> "$GITHUB_ENV"
+          echo "keystore bytes: $(wc -c < "$RUNNER_TEMP/lateshow-release.jks")"
 
-      # 版本号规则与 app/build.gradle 一致：1.5.<GITHUB_RUN_NUMBER>
-      - name: Rename APK with version
+      - name: Resolve version
         run: |
           VER="1.5.${GITHUB_RUN_NUMBER}"
+          CODE=$((1000 + GITHUB_RUN_NUMBER))
           echo "VER=$VER" >> "$GITHUB_ENV"
-          cp app/build/outputs/apk/debug/app-debug.apk "late-show-v${VER}.apk"
+          echo "LATESHOW_VERSION_NAME=$VER" >> "$GITHUB_ENV"
+          echo "LATESHOW_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+
+      - name: Build signed Release APK
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Verify APK signature & produce checksum
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK" || { echo "::error::release APK 未生成"; exit 1; }
+          # apksigner 校验：必须存在 v2/v3 签名块。
+          # runner 上通常安装多个 build-tools 版本，glob 会展开成多个参数，必须只取最高版本。
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "using build-tools: $BT"
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | head -30
+          cp "$APK" "late-show-v${VER}.apk"
+          SHA=$(sha256sum "late-show-v${VER}.apk" | cut -d' ' -f1)
+          echo "${SHA}  late-show-v${VER}.apk" > "late-show-v${VER}.apk.sha256"
+          echo "SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "APK_SHA=$SHA" >> "$GITHUB_ENV"
           ls -lh "late-show-v${VER}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: late-show-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            late-show-v${{ env.VER }}.apk.sha256
 
-      # 每次 push 自动创建 Release，App 内「检查更新」读取该 Release
+      # 每次 push 自动创建 Release，App 内「检查更新」读取该 Release。
+      # GitHub 会为每个 asset 生成 digest（sha256:...），UpdateChecker 用它校验下载完整性。
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -54,13 +94,16 @@ jobs:
           body: |
             ## 夜场 LATE SHOW v${{ env.VER }}
 
-            由 GitHub Actions 自动构建发布。
+            由 GitHub Actions 构建的 **已签名 Release 包**（R8 开启，非 debug 包）。
 
             - 提交：`${{ github.sha }}`
             - 分支：`${{ github.ref_name }}`
-            - 构建时间：${{ github.event.repository.updated_at }}
+            - SHA-256：`${{ env.APK_SHA }}`
+            - 建议安装方式：App 内「设置 → 应用更新 → 检查更新」（会校验 asset digest 与已安装签名证书）
 
-            安装方式：下载 `late-show-v${{ env.VER }}.apk` 直接安装，或在 App 内「设置 → 应用更新 → 检查更新」一键升级。
-          files: late-show-v${{ env.VER }}.apk
+            > 首次从旧版升级：因改用正式签名，需先卸载旧 debug 签名版本再安装。请先备份收藏/历史（本版本已关闭自动备份）。
+          files: |
+            late-show-v${{ env.VER }}.apk
+            late-show-v${{ env.VER }}.apk.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

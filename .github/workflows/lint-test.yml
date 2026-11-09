@@ -1,0 +1,37 @@
+name: Lint & Unit Test
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.9'
+
+      # 工程可能缺少 gradle wrapper jar，直接调用 setup-gradle 提供的 gradle 命令
+      - name: Run unit tests and Android lint
+        run: gradle test lintDebug --no-daemon --stacktrace
+
+      - name: Upload lint & test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-test-reports
+          path: |
+            app/build/reports/**
+            app/build/test-results/**
