@@ -48,6 +48,10 @@ public class SettingsFragment extends Fragment {
     private boolean sourceAvailable = false;
     /** 连接测试序号：手动保存失败时让在途的探测结果失效，避免旧结果把状态改回「有效」 */
     private int probeSeq = 0;
+    /** 验证代次：连续点击保存/测试时只认最后一次结果（审计 A-07 / A-10） */
+    private int verifySeq = 0;
+    /** 「清空 Token」是独立意图：输入框留空默认表示「沿用已保存的 Token」 */
+    private boolean tokenClearIntent = false;
 
     /** 手风琴面板：同一时间只展开一个（同步控制台独立成页后不再占用一个面板） */
     private static final int[] PANEL_HEADERS = {
@@ -126,9 +130,29 @@ public class SettingsFragment extends Fragment {
         consoleEntry = v.findViewById(R.id.consoleEntry);
 
         inputBaseUrl.setText(PrefStore.get().baseUrl());
-        inputToken.setText(PrefStore.get().apiToken());
+        // 审计 A-06：Token 绝不回显明文，避免截图 / 输入法候选栏 / 无障碍服务泄露。
+        // 输入框留空 = 沿用已保存的 Token；点右侧按钮 = 明确要清空已保存的 Token。
+        inputToken.setText("");
+        renderTokenHint();
+        inputToken.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {
+                if (s != null && s.length() > 0) tokenClearIntent = false;
+            }
+            @Override public void afterTextChanged(android.text.Editable s) { renderTokenHint(); }
+        });
         bindClearButton(inputBaseUrl, v.findViewById(R.id.btnClearBaseUrl));
-        bindClearButton(inputToken, v.findViewById(R.id.btnClearToken));
+        final View clearToken = v.findViewById(R.id.btnClearToken);
+        if (clearToken != null) {
+            clearToken.setVisibility(View.VISIBLE);
+            clearToken.setOnClickListener(x -> {
+                inputToken.setText("");
+                tokenClearIntent = true;
+                renderTokenHint();
+                inputToken.requestFocus();
+                toast("将清除已保存的 Token，点「保存」生效");
+            });
+        }
 
         // 同步控制台独立页面入口：仅模块有效（连接测试成功）时可见
         v.findViewById(R.id.btnOpenConsole).setOnClickListener(x -> {
@@ -282,74 +306,104 @@ public class SettingsFragment extends Fragment {
 
     // ==================== 播放源保存 / 测试 ====================
 
-    /** 保存/测试：先探 /api/v1/auth/state 判断是否开启鉴权，再用 /api/v1/stats 验证 Token */
+    /**
+     * 保存 / 测试连接（审计 A-07）。
+     *
+     * <p>用「临时 baseUrl + 临时 Token」走 {@link VodSyncApi#verify}，全程不读写全局配置；
+     * 只有 save=true 且验证通过，才在 {@link #commitSource} 里一次性提交地址、Token 与播放源列表。
+     * 因此「测试连接」不写盘、不写列表、不清缓存、不通知首页重载、不触发状态探测，
+     * 失败也不需要任何回滚（从未写过）。
+     */
     private void verifySource(final boolean save) {
         if (!isAdded()) return;
         final String url = inputBaseUrl.getText().toString().trim();
-        final String token = inputToken.getText().toString().trim();
-        if (url.isEmpty()) {
-            toast("请输入后端地址");
-            return;
-        }
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            toast("地址需以 http:// 或 https:// 开头");
-            return;
-        }
+        final String typed = inputToken.getText().toString().trim();
+        String err = PrefStore.validateBaseUrl(url);
+        if (err != null) { toast(err); return; }
 
-        PrefStore.get().setBaseUrl(url);
-        // 拦截器读取的是已保存的 Token：验证前必须先让输入值生效，验证失败再回滚
-        final String oldToken = PrefStore.get().apiToken();
-        if (!token.equals(oldToken)) PrefStore.get().setApiToken(token);
-
-        btnSave.setText("检测中…");
+        // 留空 = 沿用当前已保存的 Token；只有明确的「清空 Token」按钮才提交空值
+        final String token = tokenClearIntent ? ""
+                : (typed.isEmpty() ? PrefStore.get().apiToken() : typed);
+        final int seq = ++verifySeq;
+        if (save) btnSave.setText("检测中…"); else btnTest.setText("检测中…");
         srcStatus.setTextColor(getColor(R.color.t2));
-        srcStatus.setText("● 正在探测服务器…");
-        final long t0 = System.currentTimeMillis();
+        srcStatus.setText("● 正在验证（此阶段不会修改当前配置）…");
 
-        VodSyncApi.get().authState(new VodSyncApi.ApiCb<Models.AuthState>() {
-            @Override public void onOk(final Models.AuthState s) {
-                if (!isAdded()) return;
-                if (s == null) {
-                    failStatus("● 响应异常，无法判断鉴权状态");
+        VodSyncApi.verify(url, token, new VodSyncApi.ApiCb<VodSyncApi.VerifyResult>() {
+            @Override public void onOk(VodSyncApi.VerifyResult r) {
+                if (!isAdded() || seq != verifySeq) return;
+                restoreVerifyButtons();
+                String state = r.authEnabled ? "已授权 · Token 有效" : "服务端未开启鉴权 · 可不填 Token";
+                if (!save) {
+                    srcStatus.setTextColor(getColor(R.color.ok));
+                    srcStatus.setText("● 测试通过 · " + state + " · " + r.elapsedMs + "ms（未保存）");
+                    toast("连接正常，当前配置未被修改");
                     return;
                 }
-                if (!s.enabled) {
-                    okStatus("● 该服务器未开启鉴权 · 可不填 Token · " + (System.currentTimeMillis() - t0) + "ms");
-                    return;
-                }
-                if (token.isEmpty()) {
-                    srcStatus.setTextColor(getColor(R.color.warn));
-                    srcStatus.setText("● 该服务器已开启鉴权 · 请填写 API Token");
-                    resetSave("保存");
-                    toast("服务端已开启访问控制，需要 API Token");
-                    return;
-                }
-                VodSyncApi.get().get("/api/v1/stats", null, Models.StatsResp.class,
-                        new VodSyncApi.ApiCb<Models.StatsResp>() {
-                            @Override public void onOk(Models.StatsResp r) {
-                                if (!isAdded()) return;
-                                okStatus("● 已授权 · Token 有效 · 延迟 " + (System.currentTimeMillis() - t0) + "ms");
-                            }
-                            @Override public void onErr(String m) {
-                                if (!isAdded()) return;
-                                if (VodSyncApi.isTokenError(m)) {
-                                    if (!token.equals(oldToken)) PrefStore.get().setApiToken(oldToken);
-                                    String detail = VodSyncApi.tokenErrorDetail(m);
-                                    if (detail.length() > 70) detail = detail.substring(0, 70) + "…";
-                                    failStatus("● Token 无效 · " + detail);
-                                    toast("API Token 无效");
-                                } else {
-                                    failStatus("● 连接失败 · " + m);
-                                }
-                            }
-                        });
+                // 唯一的持久化入口：验证成功后原子提交
+                commitSource(url, token);
+                srcStatus.setTextColor(getColor(R.color.ok));
+                srcStatus.setText("● 已保存 · " + state + " · " + r.elapsedMs + "ms");
+                btnSave.setText("已保存");
+                btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_ok));
+                toast("配置已保存");
+                postResetSave();
+                probeSource();
             }
+
             @Override public void onErr(String m) {
-                if (!isAdded()) return;
-                failStatus("● 无法连接 · " + m);
-                toast("地址不可用，请检查地址与端口");
+                if (!isAdded() || seq != verifySeq) return;
+                probeSeq++;   // 作废在途探测，避免稍后返回的成功把失败态改回「有效」
+                setSourceState(false, null);
+                String detail = VodSyncApi.tokenErrorDetail(m).replace("[[need-token]]", "");
+                if (detail.length() > 70) detail = detail.substring(0, 70) + "…";
+                srcStatus.setTextColor(getColor(R.color.bad));
+                srcStatus.setText("● " + (save ? "保存失败" : "测试失败") + " · " + detail);
+                restoreVerifyButtons();
+                toast("验证未通过，当前配置保持原样");
             }
         });
+    }
+
+    /** 原子提交：地址 / Token / 已保存列表一并落地；凭据变化时由 PrefStore 统一清缓存 */
+    private void commitSource(String url, String token) {
+        String oldUrl = PrefStore.get().baseUrl();
+        String oldToken = PrefStore.get().apiToken();
+        tokenClearIntent = false;
+        inputToken.setText("");
+        PrefStore.get().setBaseUrl(url);
+        PrefStore.get().setApiToken(token);
+        PrefStore.get().upsertSavedSource(url, token, null);
+        renderSavedSources();
+        renderTokenHint();
+        if (!url.equals(oldUrl) || !token.equals(oldToken)) {
+            com.lateshow.app.api.Catalogs.markDirty();
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).notifyDataSourceChanged();
+            }
+        }
+    }
+
+    /** Token 输入框提示：只显示掩码，绝不回填明文（审计 A-06） */
+    private void renderTokenHint() {
+        if (inputToken == null) return;
+        if (tokenClearIntent) {
+            inputToken.setHint("将清除已保存的 Token");
+            return;
+        }
+        String saved = PrefStore.get().apiToken();
+        if (saved.isEmpty()) {
+            inputToken.setHint("vs_xxxxxxxxxxxx（服务端开启鉴权时填写）");
+        } else {
+            inputToken.setHint("已保存 " + com.lateshow.app.util.Credentials.mask(saved) + " · 留空表示不修改");
+        }
+    }
+
+    private void restoreVerifyButtons() {
+        if (!isAdded()) return;
+        btnSave.setText("保存");
+        btnTest.setText("测试连接");
+        btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_main));
     }
 
     /** 输入框右侧清空按钮：有内容才显示，点击一键清空并保持输入焦点 */
@@ -367,38 +421,6 @@ public class SettingsFragment extends Fragment {
             input.setText("");
             input.requestFocus();
         });
-    }
-
-    private void okStatus(String text) {
-        if (!isAdded()) return;
-        srcStatus.setText(text);
-        srcStatus.setTextColor(getColor(R.color.ok));
-        btnSave.setText("已保存");
-        btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_ok));
-        // 保存成功：地址 + Token 一并登记进播放源列表（按地址去重）
-        PrefStore.get().upsertSavedSource(
-                inputBaseUrl.getText().toString().trim(),
-                inputToken.getText().toString().trim(), null);
-        renderSavedSources();
-        toast("配置已保存");
-        postResetSave();
-        probeSource();
-    }
-
-    private void failStatus(String text) {
-        if (!isAdded()) return;
-        probeSeq++;   // 手动保存/测试失败：作废在途探测，避免稍后返回的成功覆盖失败态
-        setSourceState(false, null);
-        srcStatus.setText(text);
-        srcStatus.setTextColor(getColor(R.color.bad));
-        resetSave("保存");
-    }
-
-    private void resetSave(String label) {
-        btnSave.setText(label);
-        if (isAdded()) {
-            btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_main));
-        }
     }
 
     private void postResetSave() {
@@ -433,20 +455,22 @@ public class SettingsFragment extends Fragment {
         }
     }
 
-    /** 一键切换：写回地址与 Token，地址变化时清接口缓存并通知首页重载，再走保存校验 */
+    /** 一键切换：用户显式选择已保存的源，直接原子生效（不再二次验证、不再重复写列表） */
     private void applySavedSource(PrefStore.SavedSource it) {
-        String old = PrefStore.get().baseUrl();
         PrefStore.get().setBaseUrl(it.url);
-        PrefStore.get().setApiToken(it.token);
+        PrefStore.get().setApiToken(it.token == null ? "" : it.token);
         inputBaseUrl.setText(it.url);
-        inputToken.setText(it.token);
-        if (!old.equals(PrefStore.get().baseUrl())) {
-            com.lateshow.app.util.ApiCache.clear();
-            if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).notifyDataSourceChanged();
+        inputToken.setText("");          // 审计 A-06：明文不回显到输入框
+        tokenClearIntent = false;
+        renderTokenHint();
+        // 凭据变化清缓存 / 能力门控由 PrefStore.onCredentialsChanged 统一负责
+        com.lateshow.app.api.Catalogs.markDirty();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).notifyDataSourceChanged();
         }
-        verifySource(true);
         renderSavedSources();
         probeSource();
+        toast("已切换播放源：" + (it.name == null ? it.url : it.name));
     }
 
     /**
@@ -465,7 +489,11 @@ public class SettingsFragment extends Fragment {
         EditText inToken = dlg.findViewById(R.id.dssToken);
         inName.setText(it.name);
         inUrl.setText(it.url);
-        inToken.setText(it.token);
+        // 审计 A-06：编辑弹窗同样不回填明文 Token，留空表示「保持原值」
+        inToken.setText("");
+        inToken.setHint(it.token == null || it.token.isEmpty()
+                ? "未配置 Token · 留空表示不修改"
+                : "已保存 " + com.lateshow.app.util.Credentials.mask(it.token) + " · 留空表示不修改");
         final String oldUrl = it.url;
         final boolean wasActive = oldUrl != null && oldUrl.equals(PrefStore.get().baseUrl());
         final String oldToken = it.token == null ? "" : it.token;
@@ -476,22 +504,25 @@ public class SettingsFragment extends Fragment {
                 .setPositiveButton("保存", (d, w) -> {
                     String name = inName.getText().toString().trim();
                     String url = inUrl.getText().toString().trim();
-                    String token = inToken.getText().toString().trim();
-                    if (PrefStore.validateProxy(url) != null) {
-                        toast("地址需以 http:// 或 https:// 开头");
-                        return;
-                    }
-                    PrefStore.get().updateSavedSource(oldUrl, name, url, token);
+                    String typedToken = inToken.getText().toString().trim();
+                    String urlErr = PrefStore.validateBaseUrl(url);
+                    if (urlErr != null) { toast(urlErr); return; }
+                    // 留空 = 不修改该条目的 Token（updateSavedSource 里 null 表示保持）
+                    String effectiveToken = typedToken.isEmpty() ? oldToken : typedToken;
+                    PrefStore.get().updateSavedSource(oldUrl, name, url,
+                            typedToken.isEmpty() ? null : typedToken);
                     if (wasActive) {
-                        // 编辑的是当前生效地址：输入框、生效值、Token 一起同步
+                        // 编辑的是当前生效地址：生效值同步，但输入框仍不回显明文
                         boolean changed = !url.equals(PrefStore.get().baseUrl())
-                                || !token.equals(PrefStore.get().apiToken());
+                                || !effectiveToken.equals(PrefStore.get().apiToken());
                         PrefStore.get().setBaseUrl(url);
-                        PrefStore.get().setApiToken(token);
+                        PrefStore.get().setApiToken(effectiveToken);
                         inputBaseUrl.setText(url);
-                        inputToken.setText(token);
+                        inputToken.setText("");
+                        tokenClearIntent = false;
+                        renderTokenHint();
                         if (changed) {
-                            com.lateshow.app.util.ApiCache.clear();
+                            com.lateshow.app.api.Catalogs.markDirty();
                             if (getActivity() instanceof MainActivity) {
                                 ((MainActivity) getActivity()).notifyDataSourceChanged();
                             }
@@ -500,7 +531,7 @@ public class SettingsFragment extends Fragment {
                     renderSavedSources();   // 条目保持在列表中，不消失
                     toast("已保存");
                     // 生效地址或 Token 变了：重测连接，让标题延迟与入口状态同步更新
-                    if (wasActive && (!url.equals(oldUrl) || !token.equals(oldToken))) probeSource();
+                    if (wasActive && (!url.equals(oldUrl) || !effectiveToken.equals(oldToken))) probeSource();
                 })
                 .setNegativeButton("取消", null)
                 .show();

@@ -3,9 +3,10 @@ package com.lateshow.app.api;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
-import android.util.Log;
 
 import com.lateshow.app.model.Models;
+import com.lateshow.app.util.AppLog;
+import com.lateshow.app.util.PlayListParser;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -16,6 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
@@ -32,10 +35,18 @@ import okhttp3.Response;
  * 数据链路（与 NAS 模式对外表现一致，只是数据来自第三方）：
  *   1. 源站列表 = mylazily 维护的资源站目录 latest.json（每个条目带一个苹果CMS vod 接口）
  *   2. 分类     = 该站 ac=list 返回的 class 数组；无 class 时从列表条目的 type_name/type_id 反推
- *   3. 分页列表 = 该站 ac=videolist&pg=N，可按 t=<type_id> 过滤、wd=<关键词> 搜索
- *   4. 详情     = 该站 ac=detail&ids=<vod_id>，把 vod_play_from / vod_play_url 拆成线路 + 选集
+ *   3. 分页列表 = 该站 ac=videolist&pg=N，可按 t=&lt;type_id&gt; 过滤、wd=&lt;关键词&gt; 搜索
+ *   4. 详情     = 该站 ac=detail&ids=&lt;vod_id&gt;，把 vod_play_from / vod_play_url 拆成线路 + 选集
  *
- * 注意：直连模式不经过自家服务端，因此没有鉴权、没有服务端聚合与去重；源站质量由目录维护方决定。
+ * 审计整改：
+ * <ul>
+ *   <li>A-24：第三方 JSON 解析 / 700+ 集播放串拆分放到后台单线程池，不再占主线程；</li>
+ *   <li>A-28：分类 id 按源站隔离；「全部源站」不再把 {@code source=""} 写回卡片；
+ *       苹果 CMS 只认 {@code pg} 时按 pageSize 推算虚拟总页数，避免上层提前判定到底；</li>
+ *   <li>A-26：slowUntil 有上限并主动清理过期项；</li>
+ *   <li>A-32/D-01：播放串解析统一委托 {@link PlayListParser}；</li>
+ *   <li>A-35：禁止 HTTPS→HTTP 协议降级，日志走统一开关；响应体增加大小上限。</li>
+ * </ul>
  */
 public final class StaticCatalog implements Catalog {
 
@@ -44,12 +55,10 @@ public final class StaticCatalog implements Catalog {
     /** 资源站目录（源站列表来源） */
     public static final String DIR_URL = "https://mylazily.github.io/ziyuanzhan/data/latest.json";
 
-    /** 备用代理格式约定：代理地址 + url=<urlencode(目标地址)>；列表可在设置页维护（PrefStore.proxies()） */
-
-    /** 直连超过该耗时视为「慢」，后续请求优先走代理 */
     private static final long SLOW_DIRECT_MS = 3500;
-    /** 站点被判定为慢/不可用后的代理优先时长（10 分钟） */
     private static final long SLOW_TTL_MS = 10 * 60 * 1000L;
+    private static final long MAX_RESPONSE_BYTES = 16L * 1024 * 1024;
+    private static final int MAX_SLOW_ENTRIES = 64;
 
     private static final String UA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
             + "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
@@ -57,19 +66,23 @@ public final class StaticCatalog implements Catalog {
     private static final Charset GBK = Charset.forName("GBK");
     private static final Pattern HTML_TAG = Pattern.compile("<[^>]+>");
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    /** 后台解析线程池：第三方 JSON 体积大、含 700+ 集播放串，不能在主线程解析（A-24） */
+    private static final ExecutorService PARSE = Executors.newSingleThreadExecutor();
 
     /** slug(=站点域名) → 接口地址 / 名称 / 条数 / 是否可用 */
     private final Map<String, String> apiBySlug = new ConcurrentHashMap<>();
     private final Map<String, String> nameBySlug = new ConcurrentHashMap<>();
     private final Map<String, Integer> totalBySlug = new ConcurrentHashMap<>();
     private final Map<String, Boolean> enabledBySlug = new ConcurrentHashMap<>();
-    /** 分类名 → type_id（苹果CMS 按 t 过滤需要 id，而上层只有分类名） */
-    private final Map<String, Integer> typeIdByName = new ConcurrentHashMap<>();
+    /** 分类名 → type_id，必须按源站隔离：两个站同名分类的 id 不同（A-28） */
+    private final Map<String, Map<String, Integer>> typeIdBySlug = new ConcurrentHashMap<>();
 
-    private final OkHttpClient http;      // 直连：短超时，快速判定站点是否可用
-    private final OkHttpClient proxyHttp; // 代理：超时放宽，走 pz.v88.qzz.io 转发
+    private final OkHttpClient http;
+    private final OkHttpClient proxyHttp;
     /** host → 代理优先到期时间戳（该 host 直连失败/过慢过） */
     private final Map<String, Long> slowUntil = new ConcurrentHashMap<>();
+    /** 列表请求代次：直连的是第三方站点，无法按 tag 取消，用代次丢弃过期回调（A-09） */
+    private volatile int videoGen = 0;
 
     private volatile boolean dirLoaded = false;
     private volatile boolean dirLoading = false;
@@ -77,17 +90,53 @@ public final class StaticCatalog implements Catalog {
 
     public StaticCatalog() {
         http = new OkHttpClient.Builder()
-                .dns(SmartDns.INSTANCE)   // 与 NAS 模式同一套网络感知 DNS（切网自动失效）
+                .dns(SmartDns.INSTANCE)
+                .followSslRedirects(false)
                 .connectTimeout(4, TimeUnit.SECONDS)
                 .readTimeout(8, TimeUnit.SECONDS)
                 .callTimeout(9, TimeUnit.SECONDS)
                 .build();
         proxyHttp = new OkHttpClient.Builder()
                 .dns(SmartDns.INSTANCE)
+                .followSslRedirects(false)
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(25, TimeUnit.SECONDS)
                 .callTimeout(30, TimeUnit.SECONDS)
                 .build();
+    }
+
+    // ---------------- 回调切换工具 ----------------
+
+    private static <T> void okMain(VodSyncApi.ApiCb<T> cb, T r) {
+        MAIN.post(() -> cb.onOk(r));
+    }
+
+    private static <T> void errMain(VodSyncApi.ApiCb<T> cb, String m) {
+        MAIN.post(() -> cb.onErr(m));
+    }
+
+    private static void errMain(OnErr err, String m) {
+        MAIN.post(() -> err.onErr(m));
+    }
+
+    private void putTypeId(String slug, String name, int id) {
+        if (slug == null || name == null || id <= 0) return;
+        typeIdBySlug.computeIfAbsent(slug, k -> new ConcurrentHashMap<>()).put(name, id);
+    }
+
+    private Integer typeIdFor(String slug, String name) {
+        if (slug == null || name == null) return null;
+        Map<String, Integer> m = typeIdBySlug.get(slug);
+        return m == null ? null : m.get(name);
+    }
+
+    /** 由接口地址反查实际使用的 slug（「全部源站」会退化为目录里资源最多的站） */
+    private String slugOfApi(String apiBase) {
+        if (apiBase == null) return "";
+        for (Map.Entry<String, String> e : apiBySlug.entrySet()) {
+            if (apiBase.equals(e.getValue())) return e.getKey();
+        }
+        return "";
     }
 
     // ---------------- 目录加载 ----------------
@@ -96,9 +145,9 @@ public final class StaticCatalog implements Catalog {
 
     private interface OnApi { void onApi(String apiBase); }
 
-    private interface OnBody { void onBody(String body) throws Exception; }
-
     private interface OnErr { void onErr(String msg); }
+
+    private interface OnBody { void onBody(String body) throws Exception; }
 
     /** 目录只拉一次（进程内复用）；并发调用排队等同一份结果 */
     private void loadDir(final OnDir cb) {
@@ -118,7 +167,7 @@ public final class StaticCatalog implements Catalog {
                     if (!r.isSuccessful()) { finishDir("HTTP " + r.code()); return; }
                     String body = decode(r);
                     int n = parseDir(body);
-                    Log.d(TAG, "目录加载完成，源站 " + n + " 个");
+                    AppLog.d(TAG, "目录加载完成，源站 " + n + " 个");
                     finishDir(n > 0 ? null : "目录为空或格式不符");
                 } catch (Exception e) {
                     finishDir("目录解析失败：" + e.getMessage());
@@ -164,7 +213,7 @@ public final class StaticCatalog implements Catalog {
         return n;
     }
 
-    /** 拿到某源站的接口地址；目录未加载则先加载。slug 为空时自动选目录里资源最多的可用站（近似「全部源站」） */
+    /** 拿到某源站的接口地址；目录未加载则先加载。slug 为空时自动选目录里资源最多的可用站 */
     private void withApi(final String slug, final OnApi ok, final OnErr err) {
         final String key = (slug == null || slug.isEmpty()) ? defaultSlug() : slug;
         if (key != null && !key.isEmpty()) {
@@ -180,7 +229,6 @@ public final class StaticCatalog implements Catalog {
         });
     }
 
-    /** 目录内资源最多且可用的源站（直连模式没有服务端聚合，用单站兜底「全部源站」） */
     private String defaultSlug() {
         String best = null;
         int bestTotal = -1;
@@ -199,7 +247,7 @@ public final class StaticCatalog implements Catalog {
     public void sources(final VodSyncApi.ApiCb<Models.SyncSourcesResp> cb) {
         loadDir(e -> {
             if (e != null) {
-                cb.onErr("资源站目录加载失败：" + e);
+                errMain(cb, "资源站目录加载失败：" + e);
                 return;
             }
             Models.SyncSourcesResp r = new Models.SyncSourcesResp();
@@ -216,22 +264,22 @@ public final class StaticCatalog implements Catalog {
                 s.status = s.enabled ? "ok" : "down";
                 r.list.add(s);
             }
-            cb.onOk(r);
+            okMain(cb, r);
         });
     }
 
     @Override
     public void categories(final String slug, final VodSyncApi.ApiCb<Models.CategoryResp> cb) {
         withApi(slug, apiBase -> {
+            final String resolvedSlug = slugOfApi(apiBase);
             HttpUrl u = HttpUrl.parse(apiBase);
-            if (u == null) { cb.onErr("源站地址无效"); return; }
+            if (u == null) { errMain(cb, "源站地址无效"); return; }
             HttpUrl url = u.newBuilder().addQueryParameter("ac", "list").build();
             get(url, body -> {
                 Models.CategoryResp r = new Models.CategoryResp();
                 r.code = 1;
                 r.list = new ArrayList<>();
                 JSONObject o = new JSONObject(body);
-                // 标准苹果CMS：class 数组
                 JSONArray cls = o.optJSONArray("class");
                 if (cls != null) {
                     for (int i = 0; i < cls.length(); i++) {
@@ -244,10 +292,9 @@ public final class StaticCatalog implements Catalog {
                         c.typeId = id;
                         c.typeName = name;
                         r.list.add(c);
-                        typeIdByName.put(name, id);
+                        putTypeId(resolvedSlug, name, id);
                     }
                 }
-                // 非标准站点（ac=list 直接回视频列表）：用条目的 type_name/type_id 反推分类
                 if (r.list.isEmpty()) {
                     JSONArray list = o.optJSONArray("list");
                     if (list != null) {
@@ -262,30 +309,50 @@ public final class StaticCatalog implements Catalog {
                             c.typeId = id;
                             c.typeName = name;
                             r.list.add(c);
-                            typeIdByName.put(name, id);
+                            putTypeId(resolvedSlug, name, id);
                         }
                     }
                 }
                 r.total = r.list.size();
-                cb.onOk(r);
-            }, cb::onErr);
-        }, cb::onErr);
+                okMain(cb, r);
+            }, m -> errMain(cb, m));
+        }, m -> errMain(cb, m));
+    }
+
+    /** 直连第三方站点无法按 tag 取消 Call，改用代次丢弃过期回调（A-09） */
+    @Override
+    public void cancelVideos() {
+        videoGen++;
     }
 
     @Override
     public void videos(int page, int pageSize, String slug, String typeName, String keyword,
-                       final VodSyncApi.ApiCb<Models.VideoListResp> cb) {
+                       final VodSyncApi.ApiCb<Models.VideoListResp> rawCb) {
+        final int gen = videoGen;   // 同一代次内允许多页并发；换筛选条件才整体作废
+        final VodSyncApi.ApiCb<Models.VideoListResp> cb =
+                new VodSyncApi.ApiCb<Models.VideoListResp>() {
+                    @Override public void onOk(Models.VideoListResp r) {
+                        if (gen == videoGen) rawCb.onOk(r);
+                    }
+                    @Override public void onErr(String m) {
+                        if (gen == videoGen) rawCb.onErr(m);
+                    }
+                };
         final int pg = Math.max(1, page);
+        final int expected = pageSize > 0 ? pageSize : 18;
         final String kw = keyword == null ? "" : keyword.trim();
         withApi(slug, apiBase -> {
+            // A-28：「全部源站」时 withApi 会退化到某个真实站点，卡片必须写真实 slug，
+            // 否则不同站同 vodId 会互相覆盖离线缓存键。
+            final String resolvedSlug = slugOfApi(apiBase);
             HttpUrl u = HttpUrl.parse(apiBase);
-            if (u == null) { cb.onErr("源站地址无效"); return; }
+            if (u == null) { errMain(cb, "源站地址无效"); return; }
             HttpUrl.Builder b = u.newBuilder()
                     .addQueryParameter("ac", "videolist")
                     .addQueryParameter("pg", String.valueOf(pg));
-            if (typeName != null && !typeName.isEmpty()) {
-                Integer tid = typeIdByName.get(typeName);
-                if (tid != null) b.addQueryParameter("t", String.valueOf(tid));
+            Integer tid = typeIdFor(slug == null || slug.isEmpty() ? resolvedSlug : slug, typeName);
+            if (typeName != null && !typeName.isEmpty() && tid != null) {
+                b.addQueryParameter("t", String.valueOf(tid));
             }
             if (!kw.isEmpty()) b.addQueryParameter("wd", kw);
             get(b.build(), body -> {
@@ -293,8 +360,14 @@ public final class StaticCatalog implements Catalog {
                 r.code = 1;
                 JSONObject o = new JSONObject(body);
                 r.page = o.optInt("page", pg);
-                r.pagecount = Math.max(1, o.optInt("pagecount", 1));
+                int reported = o.optInt("pagecount", 0);
                 r.total = o.optInt("total", 0);
+                // 苹果 CMS 不认 page_size：当站点没给 pagecount 时，按客户端期望页大小
+                // 与 total 推算虚拟页数，避免上层「本页不足一页」提前终止翻页（A-28）。
+                if (reported <= 0 && r.total > 0) {
+                    reported = Math.max(1, (r.total + expected - 1) / expected);
+                }
+                r.pagecount = Math.max(1, reported);
                 r.list = new ArrayList<>();
                 JSONArray arr = o.optJSONArray("list");
                 if (arr != null) {
@@ -302,8 +375,8 @@ public final class StaticCatalog implements Catalog {
                         JSONObject it = arr.optJSONObject(i);
                         if (it == null) continue;
                         Models.VideoSummary v = new Models.VideoSummary();
-                        v.source = slug;
-                        v.sourceName = nameBySlug.get(slug);
+                        v.source = resolvedSlug;
+                        v.sourceName = nameBySlug.get(resolvedSlug);
                         v.vodId = it.optLong("vod_id", 0L);
                         v.typeId = it.optInt("type_id", 0);
                         v.typeName = it.optString("type_name", "");
@@ -312,19 +385,23 @@ public final class StaticCatalog implements Catalog {
                         v.vodRemarks = it.optString("vod_remarks", "");
                         v.vodTime = it.optString("vod_time", "");
                         if (v.vodId <= 0) continue;
-                        if (!TextUtils.isEmpty(v.typeName) && v.typeId > 0) typeIdByName.put(v.typeName, v.typeId);
+                        if (!TextUtils.isEmpty(v.typeName) && v.typeId > 0) {
+                            putTypeId(resolvedSlug, v.typeName, v.typeId);
+                        }
                         r.list.add(v);
                     }
                 }
-                cb.onOk(r);
-            }, cb::onErr);
-        }, cb::onErr);
+                okMain(cb, r);
+            }, m -> errMain(cb, m));
+        }, m -> errMain(cb, m));
     }
 
     @Override
-    public void detail(String slug, final long vodId, final VodSyncApi.ApiCb<Models.DetailResp> cb) {        withApi(slug, apiBase -> {
+    public void detail(String slug, final long vodId, final VodSyncApi.ApiCb<Models.DetailResp> cb) {
+        withApi(slug, apiBase -> {
+            final String resolvedSlug = slugOfApi(apiBase);
             HttpUrl u = HttpUrl.parse(apiBase);
-            if (u == null) { cb.onErr("源站地址无效"); return; }
+            if (u == null) { errMain(cb, "源站地址无效"); return; }
             HttpUrl url = u.newBuilder()
                     .addQueryParameter("ac", "detail")
                     .addQueryParameter("ids", String.valueOf(vodId))
@@ -333,14 +410,14 @@ public final class StaticCatalog implements Catalog {
                 JSONObject o = new JSONObject(body);
                 JSONArray arr = o.optJSONArray("list");
                 if (arr == null || arr.length() == 0) {
-                    cb.onErr("该源站没有这部影片的播放数据");
+                    errMain(cb, "该源站没有这部影片的播放数据");
                     return;
                 }
                 JSONObject it = arr.optJSONObject(0);
-                if (it == null) { cb.onErr("详情格式异常"); return; }
+                if (it == null) { errMain(cb, "详情格式异常"); return; }
                 Models.VideoDetail d = new Models.VideoDetail();
-                d.source = slug;
-                d.sourceName = nameBySlug.get(slug);
+                d.source = resolvedSlug;
+                d.sourceName = nameBySlug.get(resolvedSlug);
                 d.vodId = it.optLong("vod_id", vodId);
                 d.typeId = it.optInt("type_id", 0);
                 d.typeName = it.optString("type_name", "");
@@ -351,33 +428,30 @@ public final class StaticCatalog implements Catalog {
                 d.vodContent = stripHtml(it.optString("vod_content", ""));
                 d.vodPlayFrom = it.optString("vod_play_from", "");
                 d.vodPlayUrl = it.optString("vod_play_url", "");
-                // 演员/标签/地区/年代：源站原始字段，直连模式可直接拿到（详情页信息模块用）
                 d.vodActor = it.optString("vod_actor", "");
                 d.vodTag = it.optString("vod_tag", "");
                 d.vodArea = it.optString("vod_area", "");
                 d.vodYear = it.optString("vod_year", "");
-                d.vodPlayList = parsePlayList(d.vodPlayFrom, d.vodPlayUrl);
+                // D-01：与详情页兜底解析共用同一实现
+                d.vodPlayList = PlayListParser.parse(d.vodPlayFrom, d.vodPlayUrl);
                 if (d.vodPlayList.isEmpty()) {
-                    cb.onErr("该源站未提供可播放地址");
+                    errMain(cb, "该源站未提供可播放地址");
                     return;
                 }
                 Models.DetailResp r = new Models.DetailResp();
                 r.code = 1;
                 r.detail = d;
-                cb.onOk(r);
-            }, cb::onErr);
-        }, cb::onErr);
+                okMain(cb, r);
+            }, m -> errMain(cb, m));
+        }, m -> errMain(cb, m));
     }
 
-    /**
-     * 相关推荐（直连兜底）：没有服务端预计算，用「同分类第一页 + 排除自身」凑一栏同类热门。
-     * score 留 0 → 客户端不展示百分比；走的是 {@link #videos} 同一套链路，代理兜底/解析都复用。
-     */
+    /** 相关推荐（直连兜底）：用「同分类第一页 + 排除自身」凑一栏同类热门 */
     @Override
     public void related(final Models.VideoDetail base, final int limit,
                         final VodSyncApi.ApiCb<Models.RelatedResp> cb) {
         if (base == null || base.typeName == null || base.typeName.isEmpty()) {
-            cb.onErr("该源站未提供分类信息");
+            errMain(cb, "该源站未提供分类信息");
             return;
         }
         final String src = base.source;
@@ -407,10 +481,10 @@ public final class StaticCatalog implements Catalog {
                             if (out.list.size() >= limit) break;
                         }
                     }
-                    if (out.list.isEmpty()) cb.onErr("暂无同类推荐");
-                    else cb.onOk(out);
+                    if (out.list.isEmpty()) errMain(cb, "暂无同类推荐");
+                    else okMain(cb, out);
                 }
-                @Override public void onErr(String m) { cb.onErr(m); }
+                @Override public void onErr(String m) { errMain(cb, m); }
             });
     }
 
@@ -420,30 +494,26 @@ public final class StaticCatalog implements Catalog {
         Request req = new Request.Builder().url(DIR_URL).head().header("User-Agent", UA).build();
         http.newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
-                // 目录站点也可能被墙/超时：依次走代理列表
                 fetchViaProxiesHead(t0, cb);
             }
             @Override public void onResponse(Call call, Response resp) {
                 try (Response r = resp) {
-                    if (r.isSuccessful()) MAIN.post(() -> cb.onOk(System.currentTimeMillis() - t0));
-                    else MAIN.post(() -> cb.onErr("HTTP " + r.code()));
+                    if (r.isSuccessful()) okMain(cb, System.currentTimeMillis() - t0);
+                    else errMain(cb, "HTTP " + r.code());
                 } catch (Exception e) {
-                    MAIN.post(() -> cb.onErr("网络异常：" + e.getMessage()));
+                    errMain(cb, "网络异常：" + e.getMessage());
                 }
             }
         });
     }
 
-    /**
-     * 直连模式健康探测：探测「当前选中源站」的 json 接口（ac=videolist&pg=1 小页GET），
-     * HTTP 200 即视为畅通。slug 为空时由 withApi 兜底选目录内资源最多的可用站。
-     */
+    /** 直连模式健康探测：探测「当前选中源站」的 json 接口，HTTP 200 即视为畅通 */
     @Override
     public void pingCurrent(String slug, final VodSyncApi.ApiCb<Long> cb) {
         final long t0 = System.currentTimeMillis();
         withApi(slug, apiBase -> {
             HttpUrl u = HttpUrl.parse(apiBase);
-            if (u == null) { MAIN.post(() -> cb.onErr("源站地址无效")); return; }
+            if (u == null) { errMain(cb, "源站地址无效"); return; }
             HttpUrl url = u.newBuilder()
                     .addQueryParameter("ac", "videolist")
                     .addQueryParameter("pg", "1")
@@ -451,29 +521,30 @@ public final class StaticCatalog implements Catalog {
             Request req = new Request.Builder().url(url).header("User-Agent", UA).build();
             http.newCall(req).enqueue(new Callback() {
                 @Override public void onFailure(Call call, IOException e) {
-                    MAIN.post(() -> cb.onErr("网络异常：" + e.getMessage()));
+                    errMain(cb, "网络异常：" + e.getMessage());
                 }
                 @Override public void onResponse(Call call, Response resp) {
                     try (Response r = resp) {
-                        if (r.isSuccessful()) MAIN.post(() -> cb.onOk(System.currentTimeMillis() - t0));
-                        else MAIN.post(() -> cb.onErr("HTTP " + r.code()));
+                        if (r.isSuccessful()) okMain(cb, System.currentTimeMillis() - t0);
+                        else errMain(cb, "HTTP " + r.code());
                     } catch (Exception e) {
-                        MAIN.post(() -> cb.onErr("网络异常：" + e.getMessage()));
+                        errMain(cb, "网络异常：" + e.getMessage());
                     }
                 }
             });
-        }, e -> MAIN.post(() -> cb.onErr(e)));
+        }, e -> errMain(cb, e));
     }
 
     /** 目录 HEAD 探测的代理兜底：按代理列表顺序逐个尝试 */
     private void fetchViaProxiesHead(final long t0, final VodSyncApi.ApiCb<Long> cb) {
         final List<String> proxies = proxies();
-        if (proxies.isEmpty()) { MAIN.post(() -> cb.onErr("直连失败且代理列表为空")); return; }
+        if (proxies.isEmpty()) { errMain(cb, "直连失败且代理列表为空"); return; }
         tryHeadProxy(0, proxies, t0, cb);
     }
 
-    private void tryHeadProxy(final int idx, final List<String> proxies, final long t0, final VodSyncApi.ApiCb<Long> cb) {
-        if (idx >= proxies.size()) { MAIN.post(() -> cb.onErr("直连失败且所有代理均不可用")); return; }
+    private void tryHeadProxy(final int idx, final List<String> proxies, final long t0,
+                               final VodSyncApi.ApiCb<Long> cb) {
+        if (idx >= proxies.size()) { errMain(cb, "直连失败且所有代理均不可用"); return; }
         Request pr;
         try {
             pr = new Request.Builder().url(proxyUrlOf(proxies.get(idx), DIR_URL))
@@ -488,7 +559,7 @@ public final class StaticCatalog implements Catalog {
             }
             @Override public void onResponse(Call c2, Response resp2) {
                 try (Response r2 = resp2) {
-                    if (r2.isSuccessful()) MAIN.post(() -> cb.onOk(System.currentTimeMillis() - t0));
+                    if (r2.isSuccessful()) okMain(cb, System.currentTimeMillis() - t0);
                     else tryHeadProxy(idx + 1, proxies, t0, cb);
                 } catch (Exception ex) {
                     tryHeadProxy(idx + 1, proxies, t0, cb);
@@ -505,30 +576,26 @@ public final class StaticCatalog implements Catalog {
     // ---------------- 内部工具 ----------------
 
     /**
-     * 统一 GET：带浏览器 UA，宽松解码（部分老站返回 GBK），回调切回主线程。
-     *
-     * 站点可用性策略（直连失败或过慢自动走代理）：
-     *  - host 未被标记慢：先直连（9s 上限），失败按代理列表顺序逐个尝试
-     *  - host 已被标记慢：跳过直连，直接按列表顺序走代理，全部失败再退回直连
-     *  - 直连成功但耗时超过 3.5s，同样标记为慢，之后 10 分钟内优先代理
+     * 统一 GET：带浏览器 UA，宽松解码（部分老站返回 GBK）。
+     * 解析在 PARSE 后台线程执行，结果回调统一切回主线程（A-24）。
      */
     private void get(HttpUrl url, final OnBody ok, final OnErr err) {
+        final OnErr mainErr = m -> errMain(err, m);
         final String host = url.host();
         if (isSlow(host)) {
-            Log.d(TAG, "慢站点走代理：" + host);
+            AppLog.d(TAG, "慢站点走代理：" + host);
             fetchViaProxies(url, ok, e1 -> {
-                Log.d(TAG, "代理全部失败，回退直连 " + host + "：" + e1);
-                fetch(url, null, ok, e2 -> err.onErr(e2 + "（直连与代理均失败）"));
+                AppLog.d(TAG, "代理全部失败，回退直连 " + host + "：" + e1);
+                fetch(url, null, ok, e2 -> mainErr.onErr(e2 + "（直连与代理均失败）"));
             });
         } else {
             fetch(url, null, ok, e2 -> {
-                Log.d(TAG, "直连失败，改走代理 " + host + "：" + e2);
-                fetchViaProxies(url, ok, e3 -> err.onErr(e3 + "（已尝试代理）"));
+                AppLog.d(TAG, "直连失败，改走代理 " + host + "：" + e2);
+                fetchViaProxies(url, ok, e3 -> mainErr.onErr(e3 + "（已尝试代理）"));
             });
         }
     }
 
-    /** 按代理列表顺序逐个尝试（index 从 0 开始，全部失败回调 err） */
     private void fetchViaProxies(final HttpUrl url, final OnBody ok, final OnErr err) {
         final List<String> proxies = proxies();
         if (proxies.isEmpty()) { err.onErr("代理列表为空"); return; }
@@ -536,7 +603,7 @@ public final class StaticCatalog implements Catalog {
     }
 
     private void tryProxy(final int idx, final List<String> proxies, final HttpUrl url,
-                          final OnBody ok, final OnErr err) {
+                           final OnBody ok, final OnErr err) {
         if (idx >= proxies.size()) { err.onErr("所有代理均不可用"); return; }
         fetch(url, proxies.get(idx), ok, e -> tryProxy(idx + 1, proxies, url, ok, err));
     }
@@ -554,28 +621,29 @@ public final class StaticCatalog implements Catalog {
         final long t0 = System.currentTimeMillis();
         (viaProxy ? proxyHttp : http).newCall(req).enqueue(new Callback() {
             @Override public void onFailure(Call call, IOException e) {
-                MAIN.post(() -> err.onErr("网络异常：" + e.getMessage()));
+                err.onErr("网络异常：" + e.getMessage());
             }
             @Override public void onResponse(Call call, Response resp) {
                 final String body;
                 try (Response r = resp) {
                     if (!r.isSuccessful()) {
-                        MAIN.post(() -> err.onErr("HTTP " + r.code()));
+                        err.onErr("HTTP " + r.code());
                         return;
                     }
                     body = decode(r);
                 } catch (Exception e) {
-                    MAIN.post(() -> err.onErr("读取失败：" + e.getMessage()));
+                    err.onErr("读取失败：" + e.getMessage());
                     return;
                 }
                 long cost = System.currentTimeMillis() - t0;
                 if (viaProxy || cost > SLOW_DIRECT_MS) markSlow(host);
-                MAIN.post(() -> {
+                // A-24：解析与播放串拆分放到后台线程，主线程只负责最终回调
+                PARSE.execute(() -> {
                     try {
                         ok.onBody(body);
                     } catch (Exception e) {
-                        Log.w(TAG, "解析失败 " + url, e);
-                        err.onErr("数据解析失败：" + e.getMessage());
+                        AppLog.w(TAG, "解析失败 " + url);
+                        errMain(err, "数据解析失败：" + e.getMessage());
                     }
                 });
             }
@@ -593,7 +661,6 @@ public final class StaticCatalog implements Catalog {
         }
     }
 
-    /** 目标地址 → 代理 URL（整段地址做 URL 编码，目标自带的 ?ac=xx&pg=1 才能完整透传） */
     static String proxyUrlOf(String proxyBase, String raw) {
         try {
             return proxyBase + java.net.URLEncoder.encode(raw, "UTF-8");
@@ -603,17 +670,37 @@ public final class StaticCatalog implements Catalog {
     }
 
     private boolean isSlow(String host) {
+        cleanupSlow();
         Long until = slowUntil.get(host);
         return until != null && until > System.currentTimeMillis();
     }
 
-    private void markSlow(String host) {
-        slowUntil.put(host, System.currentTimeMillis() + SLOW_TTL_MS);
+    /** A-26：主动清理过期项并限制表大小，避免长期运行无限增长 */
+    private void cleanupSlow() {
+        if (slowUntil.size() < MAX_SLOW_ENTRIES) return;
+        long now = System.currentTimeMillis();
+        slowUntil.entrySet().removeIf(e -> e.getValue() == null || e.getValue() <= now);
+        while (slowUntil.size() > MAX_SLOW_ENTRIES) {
+            String oldest = null;
+            long min = Long.MAX_VALUE;
+            for (Map.Entry<String, Long> e : slowUntil.entrySet()) {
+                if (e.getValue() != null && e.getValue() < min) { min = e.getValue(); oldest = e.getKey(); }
+            }
+            if (oldest == null) break;
+            slowUntil.remove(oldest);
+        }
     }
 
-    /** 响应体解码：优先用头部 charset，无声明时按 UTF-8，出现替换符再试 GBK */
+    private void markSlow(String host) {
+        slowUntil.put(host, System.currentTimeMillis() + SLOW_TTL_MS);
+        cleanupSlow();
+    }
+
+    /** 响应体解码：优先用头部 charset，无声明时按 UTF-8，出现替换符再试 GBK；限制体积 */
     private static String decode(Response r) throws IOException {
         if (r.body() == null) return "";
+        long len = r.body().contentLength();
+        if (len > MAX_RESPONSE_BYTES) throw new IOException("响应过大，已拒绝解析");
         okhttp3.MediaType mt = r.body().contentType();
         Charset cs = mt == null ? null : mt.charset(null);
         byte[] bytes = r.body().bytes();
@@ -625,38 +712,9 @@ public final class StaticCatalog implements Catalog {
         return s;
     }
 
-    /** 苹果CMS 播放串 → 线路/选集：线路用 $$$ 分隔，集用 # 分隔，集名与地址用 $ 分隔 */
+    /** 苹果 CMS 播放串 → 线路/选集：统一委托 PlayListParser（D-01） */
     static List<Models.PlayLine> parsePlayList(String from, String urls) {
-        List<Models.PlayLine> out = new ArrayList<>();
-        if (TextUtils.isEmpty(urls)) return out;
-        String[] groups = urls.split("\\$\\$\\$");
-        String[] names = TextUtils.isEmpty(from) ? new String[0] : from.split("\\$\\$\\$");
-        for (int g = 0; g < groups.length; g++) {
-            Models.PlayLine line = new Models.PlayLine();
-            line.name = g < names.length && !TextUtils.isEmpty(names[g].trim())
-                    ? names[g].trim() : ("线路" + (g + 1));
-            // 直连模式没有服务端过滤/重排，但同样用上游下标做稳定的线路记忆键
-            line.originalIndex = g;
-            line.episodes = new ArrayList<>();
-            for (String seg : groups[g].split("#")) {
-                if (TextUtils.isEmpty(seg)) continue;
-                String s = seg.trim();
-                if (s.isEmpty()) continue;
-                int sep = s.indexOf('$');
-                Models.Episode ep = new Models.Episode();
-                if (sep > 0) {
-                    ep.name = s.substring(0, sep).trim();
-                    ep.url = s.substring(sep + 1).trim();
-                } else {
-                    ep.url = s;
-                }
-                if (TextUtils.isEmpty(ep.name)) ep.name = "第" + (line.episodes.size() + 1) + "集";
-                if (TextUtils.isEmpty(ep.url)) continue;
-                line.episodes.add(ep);
-            }
-            if (!line.episodes.isEmpty()) out.add(line);
-        }
-        return out;
+        return PlayListParser.parse(from, urls);
     }
 
     private static String stripHtml(String html) {

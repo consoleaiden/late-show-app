@@ -35,7 +35,7 @@ public final class AuthGate {
         if (com.lateshow.app.api.Catalogs.isStatic()) return;
         VodSyncApi.get().authState(new VodSyncApi.ApiCb<Models.AuthState>() {
             @Override public void onOk(Models.AuthState s) {
-                if (s == null || act.isFinishing()) return;
+                if (s == null || act.isFinishing() || act.isDestroyed()) return;
                 if (s.enabled && PrefStore.get().apiToken().isEmpty()) promptToken(act, null);
             }
             @Override public void onErr(String m) {
@@ -46,14 +46,15 @@ public final class AuthGate {
 
     /** 任意接口返回 401 时调用：是 token 问题就引导填写，填完自动重试 */
     public static boolean handleApiError(final Activity act, String msg, final Runnable retry) {
+        if (act == null || act.isFinishing() || act.isDestroyed()) return false;
         if (!VodSyncApi.isTokenError(msg)) return false;
         promptToken(act, retry);
         return true;
     }
 
-    /** 弹出 Token 填写框（预填旧值，方便对比） */
+    /** 弹出 Token 填写框（审计 A-06：不预填明文，只显示掩码） */
     public static void promptToken(final Activity act, final Runnable onRetry) {
-        if (act == null || act.isFinishing() || sPrompting) return;
+        if (act == null || act.isFinishing() || act.isDestroyed() || sPrompting) return;
         sPrompting = true;
 
         final LinearLayout box = new LinearLayout(act);
@@ -72,12 +73,14 @@ public final class AuthGate {
         box.addView(tip);
 
         final EditText input = new EditText(act);
-        input.setHint("vs_xxxxxxxxxxxxxxxx");
+        // 明文绝不预填：输入法候选栏、无障碍服务与截图都能读到 EditText 内容
+        String saved = PrefStore.get().apiToken();
+        input.setHint(saved.isEmpty() ? "vs_xxxxxxxxxxxxxxxx"
+                : "已保存 " + Credentials.mask(saved) + " · 直接粘贴新值可覆盖");
+        input.setText("");
         input.setSingleLine(true);
-        input.setText(PrefStore.get().apiToken());
-        input.setSelection(input.getText().length());
         input.setTextSize(13f);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(act, 14);
@@ -106,13 +109,15 @@ public final class AuthGate {
 
     /** 用需要鉴权的接口验证 Token 是否可用；成功后执行 onDone */
     public static void verify(final Activity act, final Runnable onDone) {
-        VodSyncApi.get().get("/api/v1/stats", null, Models.StatsResp.class,
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.STATS, null, Models.StatsResp.class,
                 new VodSyncApi.ApiCb<Models.StatsResp>() {
                     @Override public void onOk(Models.StatsResp r) {
+                        if (!alive(act)) return;
                         toast(act, "已连接 · Token 有效");
                         if (onDone != null) onDone.run();
                     }
                     @Override public void onErr(String m) {
+                        if (!alive(act)) return;
                         if (VodSyncApi.isTokenError(m)) {
                             toast(act, "Token 无效，请重新复制");
                             promptToken(act, onDone);
@@ -121,6 +126,10 @@ public final class AuthGate {
                         }
                     }
                 });
+    }
+
+    private static boolean alive(Activity act) {
+        return act != null && !act.isFinishing() && !act.isDestroyed();
     }
 
     private static void openSettings(Activity act) {

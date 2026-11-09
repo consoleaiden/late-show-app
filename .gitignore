@@ -10,3 +10,8 @@ captures/
 *.apk
 *.aab
 .DS_Store
+
+# 审计 A-03：发布密钥绝不入库
+*.jks
+*.keystore
+release-signing.zip

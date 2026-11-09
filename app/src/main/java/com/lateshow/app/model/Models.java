@@ -23,6 +23,16 @@ public final class Models {
     public static class Episode {
         public String name;
         public String url;
+        /** VodSync v1.11.0：线路/集的可播判定。null = 字段缺失（旧服务端/离线缓存），按可播处理 */
+        public Boolean playable;
+        /** 上游播放来源标识（如 ffzy / bfzy），仅用于展示与排障 */
+        public String from;
+        /** 线路类型（hls / direct / web_page 等） */
+        public String type;
+
+        public boolean isPlayable() {
+            return playable == null || playable;
+        }
     }
 
     public static class PlayLine {
@@ -34,10 +44,23 @@ public final class Models {
          * 用它做「用户上次选的是哪条线路」的持久化键。旧服务端 / 直连模式为 null。
          */
         @SerializedName("original_index") public Integer originalIndex;
+        /** VodSync v1.11.0：线路是否可播。null = 字段缺失（按可播处理，保证向后兼容） */
+        public Boolean playable;
+        public String from;
+        public String type;
 
         /** 线路的稳定标识：优先服务端 original_index，缺失时退回当前列表位置（兼容旧数据） */
         public int stableKey(int position) {
             return originalIndex != null && originalIndex >= 0 ? originalIndex : position;
+        }
+
+        /**
+         * 线路可播（审计 A-29）：只有服务端明确下发 {@code playable=false} 才判不可用；
+         * 字段缺失、旧服务端、离线缓存一律按可播处理，避免把正常线路误置灰。
+         * 「线路没有任何选集」由渲染层按「暂无选集」处理，不在这里判死刑。
+         */
+        public boolean isPlayable() {
+            return playable == null || playable;
         }
     }
 
@@ -133,6 +156,10 @@ public final class Models {
         public int code;
         public int page;
         public int pagecount;
+        /** v1.10.0 起全站列表的 total 是估值；true 时 UI 文案须降级为「约 N 条」 */
+        @SerializedName("total_approximate") public boolean totalApproximate;
+        /** 后端建议展示的查询耗时（毫秒），仅用于诊断文案 */
+        @SerializedName("query_ms") public Double queryMs;
         public int total;
         public List<VideoSummary> list;
     }
@@ -197,6 +224,12 @@ public final class Models {
         public String origin;
         public String homepage;
         public String description;
+        /** v1.11+ 源站线路策略与失败计数（审计 C-08）：控制台可据此展示策略效果 */
+        @SerializedName("fail_streak") public Integer failStreak;
+        @SerializedName("skip_until") public String skipUntil;
+        @SerializedName("play_line") public String playLine;
+        @SerializedName("play_line_effective") public String playLineEffective;
+        @SerializedName("play_line_policy") public String playLinePolicy;
         public boolean pick; // UI 勾选态
     }
 

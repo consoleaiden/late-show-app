@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 及以下 full-backup 规则，与 data_extraction_rules.xml 保持一致（审计 A-05） -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="lateshow.xml" />
+    <exclude domain="file" path="api-cache" />
+    <exclude domain="file" path="offline-media" />
+</full-backup-content>

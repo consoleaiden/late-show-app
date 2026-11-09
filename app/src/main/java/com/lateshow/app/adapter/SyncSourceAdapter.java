@@ -36,17 +36,33 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
 
     private final List<Models.SyncSource> items = new ArrayList<>();
     private final Callbacks cb;
+    /** 上一次渲染的行签名 / slug 顺序：用于差量重绑（审计 A-25） */
+    private final List<String> signatures = new ArrayList<>();
+    private final List<String> renderedKeys = new ArrayList<>();
 
     public SyncSourceAdapter(Callbacks cb) {
         this.cb = cb;
     }
 
+    /**
+     * 审计 A-19：勾选态按 slug 继承，而不是按数组下标。
+     * 5 秒轮询期间后端返回顺序若变化（新源站插入、按条数重排），按下标继承会把勾选
+     * 错挂到别的源站上，下一次「批量启停」就会误操作。
+     */
     public void setItems(List<Models.SyncSource> list) {
-        for (int i = 0; i < items.size() && i < list.size(); i++) {
-            list.get(i).pick = items.get(i).pick; // 保留勾选态
+        java.util.Map<String, Boolean> picked = new java.util.HashMap<>();
+        for (Models.SyncSource s : items) {
+            if (s != null && s.slug != null) picked.put(s.slug, s.pick);
         }
         items.clear();
-        items.addAll(list);
+        if (list != null) {
+            for (Models.SyncSource s : list) {
+                if (s == null) continue;
+                Boolean was = s.slug == null ? null : picked.get(s.slug);
+                if (was != null) s.pick = was;
+                items.add(s);
+            }
+        }
         notifyDataSetChanged();
     }
 
@@ -64,16 +80,47 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
      */
     public void renderInto(LinearLayout host) {
         if (host == null) return;
-        if (host.getChildCount() != items.size()) {
+        // 行数或 slug 顺序变化 → 重建行视图；否则只重绑内容有变化的行（A-25）
+        boolean structural = host.getChildCount() != items.size()
+                || renderedKeys.size() != items.size();
+        if (!structural) {
+            for (int i = 0; i < items.size(); i++) {
+                if (!java.util.Objects.equals(renderedKeys.get(i), keyOf(items.get(i)))) {
+                    structural = true;
+                    break;
+                }
+            }
+        }
+        if (structural) {
             host.removeAllViews();
             LayoutInflater inf = LayoutInflater.from(host.getContext());
             for (int i = 0; i < items.size(); i++) {
                 host.addView(inf.inflate(R.layout.item_sync_source, host, false));
             }
+            renderedKeys.clear();
+            for (Models.SyncSource s : items) renderedKeys.add(keyOf(s));
+            signatures.clear();
+            for (int i = 0; i < items.size(); i++) signatures.add("");
         }
         for (int i = 0; i < items.size(); i++) {
+            String sig = signatureOf(items.get(i));
+            if (!structural && sig.equals(signatures.get(i))) continue;
+            signatures.set(i, sig);
             onBindViewHolder(new VH(host.getChildAt(i)), i);
         }
+    }
+
+    private static String keyOf(Models.SyncSource s) {
+        if (s == null) return "";
+        return s.slug != null ? s.slug : String.valueOf(s.name);
+    }
+
+    /** 覆盖 onBindViewHolder 实际读取的全部字段，任一变化才重绑该行 */
+    private static String signatureOf(Models.SyncSource s) {
+        return String.valueOf(s.name) + "|" + s.pick + "|" + s.autoSync + "|" + s.running
+                + "|" + s.paused + "|" + s.queued + "|" + s.runningMode + "|" + s.lastPage
+                + "|" + s.totalPages + "|" + s.synced + "|" + s.totalVideos + "|" + s.lastSyncAt
+                + "|" + s.progress + "|" + s.origin;
     }
 
     public void setAllPicked(boolean picked) {
@@ -103,7 +150,7 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
         h.autoLabel.setTextColor(ContextCompat.getColor(h.itemView.getContext(), s.autoSync ? R.color.t3 : R.color.warn));
         h.swAuto.setOnCheckedChangeListener((bv, on) -> {
             java.util.Map<String, String> p = HomeFragment.map("enabled", String.valueOf(on));
-            com.lateshow.app.api.VodSyncApi.get().post("/api/v1/sources/" + s.slug + "/auto-sync", p,
+            com.lateshow.app.api.VodSyncApi.get().post(com.lateshow.app.util.ApiPaths.sourceAutoSync(s.slug), p,
                     Models.MsgResp.class, new com.lateshow.app.api.VodSyncApi.ApiCb<Models.MsgResp>() {
                 @Override public void onOk(Models.MsgResp r) {
                     s.autoSync = on;
@@ -174,7 +221,7 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
                 return;
             }
             java.util.Map<String, String> p = HomeFragment.map("mode", "auto");
-            com.lateshow.app.api.VodSyncApi.get().post("/api/v1/sync/" + s.slug, p,
+            com.lateshow.app.api.VodSyncApi.get().post(com.lateshow.app.util.ApiPaths.sync(s.slug), p,
                     Models.MsgResp.class, new com.lateshow.app.api.VodSyncApi.ApiCb<Models.MsgResp>() {
                 @Override public void onOk(Models.MsgResp r) {
                     if (cb != null) cb.onAction(r.msg != null ? r.msg : "同步任务已受理");
@@ -187,7 +234,7 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
 
         h.btnCali.setOnClickListener(v -> {
             java.util.Map<String, String> p = HomeFragment.map("mode", "full");
-            com.lateshow.app.api.VodSyncApi.get().post("/api/v1/sync/" + s.slug, p,
+            com.lateshow.app.api.VodSyncApi.get().post(com.lateshow.app.util.ApiPaths.sync(s.slug), p,
                     Models.MsgResp.class, new com.lateshow.app.api.VodSyncApi.ApiCb<Models.MsgResp>() {
                 @Override public void onOk(Models.MsgResp r) {
                     if (cb != null) cb.onAction("校准（全量）已受理 · " + s.name);

@@ -98,6 +98,13 @@ public class DetailFragment extends Fragment {
     private static final String ARG_SOURCE_NAME = "sourceName";
     private static final String ARG_CARD = "cardBounds";   // [x, y, w, h] 屏幕坐标
 
+    /** 配置变更重建时保存播放态（审计 A-12）：线路 / 选集 / 分页 / 内嵌播放位置 */
+    private static final String STATE_LINE = "state_line";
+    private static final String STATE_EP = "state_ep";
+    private static final String STATE_EP_PAGE = "state_ep_page";
+    private static final String STATE_INLINE = "state_inline";
+    private static final String STATE_SEEK = "state_seek_ms";
+
     /** 进入：卡片 → 整页 */
     private static final int ENTER_MS = 430;
     /** 松手后自动关闭 */
@@ -134,6 +141,13 @@ public class DetailFragment extends Fragment {
     private final Handler loadHandler = new Handler(Looper.getMainLooper());
     private Runnable showLoadingTask;
     private boolean detailShown = false;
+
+    /** 重建恢复用：renderDetail 完成后恢复播放态，且不会自动出声 */
+    private boolean restoringState = false;
+    private boolean pendingRestoreInline = false;
+    private boolean restorePaused = false;
+    private long restoreSeekMs = 0;
+    private int restoreLine = 0, restoreEp = 0, restoreEpPage = 0;
 
     private HeroMotionLayout motion;
     private View scrim, surface, playRoot, topScrim, statusScrim, heroFade;
@@ -266,6 +280,15 @@ public class DetailFragment extends Fragment {
             remark = a.getString(ARG_REMARK);
             sourceName = a.getString(ARG_SOURCE_NAME);
             cardBounds = a.getIntArray(ARG_CARD);
+        }
+        // 审计 A-12：配置变更（切主题 / 旋转 / 分屏）重建后恢复线路、选集与播放位置
+        if (st != null) {
+            restoringState = true;
+            restoreLine = st.getInt(STATE_LINE, 0);
+            restoreEp = st.getInt(STATE_EP, 0);
+            restoreEpPage = st.getInt(STATE_EP_PAGE, 0);
+            restoreSeekMs = st.getLong(STATE_SEEK, 0);
+            pendingRestoreInline = st.getBoolean(STATE_INLINE, false);
         }
 
         motion = v.findViewById(R.id.motionRoot);
@@ -1053,17 +1076,48 @@ public class DetailFragment extends Fragment {
             if (h.epIndex > 0) curEp = h.epIndex;
         }
         if (curLine >= playList().size()) curLine = 0;
+        // 审计 A-29：历史里记的线路若已被后端标记不可播，自动切到第一条可播线路
+        if (!playList().isEmpty() && curLine < playList().size()
+                && !playList().get(curLine).isPlayable()) {
+            for (int i = 0; i < playList().size(); i++) {
+                Models.PlayLine pl = playList().get(i);
+                if (pl != null && pl.isPlayable()) { curLine = i; break; }
+            }
+        }
         epPage = Math.max(0, curEp / Math.max(1, epPageSize));
+
+        // 审计 A-12：重建恢复优先于历史记录，避免刚选的线路/集数被旧历史覆盖
+        if (restoringState) {
+            restoringState = false;
+            curLine = restoreLine;
+            curEp = restoreEp;
+            epPage = restoreEpPage;
+            if (curLine >= playList().size()) curLine = 0;
+            List<Models.Episode> eps = currentEpisodes();
+            if (curEp >= eps.size()) curEp = Math.max(0, eps.size() - 1);
+        }
 
         renderLines();
         renderEpisodes();
 
-        if (h != null && h.playedSec > 0) {
+        if ((h != null && h.playedSec > 0) || restoreSeekMs > 0) {
             btnPlay.setText("继续播放 · " + epName(curEp));
         }
 
         loadRelated();
         loadCast();
+
+        // 重建后恢复内嵌播放器画面与位置，但保持暂停，不突然出声（A-12）
+        if (pendingRestoreInline) {
+            pendingRestoreInline = false;
+            final long seek = restoreSeekMs;
+            restoreSeekMs = 0;
+            restorePaused = true;
+            View root = getView();
+            if (root != null) root.post(() -> {
+                if (isAdded() && detail != null) playCurrent(seek);
+            });
+        }
     }
 
     /**
@@ -1112,11 +1166,16 @@ public class DetailFragment extends Fragment {
             @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder vh, int pos) {
                 TextView tv = (TextView) vh.itemView;
                 Models.PlayLine l = ls.get(pos);
+                // A-29：后端 v1.11+ 下发的 playable=false 线路置灰且不可选（字段缺失=可播）
+                final boolean playable = l == null || l.isPlayable();
                 tv.setText(l != null && l.name != null ? l.name : "线路" + (pos + 1));
                 boolean sel = pos == curLine;
+                tv.setEnabled(playable);
+                tv.setAlpha(playable ? 1f : 0.42f);
                 tv.setBackgroundResource(sel ? R.drawable.bg_episode_current : R.drawable.bg_episode);
-                tv.setTextColor(getColor(sel ? R.color.accText : R.color.t2));
+                tv.setTextColor(getColor(sel ? R.color.accText : (playable ? R.color.t2 : R.color.t3)));
                 tv.setOnClickListener(v -> {
+                    if (!playable) { toast("该线路暂不可播"); return; }
                     if (curLine == pos) return;
                     curLine = pos;
                     curEp = 0;
@@ -1192,12 +1251,17 @@ public class DetailFragment extends Fragment {
                 Models.Episode e = eps.get(idx);
                 tv.setText(e != null && e.name != null && !e.name.isEmpty()
                         ? e.name : "第" + (idx + 1) + "集");
+                // A-29：不可播集置灰、不可点；连播与 playCurrent 也会自动跳过
+                final boolean playable = e == null || e.isPlayable();
                 boolean cur = idx == curEp;
                 boolean watched = historyEp > 0 && idx < historyEp;
+                tv.setEnabled(playable);
+                tv.setAlpha(playable ? 1f : 0.42f);
                 tv.setBackgroundResource(cur ? R.drawable.bg_episode_current : R.drawable.bg_episode);
                 tv.setTextColor(getColor(cur ? R.color.accText
-                        : (watched ? R.color.t3 : R.color.t2)));
+                        : ((!playable || watched) ? R.color.t3 : R.color.t2)));
                 tv.setOnClickListener(v -> {
+                    if (!playable) { toast("该集暂不可播"); return; }
                     curEp = idx;
                     renderEpisodes();
                     if (lines.getAdapter() != null) lines.getAdapter().notifyDataSetChanged();
@@ -1284,7 +1348,8 @@ public class DetailFragment extends Fragment {
                     renderRelated(r.list, r.fallback);
                 }
                 @Override public void onErr(String m) {
-                    // 推荐属增强项：失败静默收起，不影响详情主流程
+                    // 推荐属增强项：失败静默收起；已切到别的片时不得收起新片的推荐区（防串台）
+                    if (!isAdded() || detail != base) return;
                     if (relatedSection != null) relatedSection.setVisibility(View.GONE);
                 }
             });
@@ -1559,41 +1624,13 @@ public class DetailFragment extends Fragment {
         return detail.vodPlayList != null ? detail.vodPlayList : new ArrayList<>();
     }
 
-    /** 客户端兜底解析 vod_play_url（与 VodSync 的 parse_play_url 规则一致） */
+    /**
+     * 客户端兜底解析 vod_play_url。
+     * 审计 A-32 / D-01：原先与 {@code StaticCatalog.parsePlayList()} 是两份同构实现，
+     * 现统一委托 {@link com.lateshow.app.util.PlayListParser}，规则只维护一处。
+     */
     private static List<Models.PlayLine> parsePlayUrl(String raw) {
-        List<Models.PlayLine> out = new ArrayList<>();
-        if (TextUtils.isEmpty(raw)) return out;
-        int li = 0;
-        int srcIdx = 0;
-        for (String line : raw.split("\\$\\$\\$")) {
-            final int upstream = srcIdx++;   // 上游原始下标：空段也占位，保证跨版本稳定
-            line = line.trim();
-            if (line.isEmpty()) continue;
-            List<Models.Episode> eps = new ArrayList<>();
-            for (String seg : line.split("#")) {
-                seg = seg.trim();
-                if (seg.isEmpty()) continue;
-                Models.Episode e = new Models.Episode();
-                int cut = seg.indexOf('$');
-                if (cut > 0) {
-                    e.name = seg.substring(0, cut).trim();
-                    e.url = seg.substring(cut + 1).trim();
-                } else {
-                    e.name = "EP" + li;
-                    e.url = seg;
-                }
-                if (!TextUtils.isEmpty(e.url)) eps.add(e);
-            }
-            if (!eps.isEmpty()) {
-                Models.PlayLine pl = new Models.PlayLine();
-                pl.name = "线路" + (li + 1);
-                pl.originalIndex = upstream;
-                pl.episodes = eps;
-                out.add(pl);
-            }
-            li++;
-        }
-        return out;
+        return com.lateshow.app.util.PlayListParser.parseRaw(raw);
     }
 
     private List<Models.Episode> currentEpisodes() {
@@ -1631,6 +1668,17 @@ public class DetailFragment extends Fragment {
     }
 
     // ==================== 播放 ====================
+
+    /** 审计 A-12：配置变更重建前保存播放态，onViewCreated / renderDetail 负责恢复 */
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle out) {
+        super.onSaveInstanceState(out);
+        out.putInt(STATE_LINE, curLine);
+        out.putInt(STATE_EP, curEp);
+        out.putInt(STATE_EP_PAGE, epPage);
+        out.putBoolean(STATE_INLINE, inlineActive);
+        out.putLong(STATE_SEEK, player != null ? player.getCurrentPosition() : 0L);
+    }
 
     @Override
     public void onResume() {
@@ -1685,13 +1733,32 @@ public class DetailFragment extends Fragment {
         c.setAppearanceLightStatusBars(light);
     }
 
+    /** 从 from 起找第一条可播且带地址的集；后端 v1.11+ 的 playable=false 直接跳过（A-29） */
+    private static int nextPlayable(List<Models.Episode> eps, int from) {
+        for (int i = Math.max(0, from); i < eps.size(); i++) {
+            Models.Episode e = eps.get(i);
+            if (e != null && !TextUtils.isEmpty(e.url) && e.isPlayable()) return i;
+        }
+        return -1;
+    }
+
     private void playCurrent(long seekMs) {
         List<Models.Episode> eps = currentEpisodes();
         if (eps.isEmpty()) {
             toast("暂无可播放的选集");
             return;
         }
-        if (curEp >= eps.size()) curEp = 0;
+        if (curEp < 0) curEp = 0;
+        int target = nextPlayable(eps, curEp);
+        if (target < 0) {
+            toast("当前线路没有可播选集，试试切换线路");
+            return;
+        }
+        if (target != curEp) {
+            curEp = target;
+            epPage = curEp / Math.max(1, epPageSize);
+            renderEpisodes();
+        }
         Models.Episode e = eps.get(curEp);
         if (e == null || TextUtils.isEmpty(e.url)) {
             toast("该集没有播放地址，试试切换线路");
@@ -1966,7 +2033,13 @@ public class DetailFragment extends Fragment {
         com.lateshow.app.util.StreamBar.bind(getView(), playUrl);
         player.setMediaItem(MediaItem.fromUri(playUrl), Math.max(0, startMs));
         player.prepare();
-        player.play();
+        if (restorePaused) {
+            // 配置重建后恢复画面与续播位置，但保持暂停，由用户点播放再出声（A-12）
+            restorePaused = false;
+            player.setPlayWhenReady(false);
+        } else {
+            player.play();
+        }
     }
 
     private static final String[] MEDIA_EXT =
@@ -2068,8 +2141,9 @@ public class DetailFragment extends Fragment {
     private void playNextAuto() {
         List<Models.Episode> eps = currentEpisodes();
         if (eps.size() <= 1) return;
-        int next = curEp + 1;
-        if (next >= eps.size()) return;
+        // A-29：连播跳过后端标记为不可播的集，落在下一集可播的直接播放
+        int next = nextPlayable(eps, curEp + 1);
+        if (next < 0) return;
         curEp = next;
         epPage = curEp / Math.max(1, epPageSize);
         renderEpisodes();

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    审计 A-05：Android 12+ 设备/云备份规则。
+    应用已设 allowBackup="false"，此处仍显式排除，防止未来改回备份时把凭据带出去。
+    SharedPreferences 是单文件 lateshow.xml，无法按键排除，因此整份排除。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="lateshow.xml" />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="api-cache" />
+        <exclude domain="file" path="offline-media" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="lateshow.xml" />
+    </device-transfer>
+</data-extraction-rules>

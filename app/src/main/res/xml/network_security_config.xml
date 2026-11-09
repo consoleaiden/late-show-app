@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    审计 A-01：默认只允许 HTTPS；明文 HTTP 收敛到明确的后端主机白名单。
+    Token / 管理密码不再在任意 HTTP 主机上裸传。
+
+    白名单说明：
+      mosang.asia          —— 当前默认后端域名
+      100.84.176.119       —— 当前 Tailscale 内网入口
+      localhost / 10.0.2.2 —— 本地调试与模拟器
+    若需要新增 HTTP 后端主机，请改用 HTTPS（推荐），或把域名追加到本文件后重新发版。
+    后端 HTTPS 就绪后（见后端协同报告 B-09）应删除整个 domain-config，全局禁用明文。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">mosang.asia</domain>
+        <domain>100.84.176.119</domain>
+        <domain>localhost</domain>
+        <domain>10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

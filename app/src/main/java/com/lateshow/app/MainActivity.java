@@ -235,15 +235,18 @@ public class MainActivity extends AppCompatActivity {
     /** 启动时静默检查一次新版本（检查失败不打扰用户） */
     private void maybeCheckUpdate() {
         com.lateshow.app.util.UpdateChecker.check((info, error) -> {
-            if (info == null || isFinishing()) return;
+            // 审计 A-10：网络回调到达时 Activity 可能已销毁，禁止再弹窗
+            if (info == null || isFinishing() || isDestroyed()) return;
             String notes = info.notes == null ? "" : info.notes.trim();
             if (notes.length() > 400) notes = notes.substring(0, 400) + "…";
-            new MaterialAlertDialogBuilder(this)
-                    .setTitle("发现新版本 v" + info.version)
-                    .setMessage("当前 v" + com.lateshow.app.util.UpdateChecker.currentVersion() + "\n\n" + notes)
-                    .setPositiveButton("立即更新", (d, w) -> com.lateshow.app.util.UpdateChecker.downloadAndInstall(this, info))
-                    .setNegativeButton("稍后", null)
-                    .show();
+            try {
+                new MaterialAlertDialogBuilder(this)
+                        .setTitle("发现新版本 v" + info.version)
+                        .setMessage("当前 v" + com.lateshow.app.util.UpdateChecker.currentVersion() + "\n\n" + notes)
+                        .setPositiveButton("立即更新", (d, w) -> com.lateshow.app.util.UpdateChecker.downloadAndInstall(this, info))
+                        .setNegativeButton("稍后", null)
+                        .show();
+            } catch (Exception ignored) { }
         });
     }
 

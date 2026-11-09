@@ -20,26 +20,40 @@ import java.util.List;
 public class LogAdapter extends RecyclerView.Adapter<LogAdapter.VH> {
 
     private final List<Models.SyncLog> items = new ArrayList<>();
+    /** 上一轮行签名：内容未变的日志行不再重绑（审计 A-25） */
+    private final List<String> signatures = new ArrayList<>();
 
     public void setItems(List<Models.SyncLog> list) {
         items.clear();
-        items.addAll(list);
+        if (list != null) items.addAll(list);
         notifyDataSetChanged();
     }
 
     /** 控制台内是 ScrollView 套 wrap_content 容器，用 LinearLayout 手工铺行保证全部日志可见 */
     public void renderInto(LinearLayout host) {
         if (host == null) return;
-        if (host.getChildCount() != items.size()) {
+        boolean structural = host.getChildCount() != items.size()
+                || signatures.size() != items.size();
+        if (structural) {
             host.removeAllViews();
             LayoutInflater inf = LayoutInflater.from(host.getContext());
             for (int i = 0; i < items.size(); i++) {
                 host.addView(inf.inflate(R.layout.item_log, host, false));
             }
+            signatures.clear();
+            for (int i = 0; i < items.size(); i++) signatures.add("");
         }
         for (int i = 0; i < items.size(); i++) {
+            String sig = signatureOf(items.get(i));
+            if (!structural && sig.equals(signatures.get(i))) continue;
+            signatures.set(i, sig);
             onBindViewHolder(new VH(host.getChildAt(i)), i);
         }
+    }
+
+    private static String signatureOf(Models.SyncLog l) {
+        return String.valueOf(l.status) + "|" + l.mode + "|" + l.slug + "|" + l.fetched
+                + "|" + l.inserted + "|" + l.updated + "|" + l.error + "|" + l.startedAt;
     }
 
     @NonNull

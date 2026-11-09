@@ -2,19 +2,34 @@ package com.lateshow.app.util;
 
 import com.lateshow.app.model.Models;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** slug → 源站展示名 内存缓存（由首页 /api/v1/sources 响应填充） */
+/**
+ * slug → 源站展示名 内存缓存（由首页 /api/v1/sources 响应填充）。
+ *
+ * 审计 A-26/A-08：改为有界 LRU，并提供 {@link #clear()} —— 后端地址 / Token / 数据源模式
+ * 变化时必须失效，否则卡片会显示上一台服务器的源站中文名。
+ */
 public final class SourceCache {
-    private static final Map<String, String> MAP = new HashMap<>();
+
+    private static final int MAX = 256;
+
+    private static final Map<String, String> MAP =
+            new LinkedHashMap<String, String>(32, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, String> e) {
+                    return size() > MAX;
+                }
+            };
 
     private SourceCache() {}
 
     public static void putAll(java.util.List<Models.Source> sources) {
         if (sources == null) return;
         synchronized (MAP) {
-            for (Models.Source s : sources) MAP.put(s.slug, s.name);
+            for (Models.Source s : sources) {
+                if (s != null && s.slug != null && s.name != null) MAP.put(s.slug, s.name);
+            }
         }
     }
 
@@ -23,8 +38,14 @@ public final class SourceCache {
         if (sources == null) return;
         synchronized (MAP) {
             for (Models.SyncSource s : sources) {
-                if (s.slug != null && s.name != null) MAP.put(s.slug, s.name);
+                if (s != null && s.slug != null && s.name != null) MAP.put(s.slug, s.name);
             }
+        }
+    }
+
+    public static void clear() {
+        synchronized (MAP) {
+            MAP.clear();
         }
     }
 

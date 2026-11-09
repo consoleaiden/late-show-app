@@ -6,14 +6,14 @@
 - `app/src/main/java/com/lateshow/app/util/OfflineMedia.java`：收藏/历史的完整播放数据存储
 - `app/src/main/java/com/lateshow/app/store/PrefStore.java`：收藏/历史条目（新增 `content` / `epCount` / `cached` 字段）
 - `app/src/main/java/com/lateshow/app/ui/HomeFragment.java`：缓存优先加载、失败回落
-- `app/src/main/java/com/lateshow/app/ui/PlayActivity.java`：详情缓存写入 + 离线播放
+- `app/src/main/java/com/lateshow/app/ui/DetailFragment.java`：详情缓存写入 + 离线播放兜底
 - `app/src/main/java/com/lateshow/app/ui/FavFragment.java`：离线可播数量展示
 
 ## 1. 缓存的数据范围
 
 | 数据 | 是否缓存 | 说明 |
 | --- | --- | --- |
-| 首页影片列表第 1 页（含 `pagecount` / `total`） | 是，TTL 10 分钟 | key = `videos\|源站\|分类\|关键词\|页码`，不同源站/分类/搜索词各自一份 |
+| 首页影片列表第 1 页（含 `pagecount` / `total`） | 是，TTL 10 分钟 | key = `videos\|<后端指纹>\|<sync\|static>\|<源站>\|<分类>\|<关键词>\|<页码>`，不同源站/分类/搜索词各自一份；后端地址或 Token 变更后指纹变化，旧缓存自动不命中 |
 | 首页列表第 2 页及以后 | 否 | 体积不可控，翻页仍走网络；离线时只展示已缓存的第一页 |
 | 分类列表 | 是，TTL 6 小时 | key = `cats\|源站`，分类变动慢，命中即不发请求 |
 | 源站列表 `/api/v1/sources` | 是，TTL 10 分钟 | 供源站切换菜单与「已收录 N 部 · M 源」统计离线展示 |
@@ -33,7 +33,7 @@
 ```
 
 - 都用应用私有目录（`getFilesDir()`），不需要存储权限，卸载即清理，也不会被系统当临时文件清掉。
-- 接口缓存写盘是异步单线程串行，读优先内存 LRU，未命中才读文件；UI 线程不做批量 IO。
+- 接口缓存写盘是异步单线程串行；L1 是有界 LRU(64)，进程启动时后台预热磁盘缓存，主线程读取只走内存、不做磁盘 IO；UI 线程不做批量 IO。
 - 离线播放数据保留 12 部在内存 LRU，详情页反复进出不重复解析。
 
 ## 3. 更新策略
@@ -61,7 +61,7 @@
 ## 4. 离线时的读取逻辑
 
 1. 收藏页 / 历史页本身只读本地存储，断网照常展示；副标题显示「N 部可离线播放」。
-2. 点开某部剧 → `PlayActivity.loadDetail()` 请求详情：
+2. 点开某部剧 → `DetailFragment.loadDetail()` 请求详情：
    - 成功：正常渲染，并按上面的规则刷新离线数据。
    - 失败：先调 `OfflineMedia.loadDetail(slug, vodId)`
      - 有缓存 → 用缓存的 `VideoDetail` 渲染（线路、选集、简介齐全），元信息尾部标注「离线缓存」，
@@ -74,3 +74,9 @@
 - 离线播放依赖源站 CDN 直链仍然有效；若源站换了地址或链接带时效签名，离线缓存会失效（重新联网打开一次该剧即可刷新）。
 - 封面图由 Glide 自己的磁盘缓存负责，离线时若从未加载过该封面会显示占位色块，不影响播放。
 - 升级到本版本前已有的收藏/历史没有播放数据，需要联网打开一次才会生成离线缓存。
+
+## 6. 安全与凭据
+
+- `saved_sources` 中的 API Token 以 `enc1:` 前缀密文存储，密钥由 Android Keystore 托管、采用 AES-GCM 加密；明文 Token 不写盘，只在内存中使用。
+- 应用内更新校验 Release asset 的 SHA-256 digest，并比对已安装包的签名证书，防止被篡改的 APK 覆盖安装。
+- `allowBackup` 已关闭，避免凭据随系统备份/恢复外泄。

@@ -1,9 +1,14 @@
 package com.lateshow.app.api;
 
 import androidx.annotation.Nullable;
+
 import com.google.gson.Gson;
 import com.lateshow.app.model.Models;
 import com.lateshow.app.store.PrefStore;
+import com.lateshow.app.util.ApiPaths;
+import com.lateshow.app.util.AppLog;
+import com.lateshow.app.util.SecureStore;
+
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.HttpUrl;
@@ -13,20 +18,35 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
  * VodSync API 封装。
- * 约定：成功 HTTP 200 + code:1；失败为 HTTP 4xx/5xx + detail。
  *
- * 鉴权（服务端 v1.5.0+）：除 /healthz 与 /api/v1/auth/* 外，所有接口都需要
- * {@code Authorization: Bearer <token>}。Token 由拦截器统一注入，且只注入给「自己服务器」的请求，
- * 绝不外泄给第三方封面图 / m3u8 CDN。
+ * 约定：成功 = HTTP 2xx + 业务 {@code code:1}（或不含 code 的纯数据响应）；
+ * 失败 = HTTP 4xx/5xx + detail，或 200 但 {@code code:0 / ok:false}。
+ *
+ * 审计 A-11/A-20/A-30/C-06/C-07/A-06：
+ * <ul>
+ *   <li>每个请求注册到可取消的 tag 集合，{@link #cancelTag(Object)} / {@link #cancelAll()}
+ *       可在页面销毁、筛选变更时取消在途请求；600ms 重试重建 Request 而非复用旧对象；</li>
+ *   <li>{@code deliver()} 校验业务失败码；healthz 与 ping 统一口径并读取 {@code version/capabilities}
+ *       写入 {@link ServerCaps}；</li>
+ *   <li>免鉴权路径不注入 Token，避免后端收紧 auth 接口后形成引导死锁；</li>
+ *   <li>所有方法跳过空串参数，DELETE 不带空 FORM body；</li>
+ *   <li>日志统一走 {@link AppLog}（release 关闭 + 脱敏），不再把 token / 完整 URL 写进 logcat。</li>
+ * </ul>
  */
 public final class VodSyncApi {
 
@@ -37,7 +57,8 @@ public final class VodSyncApi {
 
     /** onErr 里 token 失效的统一前缀（UI 据此引导用户去设置页） */
     public static final String TOKEN_ERR = "[[token-invalid]]";
-    private static final String DBG = "LateShowApi";
+    private static final String DBG = "Api";
+    private static final long HEALTH_TIMEOUT_MS = 3000L;
 
     public static boolean isTokenError(String msg) {
         return msg != null && msg.startsWith(TOKEN_ERR);
@@ -58,6 +79,11 @@ public final class VodSyncApi {
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     /** 所有回调统一切回主线程（UI 只能在主线程更新） */
     private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+
+    /** 在途请求索引（审计 A-11）：tag → Call 集合，可按页面/筛选维度整体取消 */
+    private static final Map<Object, Set<Call>> ACTIVE = new ConcurrentHashMap<>();
+    private static final Object DEFAULT_TAG = new Object();
+
     private static volatile VodSyncApi sInstance;
     private final OkHttpClient client;
 
@@ -65,24 +91,27 @@ public final class VodSyncApi {
         Interceptor auth = chain -> {
             Request req = chain.request();
             String token = PrefStore.get().apiToken();
-            // 只给「自己服务器」加头：封面/播放直链通常在第三方 CDN，带上就是泄漏
+            String path = req.url().encodedPath();
+            // 只给「自己服务器」加头，且跳过免鉴权路径（C-07）。
             boolean authed = false;
-            if (!token.isEmpty() && sameHost(req.url().host(), hostOf(baseUrl()))) {
-                // 主用 Authorization，同时带兼容头 X-API-Key（个别中间层会剥离 Authorization）
+            if (!token.isEmpty()
+                    && !ApiPaths.isPublic(path)
+                    && sameHost(req.url().host(), hostOf(baseUrl()))) {
                 req = req.newBuilder()
                         .header("Authorization", "Bearer " + token)
                         .header("X-API-Key", token)
                         .build();
                 authed = true;
             }
-            android.util.Log.d(DBG, "→ " + req.method() + " " + req.url().encodedPath()
+            AppLog.d(DBG, "→ " + req.method() + " " + path
                     + " host=" + req.url().host()
-                    + " auth=" + (authed ? com.lateshow.app.util.SecureStore.mask(token) : "NO"));
+                    + " auth=" + (authed ? SecureStore.mask(token) : "NO"));
             return chain.proceed(req);
         };
         client = new OkHttpClient.Builder()
                 .dns(SmartDns.INSTANCE)
                 .addInterceptor(auth)
+                .followSslRedirects(false)   // 审计 A-35：禁止协议降级
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(60, TimeUnit.SECONDS)
                 .build();
@@ -106,7 +135,34 @@ public final class VodSyncApi {
         } catch (Exception ignored) { }
     }
 
-    /** 连接层失败 → 值得清缓存重试一次（请求尚未到达服务器，GET 重试无副作用） */
+    // ---------- 在途请求取消（A-11） ----------
+
+    private static void register(Object tag, Call call) {
+        ACTIVE.computeIfAbsent(tag, k -> ConcurrentHashMap.newKeySet()).add(call);
+    }
+
+    private static void unregister(Object tag, Call call) {
+        Set<Call> s = ACTIVE.get(tag);
+        if (s == null) return;
+        s.remove(call);
+        if (s.isEmpty()) ACTIVE.remove(tag, s);
+    }
+
+    /** 取消某一组请求（例如首页筛选、控制台轮询）；被取消的请求不再回调 UI */
+    public static void cancelTag(Object tag) {
+        if (tag == null) return;
+        Set<Call> s = ACTIVE.remove(tag);
+        if (s == null) return;
+        for (Call c : s) {
+            try { c.cancel(); } catch (Exception ignored) { }
+        }
+    }
+
+    /** 取消全部在途请求（切换后端 / 退出应用时用） */
+    public static void cancelAll() {
+        for (Object t : new ArrayList<>(ACTIVE.keySet())) cancelTag(t);
+    }
+
     private static boolean recoverable(IOException e) {
         return e instanceof java.net.UnknownHostException
                 || e instanceof java.net.SocketTimeoutException
@@ -114,12 +170,11 @@ public final class VodSyncApi {
                 || e instanceof java.net.ConnectException;
     }
 
-    /** 网络异常 → 可读文案：区分「域名解析失败 / 地址族不可达 / 超时」，便于用户判断是否为 IPv6 问题 */
+    /** 网络异常 → 可读文案：区分「域名解析失败 / 地址族不可达 / 超时」 */
     private static String describe(IOException e) {
         if (e == null) return "未知错误";
         String raw = e.getMessage() == null ? "" : e.getMessage();
         if (e instanceof java.net.UnknownHostException) {
-            // SmartDns 会给出「当前 WiFi 无 IPv6，而该后端仅有 IPv6 地址」这类具体原因
             return raw.isEmpty() ? "无法解析后端域名（请检查网络）" : raw;
         }
         if (e instanceof java.net.SocketTimeoutException) return "连接超时（后端不可达或网络不通）";
@@ -150,147 +205,152 @@ public final class VodSyncApi {
         return a != null && b != null && a.equalsIgnoreCase(b);
     }
 
+    private HttpUrl urlOf(String path) {
+        String full = path != null && (path.startsWith("http://") || path.startsWith("https://"))
+                ? path : baseUrl() + path;
+        return HttpUrl.parse(full);
+    }
+
     /**
-     * 兜底用：当播放/图片地址确实由本服务代理转发时，用 query 参数带上 token
-     * （WebView / video 标签 / 系统播放器加不了请求头的情况）。第三方 CDN 直链原样返回。
+     * 兜底用：当播放/图片地址确实由本服务代理转发时，理论上需要带凭据。
+     * 审计 A-06 后不再把 Token 追加到 URL query（URL 会进日志、剪贴板、播放器缓存与 CDN 日志）。
+     * 若后端代理播放需要鉴权，应改用短期签名 URL（见后端协同报告 B-09）。
      */
     public String decorate(String url) {
-        if (url == null || url.isEmpty()) return url;
-        String token = PrefStore.get().apiToken();
-        if (token.isEmpty()) return url;
-        HttpUrl u = HttpUrl.parse(url);
-        if (u == null || !sameHost(u.host(), hostOf(baseUrl()))) return url;
-        if (u.queryParameter("token") != null) return url;
-        return u.newBuilder().addQueryParameter("token", token).build().toString();
+        return url;
     }
 
     /** 鉴权状态探测（免鉴权接口）：判断服务端是否开启访问控制 */
     public void authState(final ApiCb<Models.AuthState> cb) {
-        get("/api/v1/auth/state", null, Models.AuthState.class, cb);
+        get(ApiPaths.AUTH_STATE, null, Models.AuthState.class, cb);
     }
 
-    /** GET 请求并解析为指定类型 */
-    public <T> void get(String path, @Nullable Map<String, String> params, final Class<T> clazz, final ApiCb<T> cb) {
-        okhttp3.HttpUrl base = okhttp3.HttpUrl.parse(baseUrl() + path);
-        if (base == null) {
-            cb.onErr("地址无效：" + baseUrl() + path);
-            return;
-        }
-        HttpUrl.Builder b = base.newBuilder();
-        if (params != null) {
-            for (Map.Entry<String, String> e : params.entrySet()) {
-                if (e.getValue() != null && !e.getValue().isEmpty()) b.addQueryParameter(e.getKey(), e.getValue());
-            }
-        }
-        Request req = new Request.Builder().url(b.build()).get().build();
-        client.newCall(req).enqueue(new Callback() {
-            private boolean retried = false;
+    // ---------- 统一发送器 ----------
 
-            @Override public void onFailure(Call call, IOException e) {
-                // 切网后的第一次请求常见：解析结果还是上个网络的 / 连接池里是旧网卡的连接
-                // → 清缓存 + 清连接池，延迟 600ms 再重试一次（给系统时间完成路由/DNS 切换；GET 幂等）
-                if (!retried && recoverable(e)) {
-                    retried = true;
+    private <T> void enqueue(Request req, Class<T> clazz, ApiCb<T> cb, Object tag, boolean allowRetry) {
+        final Object t = tag == null ? DEFAULT_TAG : tag;
+        final Call call = client.newCall(req);
+        register(t, call);
+        call.enqueue(new Callback() {
+            @Override public void onFailure(Call c, IOException e) {
+                if (allowRetry && recoverable(e) && !c.isCanceled()) {
+                    unregister(t, call);
                     SmartDns.invalidate();
                     client.connectionPool().evictAll();
-                    android.util.Log.d(DBG, "↻ 连接失败（" + e + "），600ms 后清缓存重试一次");
+                    AppLog.d(DBG, "↻ 连接失败，600ms 后清缓存重试一次");
                     MAIN.postDelayed(() -> {
-                        NetInfo ni = NetInfo.current();
-                        android.util.Log.d(DBG, "↻ 重试中：v4=" + ni.hasV4 + " v6=" + ni.hasV6 + " lan=" + ni.lan);
-                        client.newCall(call.request()).enqueue(this);
+                        if (c.isCanceled()) return;
+                        // 审计 A-11：重建 Request，不复用旧 Request 对象
+                        enqueue(req.newBuilder().build(), clazz, cb, t, false);
                     }, 600);
                     return;
                 }
+                unregister(t, call);
+                if (c.isCanceled()) return;   // 主动取消不回调 UI
                 String msg = "网络异常：" + describe(e);
                 MAIN.post(() -> cb.onErr(msg));
             }
-            @Override public void onResponse(Call call, Response resp) throws IOException {
+
+            @Override public void onResponse(Call c, Response resp) throws IOException {
+                unregister(t, call);
+                if (c.isCanceled()) return;
                 deliver(resp, clazz, cb);
             }
         });
     }
 
-    /** POST 请求（query 传参）并解析为指定类型 */
-    public <T> void post(String path, @Nullable Map<String, String> params, final Class<T> clazz, final ApiCb<T> cb) {
-        okhttp3.HttpUrl base = okhttp3.HttpUrl.parse(baseUrl() + path);
+    /** GET 请求并解析为指定类型 */
+    public <T> void get(String path, @Nullable Map<String, String> params,
+                        final Class<T> clazz, final ApiCb<T> cb) {
+        get(path, params, clazz, null, cb);
+    }
+
+    public <T> void get(String path, @Nullable Map<String, String> params,
+                        final Class<T> clazz, @Nullable Object tag, final ApiCb<T> cb) {
+        HttpUrl base = urlOf(path);
         if (base == null) {
             cb.onErr("地址无效：" + baseUrl() + path);
             return;
         }
         HttpUrl.Builder b = base.newBuilder();
-        if (params != null) {
-            for (Map.Entry<String, String> e : params.entrySet()) {
-                if (e.getValue() != null) b.addQueryParameter(e.getKey(), e.getValue());
-            }
+        addParams(b, params);
+        enqueue(new Request.Builder().url(b.build()).get().build(), clazz, cb, tag, true);
+    }
+
+    /** POST 请求（query 传参）并解析为指定类型 */
+    public <T> void post(String path, @Nullable Map<String, String> params,
+                         final Class<T> clazz, final ApiCb<T> cb) {
+        HttpUrl base = urlOf(path);
+        if (base == null) {
+            cb.onErr("地址无效：" + baseUrl() + path);
+            return;
         }
-        Request req = new Request.Builder().url(b.build())
-                .post(RequestBody.create("", FORM)).build();
-        client.newCall(req).enqueue(new Callback() {
-            @Override public void onFailure(Call call, IOException e) {
-                String msg = "网络异常：" + describe(e);
-                MAIN.post(() -> cb.onErr(msg));
-            }
-            @Override public void onResponse(Call call, Response resp) throws IOException {
-                deliver(resp, clazz, cb);
-            }
-        });
+        HttpUrl.Builder b = base.newBuilder();
+        addParams(b, params);
+        enqueue(new Request.Builder().url(b.build())
+                .post(RequestBody.create("", FORM)).build(), clazz, cb, null, false);
     }
 
     /** POST 请求（JSON body，FastAPI BaseModel 接口用） */
-    public <T> void postJson(String path, @Nullable String jsonBody, final Class<T> clazz, final ApiCb<T> cb) {
+    public <T> void postJson(String path, @Nullable String jsonBody,
+                            final Class<T> clazz, final ApiCb<T> cb) {
         sendJson("POST", path, null, jsonBody, clazz, cb);
     }
 
     /** PATCH 请求（JSON body） */
-    public <T> void patchJson(String path, @Nullable String jsonBody, final Class<T> clazz, final ApiCb<T> cb) {
+    public <T> void patchJson(String path, @Nullable String jsonBody,
+                              final Class<T> clazz, final ApiCb<T> cb) {
         sendJson("PATCH", path, null, jsonBody, clazz, cb);
     }
 
-    /** DELETE 请求（query 传参） */
-    public <T> void delete(String path, @Nullable Map<String, String> params, final Class<T> clazz, final ApiCb<T> cb) {
+    /** DELETE 请求（query 传参，不带空 FORM body —— 审计 C-06） */
+    public <T> void delete(String path, @Nullable Map<String, String> params,
+                           final Class<T> clazz, final ApiCb<T> cb) {
         sendJson("DELETE", path, params, null, clazz, cb);
     }
 
-    /** 统一的 JSON/DELETE 发送器 */
     private <T> void sendJson(String method, String path, @Nullable Map<String, String> params,
-                              @Nullable String jsonBody, final Class<T> clazz, final ApiCb<T> cb) {
-        okhttp3.HttpUrl base = okhttp3.HttpUrl.parse(baseUrl() + path);
+                               @Nullable String jsonBody, final Class<T> clazz, final ApiCb<T> cb) {
+        HttpUrl base = urlOf(path);
         if (base == null) {
             cb.onErr("地址无效：" + baseUrl() + path);
             return;
         }
         HttpUrl.Builder b = base.newBuilder();
-        if (params != null) {
-            for (Map.Entry<String, String> e : params.entrySet()) {
-                if (e.getValue() != null) b.addQueryParameter(e.getKey(), e.getValue());
+        addParams(b, params);
+        RequestBody body = jsonBody != null ? RequestBody.create(jsonBody, JSON)
+                : ("DELETE".equals(method) ? null : RequestBody.create("", FORM));
+        enqueue(new Request.Builder().url(b.build()).method(method, body).build(),
+                clazz, cb, null, false);
+    }
+
+    /** 所有方法统一跳过空串参数（审计 C-06），避免中间层把 key= 当成显式空值而返回 422 */
+    private static void addParams(HttpUrl.Builder b, @Nullable Map<String, String> params) {
+        if (params == null) return;
+        for (Map.Entry<String, String> e : params.entrySet()) {
+            if (e.getKey() == null) continue;
+            if (e.getValue() != null && !e.getValue().isEmpty()) {
+                b.addQueryParameter(e.getKey(), e.getValue());
             }
         }
-        RequestBody body = jsonBody != null
-                ? RequestBody.create(jsonBody, JSON)
-                : RequestBody.create("", FORM);
-        Request req = new Request.Builder().url(b.build()).method(method, body).build();
-        client.newCall(req).enqueue(new Callback() {
-            @Override public void onFailure(Call call, IOException e) {
-                String msg = "网络异常：" + describe(e);
-                MAIN.post(() -> cb.onErr(msg));
-            }
-            @Override public void onResponse(Call call, Response resp) throws IOException {
-                deliver(resp, clazz, cb);
-            }
-        });
     }
 
     private <T> void deliver(Response resp, Class<T> clazz, ApiCb<T> cb) {
         try (Response r = resp) {
             String body = r.body() != null ? r.body().string() : "";
             if (!r.isSuccessful()) {
-                android.util.Log.d(DBG, "← " + r.code() + " " + r.request().url().encodedPath()
-                        + " body=" + (body.length() > 300 ? body.substring(0, 300) : body));
+                AppLog.d(DBG, "← " + r.code() + " " + r.request().url().encodedPath());
                 // 401：token 缺失/错误/被重置 —— 不重试，交给 UI 引导填写
                 String err = r.code() == 401
                         ? tokenErrMsg(extractError(r.code(), body))
                         : extractError(r.code(), body);
                 MAIN.post(() -> cb.onErr(err));
+                return;
+            }
+            // 审计 A-20：HTTP 200 也可能是业务失败（code:0 / ok:false），不能当成功渲染
+            String biz = businessError(body);
+            if (biz != null) {
+                MAIN.post(() -> cb.onErr(biz));
                 return;
             }
             T out = GSON.fromJson(body, clazz);
@@ -305,7 +365,25 @@ public final class VodSyncApi {
         }
     }
 
-    /** 从错误响应里提取 detail（字符串或 FastAPI 校验数组） */
+    /** 只把「明确的业务失败」判为错误；纯数据响应（无 code / 无 ok）一律放行 */
+    private static String businessError(String body) {
+        if (body == null || body.isEmpty() || body.charAt(0) != '{') return null;
+        try {
+            JSONObject o = new JSONObject(body);
+            if (o.has("code") && o.optInt("code", 1) == 0) {
+                String m = o.optString("msg", "");
+                if (m.isEmpty()) m = o.optString("detail", "操作失败");
+                return "业务失败：" + m;
+            }
+            if (o.has("ok") && !o.optBoolean("ok", true)) {
+                String m = o.optString("error", "");
+                if (m.isEmpty()) m = o.optString("detail", "操作未完成");
+                return "操作失败：" + m;
+            }
+        } catch (Exception ignored) { }
+        return null;
+    }
+
     private static String extractError(int code, String body) {
         try {
             JSONObject o = new JSONObject(body);
@@ -326,29 +404,21 @@ public final class VodSyncApi {
         }
     }
 
-    /** 健康检查：返回延迟 ms，失败回调 onErr */
+    // ---------- 健康检查 / 能力门控（A-20 / A-30） ----------
+
+    /** 健康检查：与 ping 完全同一口径（2xx 即有效），顺带读取版本与能力清单 */
     public void healthz(final ApiCb<Long> cb) {
-        long t0 = System.currentTimeMillis();
-        get("/healthz", null, java.util.Map.class, new ApiCb<java.util.Map>() {
-            @Override public void onOk(java.util.Map result) {
-                cb.onOk(System.currentTimeMillis() - t0);
-            }
-            @Override public void onErr(String message) {
-                cb.onErr(message);
-            }
-        });
+        ping(HEALTH_TIMEOUT_MS, cb);
     }
 
     /**
-     * 播放源连接测试：/healthz 往返延迟，带独立总超时（默认调用方传 3000ms）。
-     *
-     * 用 client.newBuilder() 派生一个短超时客户端，保留鉴权拦截器与 SmartDns，
-     * 但不改动设置/控制台日常请求用的主客户端（那个是 10s 连接 / 60s 读取）。
-     * 只要 HTTP 2xx 就算「有效」；超时、DNS 失败、连接失败、非 2xx 一律 onErr，
-     * 由 UI 统一显示为「超时」并把模块置为无效。
+     * 播放源连接测试：/healthz 往返延迟，独立短超时。
+     * 派生客户端保留 DNS 配置，但用固定 token 的拦截器由主客户端继承；
+     * 只判 HTTP 2xx，不要求 JSON 可解析（后端若改成纯文本 ok 也不会误判故障）。
+     * 响应里若有 version / capabilities，写入 ServerCaps 供能力门控使用。
      */
     public void ping(long timeoutMs, final ApiCb<Long> cb) {
-        HttpUrl url = HttpUrl.parse(baseUrl() + "/healthz");
+        HttpUrl url = urlOf(ApiPaths.HEALTHZ);
         if (url == null) {
             cb.onErr("地址无效");
             return;
@@ -361,15 +431,25 @@ public final class VodSyncApi {
                 .build();
         Request req = new Request.Builder().url(url).get().build();
         final long t0 = System.currentTimeMillis();
-        probeClient.newCall(req).enqueue(new Callback() {
-            @Override public void onFailure(Call call, IOException e) {
+        final Call call = probeClient.newCall(req);
+        register(DEFAULT_TAG, call);
+        call.enqueue(new Callback() {
+            @Override public void onFailure(Call c, IOException e) {
+                unregister(DEFAULT_TAG, call);
+                if (c.isCanceled()) return;
                 MAIN.post(() -> cb.onErr("连接超时或不可达"));
             }
-            @Override public void onResponse(Call call, Response resp) {
+
+            @Override public void onResponse(Call c, Response resp) {
+                unregister(DEFAULT_TAG, call);
                 try (Response r = resp) {
                     final boolean ok = r.isSuccessful();
                     final int code = r.code();
                     final long cost = System.currentTimeMillis() - t0;
+                    if (ok && r.body() != null) {
+                        String body = r.body().string();
+                        parseCaps(body);
+                    }
                     MAIN.post(() -> {
                         if (ok) cb.onOk(cost);
                         else cb.onErr("HTTP " + code);
@@ -379,5 +459,125 @@ public final class VodSyncApi {
                 }
             }
         });
+    }
+
+    /** /healthz 返回 {"version":"1.13.0","capabilities":["..."]} 时更新能力门控 */
+    private static void parseCaps(String body) {
+        if (body == null || body.isEmpty() || body.charAt(0) != '{') return;
+        try {
+            JSONObject o = new JSONObject(body);
+            String v = o.optString("version", "");
+            Set<String> caps = new HashSet<>();
+            JSONArray arr = o.optJSONArray("capabilities");
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    String s = arr.optString(i, "");
+                    if (!s.isEmpty()) caps.add(s);
+                }
+            }
+            JSONObject capObj = o.optJSONObject("capabilities");
+            if (capObj != null) {
+                java.util.Iterator<String> it = capObj.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    if (capObj.optBoolean(k, false)) caps.add(k);
+                }
+            }
+            ServerCaps.update(v, caps);
+        } catch (Exception ignored) { }
+    }
+
+    // ---------- 临时凭据验证（A-07） ----------
+
+    public static class VerifyResult {
+        public boolean authEnabled;
+        public long elapsedMs;
+    }
+
+    /**
+     * 用「临时 baseUrl + 临时 token」做一次性验证，全程不读写全局 PrefStore，
+     * 成功后由调用方原子提交。这样「测试连接」永远不会产生副作用（审计 A-07）。
+     *
+     * 流程：GET /api/v1/auth/state（免鉴权）→ 若开启鉴权且 token 非空 →
+     * GET /api/v1/stats（带临时 token）→ 全部通过才 onOk。
+     */
+    public static void verify(final String base, final String token,
+                              final ApiCb<VerifyResult> cb) {
+        new Thread(() -> {
+            String root = base == null ? "" : base.trim();
+            while (root.endsWith("/")) root = root.substring(0, root.length() - 1);
+            String t = token == null ? "" : token.trim();
+            long t0 = System.currentTimeMillis();
+            OkHttpClient probe = new OkHttpClient.Builder()
+                    .dns(SmartDns.INSTANCE)
+                    .followSslRedirects(false)
+                    .addInterceptor(chain -> {
+                        Request req = chain.request();
+                        if (!t.isEmpty() && !ApiPaths.isPublic(req.url().encodedPath())) {
+                            req = req.newBuilder()
+                                    .header("Authorization", "Bearer " + t)
+                                    .header("X-API-Key", t)
+                                    .build();
+                        }
+                        return chain.proceed(req);
+                    })
+                    .connectTimeout(4, TimeUnit.SECONDS)
+                    .readTimeout(6, TimeUnit.SECONDS)
+                    .callTimeout(8, TimeUnit.SECONDS)
+                    .build();
+            try {
+                HttpUrl authUrl = HttpUrl.parse(root + ApiPaths.AUTH_STATE);
+                if (authUrl == null) {
+                    MAIN.post(() -> cb.onErr("地址无效：" + root));
+                    return;
+                }
+                String authBody = execute(probe, new Request.Builder().url(authUrl).get().build());
+                JSONObject auth = new JSONObject(authBody);
+                boolean enabled = auth.optBoolean("enabled", false);
+
+                if (enabled && t.isEmpty()) {
+                    MAIN.post(() -> cb.onErr("[[need-token]]该服务器已开启访问控制，需要填写 API Token"));
+                    return;
+                }
+                if (enabled) {
+                    HttpUrl statsUrl = HttpUrl.parse(root + ApiPaths.STATS);
+                    if (statsUrl == null) {
+                        MAIN.post(() -> cb.onErr("地址无效：" + root));
+                        return;
+                    }
+                    String statsBody = execute(probe, new Request.Builder().url(statsUrl).get().build());
+                    JSONObject st = new JSONObject(statsBody);
+                    if (st.has("code") && st.optInt("code", 1) == 0) {
+                        MAIN.post(() -> cb.onErr("Token 无效或未授权"));
+                        return;
+                    }
+                }
+                VerifyResult r = new VerifyResult();
+                r.authEnabled = enabled;
+                r.elapsedMs = System.currentTimeMillis() - t0;
+                MAIN.post(() -> cb.onOk(r));
+            } catch (IOException e) {
+                final String msg;
+                if (e.getMessage() != null && e.getMessage().contains("401")) {
+                    msg = tokenErrMsg("API Token 无效，请重新复制");
+                } else {
+                    msg = "无法连接：" + describe(e);
+                }
+                MAIN.post(() -> cb.onErr(msg));
+            } catch (Exception e) {
+                MAIN.post(() -> cb.onErr("验证失败：" + e.getMessage()));
+            }
+        }, "verify-source").start();
+    }
+
+    private static String execute(OkHttpClient c, Request req) throws IOException {
+        try (Response r = c.newCall(req).execute()) {
+            String body = r.body() != null ? r.body().string() : "";
+            if (r.code() == 401) throw new IOException("401 " + body);
+            if (!r.isSuccessful()) {
+                throw new IOException("HTTP " + r.code() + " " + extractError(r.code(), body));
+            }
+            return body;
+        }
     }
 }

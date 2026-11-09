@@ -2,9 +2,16 @@ plugins {
     id 'com.android.application'
 }
 
-// 版本号由 CI 运行号生成：GITHUB_RUN_NUMBER 存在时 versionName=1.5.<run>，保证每次发布都能被 App 识别为新版本
+// 版本号（审计 A-31）：优先读 CI/本地显式环境变量，未设置时再回退 GITHUB_RUN_NUMBER。
+// 本地构建给 1001 而不是 1，避免本地产物因 versionCode 过低无法覆盖安装。
 def ghRun = System.getenv("GITHUB_RUN_NUMBER")
-def buildNo = (ghRun != null && ghRun.isNumber()) ? ghRun.toInteger() : 0
+def buildNo = (ghRun != null && ghRun.isInteger()) ? ghRun.toInteger() : 0
+def envCode = System.getenv("LATESHOW_VERSION_CODE")
+def envName = System.getenv("LATESHOW_VERSION_NAME")
+def appVersionCode = (envCode != null && envCode.isInteger()) ? envCode.toInteger()
+        : (buildNo > 0 ? 1000 + buildNo : 1001)
+def appVersionName = (envName != null && !envName.trim().isEmpty()) ? envName.trim()
+        : (buildNo > 0 ? "1.5.${buildNo}" : "1.5.0")
 
 android {
     namespace 'com.lateshow.app'
@@ -14,35 +21,48 @@ android {
         applicationId "com.lateshow.app"
         minSdk 24
         targetSdk 34
-        versionCode buildNo > 0 ? (1000 + buildNo) : 1
-        versionName buildNo > 0 ? "1.5.${buildNo}" : "1.5.0"
+        versionCode appVersionCode
+        versionName appVersionName
     }
 
     buildFeatures {
         buildConfig true
     }
 
+    // 审计 A-02/A-03：正式签名完全来自 CI Secrets，仓库内不再有任何密钥与口令。
+    // debug 构建使用 AGP 默认的 ~/.android/debug.keystore（不再入库、不再硬编码 android/android）。
     signingConfigs {
-        debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+        release {
+            def store = System.getenv("SIGNING_STORE_FILE")
+            if (store != null && !store.trim().isEmpty()) {
+                storeFile file(store.trim())
+                storePassword System.getenv("SIGNING_STORE_PASSWORD")
+                keyAlias System.getenv("SIGNING_KEY_ALIAS")
+                keyPassword System.getenv("SIGNING_KEY_PASSWORD")
+            }
         }
     }
 
     buildTypes {
-        debug {
-            signingConfig signingConfigs.debug
-        }
         release {
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            def store = System.getenv("SIGNING_STORE_FILE")
+            if (store != null && !store.trim().isEmpty()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+    lint {
+        lintConfig file('lint.xml')
+        abortOnError false
     }
 }
 
@@ -60,4 +80,6 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
     implementation 'androidx.media3:media3-ui:1.4.1'
+
+    testImplementation 'junit:junit:4.13.2'
 }

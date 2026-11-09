@@ -68,6 +68,19 @@ public class HomeFragment extends Fragment {
     private boolean catFailed = false; // 分类接口失败时用列表数据兜底
     private List<Models.VideoSummary> lastRawList = new ArrayList<>();
 
+    /** 搜索防抖：连续输入只在停顿 300ms 后发一次请求（审计 A-09） */
+    private static final long SEARCH_DEBOUNCE_MS = 300L;
+    private final android.os.Handler searchHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable pendingSearch;
+    private int searchSeq = 0;
+    /** 列表代次：只有最新一次筛选的响应才能改 UI 与 loading（审计 A-09） */
+    private int listGeneration = 0;
+    /** 源站菜单弹窗：视图销毁时必须 dismiss，避免 WindowLeaked */
+    private PopupWindow sourcePopup;
+    /** 代码触发 setText 时抑制防抖重载，避免「切数据源」被重载两次（A-27） */
+    private boolean suppressSearchReload = false;
+
     /** 搜索历史每页条数（默认展示前 10 条，翻页查看更多） */
     private static final int HIST_PAGE_SIZE = 10;
     private LinearLayout histPanel, histBody, histPager;
@@ -186,7 +199,10 @@ public class HomeFragment extends Fragment {
             @Override public void afterTextChanged(Editable s) {
                 keyword = s.toString().trim();
                 if (!keyword.isEmpty()) hideHistory(); // 输入中收起历史，把空间让给结果列表
-                reload();
+                // 普通输入不是标签跳转：清掉可能残留的一次性标签意图
+                com.lateshow.app.api.SearchIntent.clear();
+                if (suppressSearchReload) return;   // 代码回填不再触发一次重载（A-27）
+                scheduleReload();
             }
         });
 
@@ -198,9 +214,11 @@ public class HomeFragment extends Fragment {
             curName = pendingTagName != null ? pendingTagName : "全部源站";
             curCategory = null;
             keyword = pendingTagKeyword;
-            inputSearch.setText(keyword);   // 触发 afterTextChanged → reload
+            inputSearch.setText(keyword);   // 触发 afterTextChanged → 防抖 reload
             inputSearch.setSelection(keyword.length());
             inputSearch.clearFocus();
+            // 标签跳转：能力门控就绪时由 SyncCatalog 消费该意图改用 tag 参数（B-01）
+            com.lateshow.app.api.SearchIntent.setTag(keyword);
             pendingTagKeyword = null;
         }
 
@@ -233,10 +251,12 @@ public class HomeFragment extends Fragment {
         hideKeyboard();
         keyword = k;
         if (!k.equals(inputSearch.getText().toString().trim())) {
-            inputSearch.setText(k);          // afterTextChanged → reload()
+            inputSearch.setText(k);          // afterTextChanged → 防抖 reload
         } else {
-            reload();                        // 同关键词也要重新按新源站加载
+            scheduleReload();                // 同关键词也要重新按新源站加载
         }
+        // 必须在防抖任务执行前设置：SyncCatalog.videos 会消费它决定是否用 tag 参数
+        com.lateshow.app.api.SearchIntent.setTag(k);
         inputSearch.setSelection(k.length());
         toastShort("在「" + n + "」中搜索：" + k);
     }
@@ -514,6 +534,10 @@ public class HomeFragment extends Fragment {
     @Override
     public void onDestroyView() {
         stopRingAnim();
+        dismissSourceMenu();
+        searchHandler.removeCallbacksAndMessages(null);
+        skelHandler.removeCallbacksAndMessages(null);
+        com.lateshow.app.api.Catalogs.get().cancelVideos();
         super.onDestroyView();
     }
 
@@ -652,11 +676,19 @@ public class HomeFragment extends Fragment {
 
     /** 数据源模式切换后调用：重置筛选条件并重载（由设置页 / MainActivity 触发） */
     public void onDataSourceChanged() {
+        // 审计 A-27：这里已直接重载，顺手消费脏标记，避免下一次 onResume 再重载一遍
+        com.lateshow.app.api.Catalogs.consumeDirty();
+        ++listGeneration;
+        com.lateshow.app.api.Catalogs.get().cancelVideos();
+        loading = false;
         curSlug = PrefStore.get().currentSourceSlug();
         curName = PrefStore.get().currentSourceName();
         curCategory = null;
         keyword = "";
+        com.lateshow.app.api.SearchIntent.clear();
+        suppressSearchReload = true;
         if (inputSearch != null) inputSearch.setText("");
+        suppressSearchReload = false;
         if (getView() == null) return;
         final int cyc = beginSourceProbe();
         refreshSources();
@@ -782,15 +814,30 @@ public class HomeFragment extends Fragment {
         int maxH = (int) (getResources().getDisplayMetrics().heightPixels * 0.55f);
         sv.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(want, maxH)));
 
+        dismissSourceMenu();   // 同一时间只允许一个源站弹窗
         PopupWindow pw = new PopupWindow(sv, dp(250),
                 ViewGroup.LayoutParams.WRAP_CONTENT, true);
         // 浮层统一 12dp 圆角（原 bg_card_lg 18dp，弹出层比页面卡片更收一档）、1dp 描边
         pw.setBackgroundDrawable(getResources().getDrawable(R.drawable.bg_menu));
         pw.setOutsideTouchable(true);
         pw.setElevation(dp(8));
+        sourcePopup = pw;
+        pw.setOnDismissListener(() -> { if (sourcePopup == pw) sourcePopup = null; });
         // 左移 4dp：浮层左缘盖住海报列左缘，消除背后海报切出的 1px 细线
-        pw.showAsDropDown(btnSource, -dp(4), dp(6));
+        try {
+            pw.showAsDropDown(btnSource, -dp(4), dp(6));
+        } catch (Exception e) {
+            sourcePopup = null;   // Activity 已销毁 / token 失效时不留悬挂窗口
+            return;
+        }
         box.setTag(pw);
+    }
+
+    private void dismissSourceMenu() {
+        if (sourcePopup != null) {
+            try { sourcePopup.dismiss(); } catch (Exception ignored) { }
+            sourcePopup = null;
+        }
     }
 
     private boolean pendingMenu = false;
@@ -832,6 +879,7 @@ public class HomeFragment extends Fragment {
     private void refreshCategories() {
         catFailed = false;
         final String ck = "cats|" + com.lateshow.app.api.Catalogs.cacheTag() + "|" + curSlug;
+        final int gen = listGeneration;   // 旧分类响应不能覆盖新源站的芯片
         Models.CategoryResp cached = ApiCache.get(ck, Models.CategoryResp.class, TTL_CAT);
         if (cached != null && cached.list != null && !cached.list.isEmpty()) {
             applyCategories(cached.list);
@@ -840,7 +888,7 @@ public class HomeFragment extends Fragment {
         com.lateshow.app.api.Catalogs.get().categories(curSlug,
             new VodSyncApi.ApiCb<Models.CategoryResp>() {
                 @Override public void onOk(Models.CategoryResp r) {
-                    if (!isAdded()) return;
+                    if (!isAdded() || gen != listGeneration) return;
                     if (r.list != null && !r.list.isEmpty()) {
                         ApiCache.put(ck, r);
                         applyCategories(r.list);
@@ -851,7 +899,7 @@ public class HomeFragment extends Fragment {
                     }
                 }
                 @Override public void onErr(String m) {
-                    if (!isAdded()) return;
+                    if (!isAdded() || gen != listGeneration) return;
                     // 网络失败：先用本地缓存的分类，仍没有再按影片类型兜底
                     Models.CategoryResp stale = ApiCache.getStale(ck, Models.CategoryResp.class);
                     if (stale != null && stale.list != null && !stale.list.isEmpty()) {
@@ -895,7 +943,22 @@ public class HomeFragment extends Fragment {
         chipAdapter.selectByName(curCategory);
     }
 
+    /** 搜索防抖：连续输入只保留最后一次，停顿 300ms 才真正发请求（审计 A-09） */
+    private void scheduleReload() {
+        if (pendingSearch != null) searchHandler.removeCallbacks(pendingSearch);
+        final int seq = ++searchSeq;
+        pendingSearch = () -> {
+            if (!isAdded() || getView() == null || seq != searchSeq) return;
+            reload();
+        };
+        searchHandler.postDelayed(pendingSearch, SEARCH_DEBOUNCE_MS);
+    }
+
     private void reload() {
+        // 新筛选先作废旧请求：NAS 模式真正 cancel Call，直连模式用代次丢弃回调
+        ++listGeneration;
+        com.lateshow.app.api.Catalogs.get().cancelVideos();
+        loading = false;   // 旧请求被作废，其 onOk/onErr 不能再改这个标记
         page = 1;
         noMore = false;   // 换源站 / 分类 / 关键词后重新允许翻页
         videoAdapter.setItems(new ArrayList<>());
@@ -907,6 +970,7 @@ public class HomeFragment extends Fragment {
     private void loadPage(int p) {
         loading = true;
         final int reqPage = p;
+        final int gen = listGeneration;   // 只认发起时的代次（审计 A-09）
         final String ck = listCacheKey(p);
         final String kw = keyword;
         final String type = curCategory;
@@ -928,7 +992,7 @@ public class HomeFragment extends Fragment {
         com.lateshow.app.api.Catalogs.get().videos(p, PAGE_SIZE, curSlug, type, kw,
             new VodSyncApi.ApiCb<Models.VideoListResp>() {
                 @Override public void onOk(Models.VideoListResp r) {
-                    if (!isAdded()) return;
+                    if (!isAdded() || gen != listGeneration) return;   // 过期响应直接丢弃
                     loading = false;
                     // 首屏列表拿到 = 当前源站确实能出数据，作为「畅通」证据点亮圆环
                     if (reqPage == 1) reportSourceProbe(cyc, RING_OK);
@@ -936,7 +1000,7 @@ public class HomeFragment extends Fragment {
                     applyList(r, reqPage, false);
                 }
                 @Override public void onErr(String m) {
-                    if (!isAdded()) return;
+                    if (!isAdded() || gen != listGeneration) return;   // 过期错误不污染新筛选
                     loading = false;
                     hideSkeleton();
                     if (reqPage == 1 && videoAdapter.getItemCount() == 0) {

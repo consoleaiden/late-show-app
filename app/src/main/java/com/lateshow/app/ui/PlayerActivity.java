@@ -34,20 +34,26 @@ public class PlayerActivity extends AppCompatActivity {
     private Integer lineKey;
     private long lastSavedSec = 0;
 
-    /** 周期检查「跳过片尾」 */
+    /** 5 秒周期：检查「跳过片尾」+ 落盘播放进度（审计 A-14，异常退出也不丢进度） */
+    private static final long TICK_MS = 5000L;
     private final Handler tickHandler = new Handler(Looper.getMainLooper());
     private final Runnable endingTick = new Runnable() {
         @Override public void run() {
-            if (player != null && player.isPlaying()) {
-                int skip = PrefStore.get().skipEndingSec();
-                if (skip > 0) {
-                    long dur = player.getDuration();
-                    if (dur > 0 && player.getCurrentPosition() >= dur - skip * 1000L) {
-                        player.seekTo(dur); // 触发 STATE_ENDED，进度按播完保存
+            if (player != null) {
+                long durMs = player.getDuration();
+                long pos = player.getCurrentPosition();
+                if (player.isPlaying()) {
+                    int skip = PrefStore.get().skipEndingSec();
+                    if (skip > 0 && durMs > 0 && pos >= durMs - skip * 1000L) {
+                        player.seekTo(durMs); // 触发 STATE_ENDED，进度按播完保存
+                    }
+                    // 进度变化超过 3 秒才写一次整表，避免拖动/暂停时高频写盘（A-23）
+                    if (durMs > 0 && pos > 0 && Math.abs(pos / 1000 - lastSavedSec) >= 3) {
+                        saveProgress(pos / 1000, durMs / 1000);
                     }
                 }
             }
-            tickHandler.postDelayed(this, 3000);
+            tickHandler.postDelayed(this, TICK_MS);
         }
     };
 
@@ -81,7 +87,11 @@ public class PlayerActivity extends AppCompatActivity {
         pic = it.getStringExtra("pic");
         remarks = it.getStringExtra("remarks");
         sourceName = it.getStringExtra("sourceName");
-        long startMs = it.getLongExtra("startMs", 0);
+        // 审计 A-13：切主题 / 配置变更重建后优先用已保存的实时播放位置，
+        // 不能再用 Intent 里的原始 startMs 把用户已看的进度冲掉。
+        long startMs = savedInstanceState != null
+                ? savedInstanceState.getLong("resume_pos_ms", it.getLongExtra("startMs", 0))
+                : it.getLongExtra("startMs", 0);
         // 直进全屏且无进度：应用「跳过片头」设置
         if (startMs == 0) {
             int skip = PrefStore.get().skipIntroSec();
@@ -152,7 +162,7 @@ public class PlayerActivity extends AppCompatActivity {
         player.setMediaItem(mi, Math.max(0, startMs));
         player.prepare();
         player.play();
-        tickHandler.postDelayed(endingTick, 3000);
+        tickHandler.postDelayed(endingTick, TICK_MS);
 
         player.addListener(new Player.Listener() {
             @Override
@@ -259,6 +269,13 @@ public class PlayerActivity extends AppCompatActivity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) hideSystemBars(); // 对话框/通知等抢焦点后恢复时补隐藏
+    }
+
+    /** 配置变更（含切主题）重建时保存实时播放位置，供 onCreate 恢复（A-13 / A-12） */
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        if (player != null) out.putLong("resume_pos_ms", player.getCurrentPosition());
     }
 
     @Override

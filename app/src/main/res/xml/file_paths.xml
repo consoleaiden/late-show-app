@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    审计 A-34：FileProvider 只暴露应用内更新用的 APK 子目录，
+    不再把整个 cacheDir / filesDir 纳入可授权范围。
+    UpdateChecker 会把下载的 APK 写到 cacheDir/updates/。
+-->
 <paths>
-    <cache-path name="apk" path="." />
-    <files-path name="files" path="." />
+    <cache-path name="apk" path="updates/" />
 </paths>

@@ -28,6 +28,13 @@ public interface Catalog {
     void videos(int page, int pageSize, String slug, String typeName, String keyword,
                 VodSyncApi.ApiCb<Models.VideoListResp> cb);
 
+    /**
+     * 作废仍在途的列表请求（审计 A-09）：首页换关键词 / 换源站 / 换分类时调用，
+     * 避免旧响应把新筛选结果覆盖掉。实现可真正 cancel Call，也可用代次丢弃回调。
+     * 默认空实现，保证旧实现无需改动。
+     */
+    default void cancelVideos() { }
+
     /** 影片详情（含线路与选集） */
     void detail(String slug, long vodId, VodSyncApi.ApiCb<Models.DetailResp> cb);
 

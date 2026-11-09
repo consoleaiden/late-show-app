@@ -62,8 +62,21 @@ public final class OfflineMedia {
         }
     }
 
+    /**
+     * 离线文件名（审计 A-34）：只保留安全字符，避免第三方数据里的 {@code /}、{@code ..}
+     * 或控制字符拼进路径；同时限制长度防止超长文件名。
+     * 常见 slug 是域名/短标识，净化后与旧文件名一致，已有的离线数据仍可读。
+     */
     public static String key(String slug, long vodId) {
-        return (slug == null ? "_" : slug) + "_" + vodId;
+        String s = slug == null ? "_" : slug;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length() && sb.length() < 80; i++) {
+            char c = s.charAt(i);
+            sb.append(Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '.' ? c : '_');
+        }
+        String clean = sb.toString().replace("..", "_");
+        if (clean.isEmpty()) clean = "_";
+        return clean + "_" + vodId;
     }
 
     /** 保存完整播放数据（异步写盘，立即进内存缓存） */
@@ -170,9 +183,15 @@ public final class OfflineMedia {
             if (f.delete()) {
                 files--;
                 total -= len;
+                final String k = f.getName().replace(".json", "");
                 synchronized (L1) {
-                    L1.remove(f.getName().replace(".json", ""));
+                    L1.remove(k);
                 }
+                // 审计 A-15：文件被淘汰后必须回写收藏/历史的「可离线」标记，
+                // 否则卡片仍标可离线，但点进去离线详情会失败。
+                try {
+                    com.lateshow.app.store.PrefStore.get().clearCachedByKey(k);
+                } catch (Exception ignored) { }
             }
         }
     }

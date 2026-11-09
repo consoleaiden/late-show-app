@@ -76,6 +76,17 @@ public class SyncConsoleActivity extends AppCompatActivity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean polling = false;
+    /** 轮询代次：只认最后一次 refreshAll 的结果，写操作后的旧响应一律丢弃（审计 A-10） */
+    private int pollGeneration = 0;
+    /** 在途轮询请求分组：新一轮刷新 / 页面销毁时整体取消（A-10 / A-11） */
+    private static final Object POLL_TAG = new Object();
+    /** 进程内明文 Token：仅供「临时显示」，绝不落盘、不进 logcat、不进剪贴板（A-06） */
+    private String transientToken = null;
+    private final Runnable hideTokenTask = () -> {
+        if (tvTokenValue == null) return;
+        tvTokenValue.setText(tokenMaskText());
+        tvTokenValue.setTextColor(color(R.color.t2));
+    };
     private Models.PauseState pauseState = new Models.PauseState();
 
     private final ObjectAnimator[] animStats = new ObjectAnimator[1];
@@ -93,11 +104,16 @@ public class SyncConsoleActivity extends AppCompatActivity {
 
     private final Runnable pollTask = new Runnable() {
         @Override public void run() {
-            if (!polling) return;
+            if (!polling || !uiAlive()) return;
             refreshAll(false);
             handler.postDelayed(this, 5000);
         }
     };
+
+    /** Activity 仍可安全弹窗 / 更新 UI（避免窗口泄漏与异步回调崩溃） */
+    private boolean uiAlive() {
+        return !isFinishing() && !isDestroyed();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -250,10 +266,10 @@ public class SyncConsoleActivity extends AppCompatActivity {
 
     private void bindActions() {
         // ② 同步操作
-        findViewById(R.id.btnSyncAll).setOnClickListener(v -> post("/api/v1/sync-all?mode=auto", "全站增量同步已受理"));
-        findViewById(R.id.btnRefresh).setOnClickListener(v -> post("/api/v1/sources/refresh", "源站列表刷新已受理"));
-        findViewById(R.id.btnFullSync).setOnClickListener(v -> post("/api/v1/sync-all?mode=full", "全站全量同步已受理（耗时长）"));
-        findViewById(R.id.btnRecount).setOnClickListener(v -> post("/api/v1/maintenance/recount", "条数校准已受理"));
+        findViewById(R.id.btnSyncAll).setOnClickListener(v -> post(com.lateshow.app.util.ApiPaths.SYNC_ALL_AUTO, "全站增量同步已受理"));
+        findViewById(R.id.btnRefresh).setOnClickListener(v -> post(com.lateshow.app.util.ApiPaths.SOURCES_REFRESH, "源站列表刷新已受理"));
+        findViewById(R.id.btnFullSync).setOnClickListener(v -> post(com.lateshow.app.util.ApiPaths.SYNC_ALL_FULL, "全站全量同步已受理（耗时长）"));
+        findViewById(R.id.btnRecount).setOnClickListener(v -> post(com.lateshow.app.util.ApiPaths.MAINTENANCE_RECOUNT, "条数校准已受理"));
         findViewById(R.id.btnAddCustom).setOnClickListener(v -> showCustomSourceDialog(null));
         findViewById(R.id.btnProxyStatus).setOnClickListener(v -> showProxyStatusDialog());
 
@@ -289,16 +305,16 @@ public class SyncConsoleActivity extends AppCompatActivity {
         // ⑨ 明星词库
         findViewById(R.id.btnStarAdd).setOnClickListener(v -> addStarTerms());
         findViewById(R.id.btnStarRecompute).setOnClickListener(v ->
-                postJson("/api/v1/star-terms/recompute", "{}", "相关推荐重算已受理", this::loadStarTerms));
+                postJson(com.lateshow.app.util.ApiPaths.STAR_TERMS_RECOMPUTE, "{}", "相关推荐重算已受理", this::loadStarTerms));
 
         // ⑩ 诊断与维护
-        findViewById(R.id.btnRelatedStatus).setOnClickListener(v -> showJson("/api/v1/related/status", null));
-        findViewById(R.id.btnStarTagsStatus).setOnClickListener(v -> showJson("/api/v1/star/tags/status", null));
-        findViewById(R.id.btnUntrackedStars).setOnClickListener(v -> showJson("/api/v1/star/tags/untracked", null));
+        findViewById(R.id.btnRelatedStatus).setOnClickListener(v -> showJson(com.lateshow.app.util.ApiPaths.RELATED_STATUS, null));
+        findViewById(R.id.btnStarTagsStatus).setOnClickListener(v -> showJson(com.lateshow.app.util.ApiPaths.STAR_TAGS_STATUS, null));
+        findViewById(R.id.btnUntrackedStars).setOnClickListener(v -> showJson(com.lateshow.app.util.ApiPaths.STAR_TAGS_UNTRACKED, null));
         findViewById(R.id.btnRelatedRecompute).setOnClickListener(v ->
-                post("/api/v1/maintenance/related-recompute", "相关推荐重算已受理"));
+                post(com.lateshow.app.util.ApiPaths.MAINTENANCE_RELATED, "相关推荐重算已受理"));
         findViewById(R.id.btnStarTagsBackfill).setOnClickListener(v ->
-                post("/api/v1/maintenance/star-tags", "明星标签回填已受理"));
+                post(com.lateshow.app.util.ApiPaths.MAINTENANCE_STAR_TAGS, "明星标签回填已受理"));
 
         // ⑪ 播放线路策略
         findViewById(R.id.btnLineApply).setOnClickListener(v -> applyLinePolicy());
@@ -314,6 +330,10 @@ public class SyncConsoleActivity extends AppCompatActivity {
     // ==================== ① 运行概览 / ③ 暂停 / ⑥ 源站 / ⑦ 日志 ====================
 
     private void refreshAll(boolean showSkeleton) {
+        if (!uiAlive()) return;
+        final int gen = ++pollGeneration;
+        // 上一轮未完成的轮询请求整体取消：写操作后立刻刷新时不会有两批响应交叉落 UI
+        VodSyncApi.cancelTag(POLL_TAG);
         // 状态行右侧的「上次刷新」：每轮请求发起时更新，替代已移除的手动刷新按钮
         if (tvConsoleTime != null) {
             tvConsoleTime.setText("上次刷新 " + android.text.format.DateFormat.format(
@@ -323,9 +343,10 @@ public class SyncConsoleActivity extends AppCompatActivity {
             skelHandler.removeCallbacks(skelShowTask);
             skelHandler.postDelayed(skelShowTask, 220);
         }
-        VodSyncApi.get().get("/api/v1/pause", null, Models.PauseResp.class,
-                new VodSyncApi.ApiCb<Models.PauseResp>() {
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.PAUSE, null, Models.PauseResp.class,
+                POLL_TAG, new VodSyncApi.ApiCb<Models.PauseResp>() {
             @Override public void onOk(Models.PauseResp r) {
+                if (!uiAlive() || gen != pollGeneration) return;
                 Models.PauseState p = r.state != null ? r.state : new Models.PauseState();
                 p.global = r.global; p.full = r.full; p.incremental = r.incremental;
                 pauseState = p;
@@ -335,9 +356,10 @@ public class SyncConsoleActivity extends AppCompatActivity {
             @Override public void onErr(String m) { }
         });
 
-        VodSyncApi.get().get("/api/v1/sources", null, Models.SyncSourcesResp.class,
-                new VodSyncApi.ApiCb<Models.SyncSourcesResp>() {
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.SOURCES, null, Models.SyncSourcesResp.class,
+                POLL_TAG, new VodSyncApi.ApiCb<Models.SyncSourcesResp>() {
             @Override public void onOk(Models.SyncSourcesResp r) {
+                if (!uiAlive() || gen != pollGeneration) return;
                 Skeleton.hide(srcSkeleton, animSrc);
                 srcAdapter.setItems(r.list != null ? r.list : new ArrayList<>());
                 srcAdapter.renderInto(srcList);
@@ -347,47 +369,60 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 tvConsoleStatus.setTextColor(color(R.color.ok));
             }
             @Override public void onErr(String m) {
+                if (!uiAlive() || gen != pollGeneration) return;
                 Skeleton.hide(srcSkeleton, animSrc);
                 tvConsoleStatus.setText("● 连接失败 · " + m);
                 tvConsoleStatus.setTextColor(color(R.color.bad));
             }
         });
 
-        VodSyncApi.get().get("/api/v1/logs", HomeFragment.map("limit", "20"), Models.LogsResp.class,
-                new VodSyncApi.ApiCb<Models.LogsResp>() {
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.LOGS,
+                HomeFragment.map("limit", "20"), Models.LogsResp.class,
+                POLL_TAG, new VodSyncApi.ApiCb<Models.LogsResp>() {
             @Override public void onOk(Models.LogsResp r) {
+                if (!uiAlive() || gen != pollGeneration) return;
                 Skeleton.hide(logSkeleton, animLog);
                 logAdapter.setItems(r.list != null ? r.list : new ArrayList<>());
                 logAdapter.renderInto(logList);
             }
-            @Override public void onErr(String m) { Skeleton.hide(logSkeleton, animLog); }
+            @Override public void onErr(String m) {
+                if (!uiAlive() || gen != pollGeneration) return;
+                Skeleton.hide(logSkeleton, animLog);
+            }
         });
 
-        VodSyncApi.get().get("/api/v1/stats", null, Models.StatsResp.class,
-                new VodSyncApi.ApiCb<Models.StatsResp>() {
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.STATS, null, Models.StatsResp.class,
+                POLL_TAG, new VodSyncApi.ApiCb<Models.StatsResp>() {
             @Override public void onOk(Models.StatsResp r) {
+                if (!uiAlive() || gen != pollGeneration) return;
                 Skeleton.hide(statsSkeleton, animStats);
                 renderStats(r);
             }
-            @Override public void onErr(String m) { Skeleton.hide(statsSkeleton, animStats); }
+            @Override public void onErr(String m) {
+                if (!uiAlive() || gen != pollGeneration) return;
+                Skeleton.hide(statsSkeleton, animStats);
+            }
         });
     }
 
     private void renderStats(Models.StatsResp s) {
         autoCount.setText("自动同步 " + s.sourcesEnabled + "/" + s.sourcesTotal);
-        statsGrid.removeAllViews();
-        addStatRow(new String[][]{
+        String[][] row1 = {
                 {TimeUtil.thousands(s.sourcesTotal), "源站总数 · 已启用 " + s.sourcesEnabled},
-                {TimeUtil.thousands(s.videosTotal), "已入库视频"}});
-        addStatRow(new String[][]{
+                {TimeUtil.thousands(s.videosTotal), "已入库视频"}};
+        String[][] row2 = {
                 {String.valueOf(s.sourcesSyncing), "正在同步"},
-                {TimeUtil.thousands(s.todayInserted), "今日新增 / 更新 " + TimeUtil.thousands(s.todayUpdated)}});
-        if (s.sync_load != null) {
-            addStatRow(new String[][]{
-                    {s.sync_load.running + "/" + s.sync_load.limit,
-                            "同步负载" + (s.sync_load.queued > 0 ? " · 排队 " + s.sync_load.queued : "")},
-                    {String.valueOf(s.sourcesUnfinished), "有断点待续传"}});
-        }
+                {TimeUtil.thousands(s.todayInserted), "今日新增 / 更新 " + TimeUtil.thousands(s.todayUpdated)}};
+        boolean hasLoad = s.sync_load != null;
+        String[][] row3 = hasLoad ? new String[][]{
+                {s.sync_load.running + "/" + s.sync_load.limit,
+                        "同步负载" + (s.sync_load.queued > 0 ? " · 排队 " + s.sync_load.queued : "")},
+                {String.valueOf(s.sourcesUnfinished), "有断点待续传"}} : null;
+        // 审计 A-25：5 秒轮询只复用并改文案，不再 removeAllViews + 重新 inflate
+        ensureStatRows(hasLoad ? 3 : 2);
+        bindStatRow(0, row1);
+        bindStatRow(1, row2);
+        if (hasLoad) bindStatRow(2, row3);
         StringBuilder sb = new StringBuilder();
         if (s.proxy != null && s.proxy.enabled) {
             sb.append("代理通道 · 已启用\n直连 ").append(s.proxy.directSuccess)
@@ -407,24 +442,38 @@ public class SyncConsoleActivity extends AppCompatActivity {
         tvRuntime.setVisibility(View.VISIBLE);
     }
 
-    private void addStatRow(String[][] cells) {
+    /** 只在行数变化时增删，其余轮次复用已有卡片（A-25） */
+    private void ensureStatRows(int want) {
         int dp8 = (int) (8 * getResources().getDisplayMetrics().density);
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowLp.bottomMargin = dp8;
-        row.setLayoutParams(rowLp);
-        for (int i = 0; i < cells.length; i++) {
-            View card = getLayoutInflater().inflate(R.layout.item_stat, row, false);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            if (i > 0) lp.leftMargin = dp8;
-            card.setLayoutParams(lp);
-            ((TextView) card.findViewById(R.id.statValue)).setText(cells[i][0]);
-            ((TextView) card.findViewById(R.id.statLabel)).setText(cells[i][1]);
-            row.addView(card);
+        while (statsGrid.getChildCount() > want) {
+            statsGrid.removeViewAt(statsGrid.getChildCount() - 1);
         }
-        statsGrid.addView(row);
+        while (statsGrid.getChildCount() < want) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rowLp.bottomMargin = dp8;
+            row.setLayoutParams(rowLp);
+            for (int i = 0; i < 2; i++) {
+                View card = getLayoutInflater().inflate(R.layout.item_stat, row, false);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                if (i > 0) lp.leftMargin = dp8;
+                card.setLayoutParams(lp);
+                row.addView(card);
+            }
+            statsGrid.addView(row);
+        }
+    }
+
+    private void bindStatRow(int idx, String[][] cells) {
+        if (idx < 0 || idx >= statsGrid.getChildCount()) return;
+        LinearLayout row = (LinearLayout) statsGrid.getChildAt(idx);
+        for (int i = 0; i < cells.length && i < row.getChildCount(); i++) {
+            ((TextView) row.getChildAt(i).findViewById(R.id.statValue)).setText(cells[i][0]);
+            ((TextView) row.getChildAt(i).findViewById(R.id.statLabel)).setText(cells[i][1]);
+        }
     }
 
     private void buildPauseRows() {
@@ -443,7 +492,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
             sw.setOnCheckedChangeListener(null);
             sw.setChecked(scopeOn(scope));
             sw.setOnCheckedChangeListener((bv, on) -> {
-                String path = on ? "/api/v1/pause" : "/api/v1/resume";
+                String path = on ? com.lateshow.app.util.ApiPaths.PAUSE : com.lateshow.app.util.ApiPaths.RESUME;
                 VodSyncApi.get().post(path, HomeFragment.map("scope", scope), Models.MsgResp.class,
                         new VodSyncApi.ApiCb<Models.MsgResp>() {
                     @Override public void onOk(Models.MsgResp r) {
@@ -488,7 +537,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
 
     private void autoSyncBatch(String slugs, boolean enabled) {
         if (slugs == null || slugs.isEmpty()) { toast("未选择源站"); return; }
-        VodSyncApi.get().post("/api/v1/sources/auto-sync",
+        VodSyncApi.get().post(com.lateshow.app.util.ApiPaths.SOURCES_AUTO_SYNC,
                 HomeFragment.map("enabled", String.valueOf(enabled), "slugs", slugs),
                 Models.MsgResp.class, new VodSyncApi.ApiCb<Models.MsgResp>() {
             @Override public void onOk(Models.MsgResp r) { toast(r.msg != null ? r.msg : "已更新"); refreshAll(false); }
@@ -551,6 +600,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
     // ==================== ② 自定义源站 / 代理状态 ====================
 
     private void showCustomSourceDialog(final Models.SyncSource edit) {
+        if (!uiAlive()) return;   // 审计 A-10：异步回调里弹窗必须先判 Activity 状态
         final boolean isEdit = edit != null;
         View dlg = getLayoutInflater().inflate(R.layout.dialog_custom_source, null);
         final EditText inName = dlg.findViewById(R.id.dcsName);
@@ -589,7 +639,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                     probeView.setText("● 探测中…");
                     probeView.setTextColor(color(R.color.t2));
                     try {
-                        VodSyncApi.get().postJson("/api/v1/sources/probe",
+                        VodSyncApi.get().postJson(com.lateshow.app.util.ApiPaths.SOURCES_PROBE,
                                 new org.json.JSONObject().put("api_url", url).toString(),
                                 Models.ProbeResp.class, new VodSyncApi.ApiCb<Models.ProbeResp>() {
                             @Override public void onOk(Models.ProbeResp r) {
@@ -631,7 +681,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                     .put("name", name).put("api_url", url).put("description", desc)
                     .put("probe", true).put("allow_unreachable", force);
             if (!slug.isEmpty()) body.put("slug", slug);
-            VodSyncApi.get().postJson("/api/v1/sources/custom", body.toString(),
+            VodSyncApi.get().postJson(com.lateshow.app.util.ApiPaths.SOURCES_CUSTOM, body.toString(),
                     Models.CustomSourceResp.class, new VodSyncApi.ApiCb<Models.CustomSourceResp>() {
                 @Override public void onOk(Models.CustomSourceResp r) {
                     dialog.dismiss();
@@ -639,6 +689,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                     refreshAll(false);
                 }
                 @Override public void onErr(String m) {
+                    if (!uiAlive()) return;
                     if (!force && m != null && m.contains("源站不可用")) {
                         new MaterialAlertDialogBuilder(SyncConsoleActivity.this)
                                 .setTitle("探测失败")
@@ -656,7 +707,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
         try {
             org.json.JSONObject body = new org.json.JSONObject()
                     .put("name", name).put("api_url", url).put("description", desc);
-            VodSyncApi.get().patchJson("/api/v1/sources/" + s.slug + "/custom", body.toString(),
+            VodSyncApi.get().patchJson(com.lateshow.app.util.ApiPaths.sourceCustom(s.slug), body.toString(),
                     Models.MsgResp.class, new VodSyncApi.ApiCb<Models.MsgResp>() {
                 @Override public void onOk(Models.MsgResp r) {
                     dialog.dismiss();
@@ -669,12 +720,13 @@ public class SyncConsoleActivity extends AppCompatActivity {
     }
 
     private void confirmDeleteCustom(final Models.SyncSource s) {
+        if (!uiAlive()) return;
         new MaterialAlertDialogBuilder(this)
                 .setTitle("删除自定义源站")
                 .setMessage("确认删除「" + s.name + "」（" + s.slug + "）？\n"
                         + "该站已入库的 " + TimeUtil.thousands(s.totalVideos) + " 条数据将一并删除，且不可恢复。")
                 .setPositiveButton("删除", (d, w) -> VodSyncApi.get().delete(
-                        "/api/v1/sources/" + s.slug + "/custom",
+                        com.lateshow.app.util.ApiPaths.sourceCustom(s.slug),
                         HomeFragment.map("confirm", s.slug, "drop_table", "true"),
                         Models.MsgResp.class, new VodSyncApi.ApiCb<Models.MsgResp>() {
                     @Override public void onOk(Models.MsgResp r) { toast(r.msg != null ? r.msg : "已删除"); refreshAll(false); }
@@ -684,9 +736,10 @@ public class SyncConsoleActivity extends AppCompatActivity {
     }
 
     private void showProxyStatusDialog() {
-        VodSyncApi.get().get("/api/v1/stats", null, Models.StatsResp.class,
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.STATS, null, Models.StatsResp.class,
                 new VodSyncApi.ApiCb<Models.StatsResp>() {
             @Override public void onOk(Models.StatsResp s) {
+                if (!uiAlive()) return;   // 异步回调里构造并弹出对话框
                 StringBuilder sb = new StringBuilder();
                 if (s.proxy == null) {
                     sb.append("该版本后端未上报代理状态（需 v1.4.0+）。");
@@ -728,7 +781,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
         hideKeyboard();
         searchInfo.setText("搜索中…");
         searchResults.removeAllViews();
-        VodSyncApi.get().get("/api/v1/search",
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.SEARCH,
                 HomeFragment.map("wd", kw, "page", "1", "page_size", "20"),
                 JsonObject.class, new VodSyncApi.ApiCb<JsonObject>() {
             @Override public void onOk(JsonObject r) {
@@ -756,7 +809,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
     // ==================== ⑤ 数据表浏览 ====================
 
     private void loadTables() {
-        VodSyncApi.get().get("/api/v1/admin/tables", null, JsonObject.class,
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.ADMIN_TABLES, null, JsonObject.class,
                 new VodSyncApi.ApiCb<JsonObject>() {
             @Override public void onOk(JsonObject r) {
                 tableNames.clear();
@@ -791,7 +844,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
         if (pos < 0 || pos >= tableNames.size()) return;
         String table = tableNames.get(pos);
         String kw = etTableQuery.getText().toString().trim();
-        String path = "/api/v1/admin/tables/" + table + "/rows";
+        String path = com.lateshow.app.util.ApiPaths.tableRows(table);
         tableResults.removeAllViews();
         tvTablePage.setText("查询中…");
         VodSyncApi.get().get(path,
@@ -827,10 +880,38 @@ public class SyncConsoleActivity extends AppCompatActivity {
 
     // ==================== ⑧ 访问控制与 Token ====================
 
+    /**
+     * 审计 A-06：不再请求 {@code /auth/token} 把明文拉到界面上常驻，也不写剪贴板。
+     * 只展示掩码；新生成的 Token 直接写入 Keystore（本 App 自动完成凭据轮换）。
+     */
+    private String tokenMaskText() {
+        String t = transientToken;
+        if (t == null || t.isEmpty()) t = PrefStore.get().apiToken();
+        if (t == null || t.isEmpty()) return "（本 App 尚未配置 API Token · 请到设置页填写）";
+        return "已配置 " + com.lateshow.app.util.Credentials.mask(t) + " · 明文已隐藏";
+    }
+
+    /** 后端返回新 Token 时调用：只落 Keystore，不在界面常驻明文 */
+    private void adoptNewToken(JsonObject r) {
+        if (r == null || !r.has("token") || r.get("token").isJsonNull()) return;
+        String t = r.get("token").getAsString();
+        if (t == null || t.trim().isEmpty()) return;
+        transientToken = t.trim();
+        PrefStore.get().setApiToken(transientToken);   // 加密落盘 + 清跨主机缓存
+        if (uiAlive() && tvTokenValue != null) {
+            handler.removeCallbacks(hideTokenTask);
+            tvTokenValue.setText(tokenMaskText());
+            tvTokenValue.setTextColor(color(R.color.t2));
+        }
+    }
+
     private void loadAuthSection() {
-        VodSyncApi.get().get("/api/v1/auth/state", null, Models.AuthState.class,
+        if (!uiAlive()) return;
+        tvTokenValue.setText(tokenMaskText());
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.AUTH_STATE, null, Models.AuthState.class,
                 new VodSyncApi.ApiCb<Models.AuthState>() {
             @Override public void onOk(Models.AuthState s) {
+                if (!uiAlive()) return;
                 tvAuthState.setText("● " + (s.enabled ? "已启用授权访问" : "未启用授权访问")
                         + (s.loggedIn ? " · 已登录" : "")
                         + (s.hasToken ? " · 已生成 Token" : ""));
@@ -838,54 +919,64 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 swAuthEnable.setChecked(s.enabled);
                 swAuthEnable.setOnCheckedChangeListener((bv, on) -> setAuthEnabled(on));
             }
-            @Override public void onErr(String m) { tvAuthState.setText("● 状态读取失败：" + m); }
-        });
-        VodSyncApi.get().get("/api/v1/auth/token", null, JsonObject.class,
-                new VodSyncApi.ApiCb<JsonObject>() {
-            @Override public void onOk(JsonObject r) {
-                tvTokenValue.setText(str(r, "token").isEmpty() ? "（未生成）" : str(r, "token"));
+            @Override public void onErr(String m) {
+                if (uiAlive()) tvAuthState.setText("● 状态读取失败：" + m);
             }
-            @Override public void onErr(String m) { tvTokenValue.setText("（读取失败：" + m + "）"); }
         });
     }
 
     private void setAuthEnabled(boolean on) {
+        if (!uiAlive()) return;
         try {
-            VodSyncApi.get().postJson("/api/v1/auth/settings",
+            VodSyncApi.get().postJson(com.lateshow.app.util.ApiPaths.AUTH_SETTINGS,
                     new org.json.JSONObject().put("enabled", on).toString(),
                     JsonObject.class, new VodSyncApi.ApiCb<JsonObject>() {
                 @Override public void onOk(JsonObject r) {
-                    toast(on ? "已启用授权访问（Token 已自动更换）" : "已关闭授权访问");
-                    if (r != null && r.has("token") && !r.get("token").isJsonNull()) {
-                        tvTokenValue.setText(r.get("token").getAsString());
-                    }
+                    if (!uiAlive()) return;
+                    adoptNewToken(r);
+                    toast(on ? "已启用授权访问 · 新 Token 已自动同步到本 App" : "已关闭授权访问");
                     loadAuthSection();
                 }
-                @Override public void onErr(String m) { toast(m); loadAuthSection(); }
+                @Override public void onErr(String m) { if (uiAlive()) { toast(m); loadAuthSection(); } }
             });
         } catch (Exception e) { toast("请求构造失败：" + e.getMessage()); }
     }
 
+    /**
+     * 审计 A-06：不再把 Token 写入系统剪贴板（其它 App 与输入法均可读取）。
+     * 改为「临时显示 10 秒」，到点自动恢复掩码，明文只存在于本页内存。
+     */
     private void copyToken() {
-        String t = tvTokenValue.getText().toString().trim();
-        if (t.isEmpty() || t.startsWith("（")) { toast("还没有 Token"); return; }
-        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("vodsync-token", t));
-        toast("Token 已复制");
+        if (!uiAlive()) return;
+        if (transientToken == null || transientToken.isEmpty()) {
+            String local = PrefStore.get().apiToken();
+            if (local == null || local.isEmpty()) {
+                toast("本 App 尚未配置 Token，请到设置页填写");
+                return;
+            }
+            transientToken = local;
+        }
+        tvTokenValue.setText(transientToken);
+        tvTokenValue.setTextColor(color(R.color.warn));
+        handler.removeCallbacks(hideTokenTask);
+        handler.postDelayed(hideTokenTask, 10000);
+        toast("明文临时显示 10 秒 · 不会写入剪贴板");
     }
 
     private void rotateToken() {
+        if (!uiAlive()) return;
         new MaterialAlertDialogBuilder(this)
                 .setTitle("重新生成 API Token")
-                .setMessage("旧 Token 立即失效，已配置的客户端（含本 App）需要同步更新。继续？")
+                .setMessage("旧 Token 立即失效，本 App 会自动改用新 Token；其它客户端需手动更新。继续？")
                 .setPositiveButton("重新生成", (d, w) ->
-                        VodSyncApi.get().postJson("/api/v1/auth/token", "{}", JsonObject.class,
-                                new VodSyncApi.ApiCb<JsonObject>() {
+                        VodSyncApi.get().postJson(com.lateshow.app.util.ApiPaths.AUTH_TOKEN,
+                                "{}", JsonObject.class, new VodSyncApi.ApiCb<JsonObject>() {
                             @Override public void onOk(JsonObject r) {
-                                tvTokenValue.setText(str(r, "token"));
-                                toast("新 Token 已生成，请同步更新 App 里的 API Token");
+                                if (!uiAlive()) return;
+                                adoptNewToken(r);
+                                toast("新 Token 已生成并自动写入本 App 凭据");
                             }
-                            @Override public void onErr(String m) { toast(m); }
+                            @Override public void onErr(String m) { if (uiAlive()) toast(m); }
                         }))
                 .setNegativeButton("取消", null).show();
     }
@@ -897,7 +988,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
         if (!nw.equals(nw2)) { toast("两次输入的新密码不一致"); return; }
         if (nw.length() < 6) { toast("新密码至少 6 位"); return; }
         try {
-            VodSyncApi.get().postJson("/api/v1/auth/password",
+            VodSyncApi.get().postJson(com.lateshow.app.util.ApiPaths.AUTH_PASSWORD,
                     new org.json.JSONObject().put("old", old).put("new", nw).toString(),
                     JsonObject.class, new VodSyncApi.ApiCb<JsonObject>() {
                 @Override public void onOk(JsonObject r) {
@@ -912,7 +1003,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
     // ==================== ⑨ 明星词库 ====================
 
     private void loadStarTerms() {
-        VodSyncApi.get().get("/api/v1/star-terms", null, JsonObject.class,
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.STAR_TERMS, null, JsonObject.class,
                 new VodSyncApi.ApiCb<JsonObject>() {
             @Override public void onOk(JsonObject r) {
                 JsonArray arr = arrayOf(r, "list");
@@ -945,21 +1036,24 @@ public class SyncConsoleActivity extends AppCompatActivity {
         row.addView(smallBtn(enabled ? "停用" : "启用", v ->
                 patchTerm(id, "{\"enabled\":" + (!enabled) + "}")));
         row.addView(smallBtn("改别名", v -> editTermAlias(id, str(o, "aliases"))));
-        row.addView(smallBtn("删除", v -> new MaterialAlertDialogBuilder(this)
-                .setTitle("删除词条")
-                .setMessage("确认删除「" + str(o, "term") + "」？")
-                .setPositiveButton("删除", (d, w) -> VodSyncApi.get().delete(
-                        "/api/v1/star-terms/" + id, null, JsonObject.class,
-                        new VodSyncApi.ApiCb<JsonObject>() {
-                    @Override public void onOk(JsonObject r) { toast("已删除"); loadStarTerms(); }
-                    @Override public void onErr(String m) { toast(m); }
-                }))
-                .setNegativeButton("取消", null).show()));
+        row.addView(smallBtn("删除", v -> {
+            if (!uiAlive()) return;
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle("删除词条")
+                    .setMessage("确认删除「" + str(o, "term") + "」？")
+                    .setPositiveButton("删除", (d, w) -> VodSyncApi.get().delete(
+                            com.lateshow.app.util.ApiPaths.starTerm(id), null, JsonObject.class,
+                            new VodSyncApi.ApiCb<JsonObject>() {
+                        @Override public void onOk(JsonObject r) { toast("已删除"); loadStarTerms(); }
+                        @Override public void onErr(String m) { toast(m); }
+                    }))
+                    .setNegativeButton("取消", null).show();
+        }));
         box.addView(row);
     }
 
     private void patchTerm(int id, String body) {
-        VodSyncApi.get().patchJson("/api/v1/star-terms/" + id, body, JsonObject.class,
+        VodSyncApi.get().patchJson(com.lateshow.app.util.ApiPaths.starTerm(id), body, JsonObject.class,
                 new VodSyncApi.ApiCb<JsonObject>() {
             @Override public void onOk(JsonObject r) { toast("已更新"); loadStarTerms(); }
             @Override public void onErr(String m) { toast(m); }
@@ -967,6 +1061,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
     }
 
     private void editTermAlias(int id, String current) {
+        if (!uiAlive()) return;
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setText(current);
@@ -1005,7 +1100,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
         String terms = etStarTerms.getText().toString().trim();
         if (terms.isEmpty()) { toast("请先粘贴要添加的主演名"); return; }
         try {
-            VodSyncApi.get().postJson("/api/v1/star-terms",
+            VodSyncApi.get().postJson(com.lateshow.app.util.ApiPaths.STAR_TERMS,
                     new org.json.JSONObject().put("terms", terms).toString(),
                     JsonObject.class, new VodSyncApi.ApiCb<JsonObject>() {
                 @Override public void onOk(JsonObject r) {
@@ -1087,7 +1182,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
         if (s == null) { toast("请先选择源站"); return; }
         int pos = spLinePolicy.getSelectedItemPosition();
         String policy = POLICY_VALUES[pos >= 0 && pos < POLICY_VALUES.length ? pos : 0];
-        VodSyncApi.get().post("/api/v1/sources/" + s.slug + "/play-line-policy",
+        VodSyncApi.get().post(com.lateshow.app.util.ApiPaths.sourcePlayLinePolicy(s.slug),
                 HomeFragment.map("policy", policy), Models.MsgResp.class,
                 new VodSyncApi.ApiCb<Models.MsgResp>() {
             @Override public void onOk(Models.MsgResp r) {
@@ -1104,8 +1199,8 @@ public class SyncConsoleActivity extends AppCompatActivity {
         if (s == null) { toast("请先选择源站"); return; }
         boolean wantPause = !s.paused;
         String path = wantPause
-                ? "/api/v1/sources/" + s.slug + "/pause"
-                : "/api/v1/sources/" + s.slug + "/resume";
+                ? com.lateshow.app.util.ApiPaths.sourcePause(s.slug)
+                : com.lateshow.app.util.ApiPaths.sourceResume(s.slug);
         VodSyncApi.get().post(path, null, Models.MsgResp.class,
                 new VodSyncApi.ApiCb<Models.MsgResp>() {
             @Override public void onOk(Models.MsgResp r) {
@@ -1188,6 +1283,8 @@ public class SyncConsoleActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // 审计 A-33：先撤销可能残留的旧轮询，避免多次 onResume 叠出多个 5 秒循环
+        handler.removeCallbacks(pollTask);
         polling = true;
         handler.postDelayed(pollTask, 5000);
         refreshAll(false);
@@ -1198,10 +1295,18 @@ public class SyncConsoleActivity extends AppCompatActivity {
         super.onPause();
         polling = false;
         handler.removeCallbacks(pollTask);
+        handler.removeCallbacks(hideTokenTask);
+        if (tvTokenValue != null) tvTokenValue.setText(tokenMaskText());
     }
 
     @Override
     protected void onDestroy() {
+        polling = false;
+        ++pollGeneration;                 // 所有在途回调立即失效
+        handler.removeCallbacksAndMessages(null);
+        skelHandler.removeCallbacksAndMessages(null);
+        VodSyncApi.cancelTag(POLL_TAG);   // 取消本页所有在途轮询请求
+        transientToken = null;            // 进程内明文副本随页面销毁
         skelHandler.removeCallbacks(skelShowTask);
         Skeleton.hide(statsSkeleton, animStats);
         Skeleton.hide(srcSkeleton, animSrc);

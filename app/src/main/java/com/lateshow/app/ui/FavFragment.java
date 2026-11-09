@@ -240,9 +240,13 @@ public class FavFragment extends Fragment {
                     cards.add(c);
                 }
             }
-            if (!isAdded()) return;
+            // 审计 A-21：isAdded() 检查与 runOnUiThread 调用之间存在时间窗，
+            // 期间 Fragment 可能已 detach；缓存 Activity 引用并捕获异常，避免后台线程崩溃。
+            final android.app.Activity act = getActivity();
+            if (!isAdded() || act == null || act.isFinishing() || act.isDestroyed()) return;
             final int cc = cachedCount[0];
-            requireActivity().runOnUiThread(() -> {
+            try {
+                act.runOnUiThread(() -> {
                 // 期间用户已切换 Tab 或页面已销毁：丢弃这次结果
                 if (!isAdded() || hist != showHist || getView() == null) return;
                 hideSkeleton();
@@ -261,7 +265,10 @@ public class FavFragment extends Fragment {
                 emptyView.setVisibility(cards.isEmpty() ? View.VISIBLE : View.GONE);
                 metaInfo.setText(metaInfo.getText() + " · 共 " + cards.size() + " 部"
                         + (cc > 0 ? " · " + cc + " 部可离线播放" : ""));
-            });
+                });
+            } catch (RuntimeException e) {
+                com.lateshow.app.util.AppLog.w("FavFragment", "页面已销毁，丢弃渲染结果：" + e.getMessage());
+            }
         });
     }
 

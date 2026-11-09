@@ -347,9 +347,9 @@
                     <TextView android:id="@+id/tvTokenValue" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="10dp" android:padding="10dp" android:background="@drawable/bg_field"
                         android:textSize="11sp" android:fontFamily="monospace" android:textColor="@color/t2"
-                        android:text="（未读取）" />
+                        android:text="（明文已隐藏）" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="horizontal">
-                        <TextView android:id="@+id/btnTokenCopy" style="@style/OpBtn" android:text="复制 Token" />
+                        <TextView android:id="@+id/btnTokenCopy" style="@style/OpBtn" android:text="临时查看 10s" />
                         <TextView android:id="@+id/btnTokenRotate" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="重新生成" />
                     </LinearLayout>
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content"
