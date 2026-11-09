@@ -39,9 +39,9 @@ public final class ApiCache {
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
 
     /** 有界 LRU：accessOrder=true，超上限淘汰最久未用 */
-    private static final Map<String, Entry> L1 =
-            new LinkedHashMap<String, Entry>(16, 0.75f, true) {
-                @Override protected boolean removeEldestEntry(Map.Entry<String, Entry> e) {
+    private static final Map<String, CacheEntry> L1 =
+            new LinkedHashMap<String, CacheEntry>(16, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> e) {
                     return size() > MAX_L1;
                 }
             };
@@ -51,7 +51,7 @@ public final class ApiCache {
 
     private ApiCache() {}
 
-    private static final class Entry {
+    private static final class CacheEntry {
         long savedAt;
         String json;
         Object obj;
@@ -88,7 +88,7 @@ public final class ApiCache {
                 try {
                     Wrapper w = GSON.fromJson(raw, Wrapper.class);
                     if (w == null || w.d == null || w.k == null || w.k.isEmpty()) continue;
-                    Entry e = new Entry();
+                    CacheEntry e = new CacheEntry();
                     e.savedAt = w.t;
                     e.json = w.d;
                     synchronized (L1) {
@@ -107,7 +107,7 @@ public final class ApiCache {
 
     /** 命中且未过期返回对象；过期/不存在返回 null（过期条目会保留供 getStale 使用） */
     public static <T> T get(String key, Class<T> clazz, long ttlMs) {
-        Entry e = read(scoped(key));
+        CacheEntry e = read(scoped(key));
         if (e == null) return null;
         if (ttlMs > 0 && System.currentTimeMillis() - e.savedAt > ttlMs) return null;
         return parse(e, clazz);
@@ -115,12 +115,12 @@ public final class ApiCache {
 
     /** 忽略 TTL 读取（离线兜底：网络失败时用旧数据） */
     public static <T> T getStale(String key, Class<T> clazz) {
-        Entry e = read(scoped(key));
+        CacheEntry e = read(scoped(key));
         return e == null ? null : parse(e, clazz);
     }
 
     public static long ageMs(String key) {
-        Entry e = read(scoped(key));
+        CacheEntry e = read(scoped(key));
         return e == null ? -1 : System.currentTimeMillis() - e.savedAt;
     }
 
@@ -134,7 +134,7 @@ public final class ApiCache {
             return;
         }
         final String sk = scoped(key);
-        final Entry e = new Entry();
+        final CacheEntry e = new CacheEntry();
         e.savedAt = System.currentTimeMillis();
         e.json = json;
         e.obj = value;
@@ -169,13 +169,13 @@ public final class ApiCache {
     // ---------- 内部 ----------
 
     /** 只读内存：主线程不再做磁盘 IO */
-    private static Entry read(String scopedKey) {
+    private static CacheEntry read(String scopedKey) {
         synchronized (L1) {
             return L1.get(scopedKey);
         }
     }
 
-    private static <T> T parse(Entry e, Class<T> clazz) {
+    private static <T> T parse(CacheEntry e, Class<T> clazz) {
         if (clazz == null) return null;
         if (e.obj != null && clazz.isInstance(e.obj)) return clazz.cast(e.obj);
         try {

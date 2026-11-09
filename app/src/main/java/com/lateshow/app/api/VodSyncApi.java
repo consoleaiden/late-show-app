@@ -504,8 +504,9 @@ public final class VodSyncApi {
     public static void verify(final String base, final String token,
                               final ApiCb<VerifyResult> cb) {
         new Thread(() -> {
-            String root = base == null ? "" : base.trim();
-            while (root.endsWith("/")) root = root.substring(0, root.length() - 1);
+            String tmp = base == null ? "" : base.trim();
+            while (tmp.endsWith("/")) tmp = tmp.substring(0, tmp.length() - 1);
+            final String root = tmp;   // lambda 捕获：去尾斜杠后固化为 final
             String t = token == null ? "" : token.trim();
             long t0 = System.currentTimeMillis();
             OkHttpClient probe = new OkHttpClient.Builder()
