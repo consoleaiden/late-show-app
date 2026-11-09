@@ -1591,6 +1591,11 @@ public class DetailFragment extends Fragment {
         if (detail != null && epGrid.getChildCount() > 0) {
             renderEpisodes();
         }
+        // 播放偏好开关可能在设置页改过：回到详情页时按当前偏好刷新播放地址工具条
+        if (inlineActive && curPlayUrl != null) {
+            com.lateshow.app.util.StreamBar.bind(getView(),
+                    com.lateshow.app.api.VodSyncApi.get().decorate(curPlayUrl));
+        }
     }
 
     @Override
@@ -1913,6 +1918,8 @@ public class DetailFragment extends Fragment {
         curStartMs = startMs;
         curPlayUrl = guessStreamUrl(rawUrl);
         String playUrl = VodSyncApi.get().decorate(curPlayUrl);
+        // 切换线路 / 自动连播换集时，地址条同步显示真正在播的直链
+        com.lateshow.app.util.StreamBar.bind(getView(), playUrl);
         player.setMediaItem(MediaItem.fromUri(playUrl), Math.max(0, startMs));
         player.prepare();
         player.play();

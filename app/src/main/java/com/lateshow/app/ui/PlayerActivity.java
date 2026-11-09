@@ -27,6 +27,8 @@ public class PlayerActivity extends AppCompatActivity {
     private PlayerView pv;
     private String slug, epName, title, pic, remarks, sourceName;
     private long vodId;
+    /** 真正在播的地址（decorate 后），播放地址工具条展示的就是它 */
+    private String streamUrl;
     private int epIndex, lineIndex;
     /** VodSync v1.11.0：线路稳定标识（original_index），null = 老版本详情页未传 */
     private Integer lineKey;
@@ -145,7 +147,8 @@ public class PlayerActivity extends AppCompatActivity {
             }
         });
 
-        MediaItem mi = MediaItem.fromUri(com.lateshow.app.api.VodSyncApi.get().decorate(url));
+        streamUrl = com.lateshow.app.api.VodSyncApi.get().decorate(url);
+        MediaItem mi = MediaItem.fromUri(streamUrl);
         player.setMediaItem(mi, Math.max(0, startMs));
         player.prepare();
         player.play();
@@ -256,6 +259,13 @@ public class PlayerActivity extends AppCompatActivity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) hideSystemBars(); // 对话框/通知等抢焦点后恢复时补隐藏
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 开关可能在设置页改过：每次回到前台按当前偏好重新决定地址条显隐
+        com.lateshow.app.util.StreamBar.bind(findViewById(android.R.id.content), streamUrl);
     }
 
     private void saveProgress(long playedSec, long totalSec) {

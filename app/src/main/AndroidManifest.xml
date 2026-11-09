@@ -30,6 +30,12 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="sensorLandscape" />
 
+        <!-- 同步控制台：从设置页「播放源与鉴权」内进入的独立页面 -->
+        <activity
+            android:name=".ui.SyncConsoleActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustPan" />
+
         <!-- 应用内更新：把缓存的 APK 以 content:// 形式交给系统安装器 -->
         <provider
             android:name="androidx.core.content.FileProvider"

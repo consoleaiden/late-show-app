@@ -338,4 +338,46 @@ public final class VodSyncApi {
             }
         });
     }
+
+    /**
+     * 播放源连接测试：/healthz 往返延迟，带独立总超时（默认调用方传 3000ms）。
+     *
+     * 用 client.newBuilder() 派生一个短超时客户端，保留鉴权拦截器与 SmartDns，
+     * 但不改动设置/控制台日常请求用的主客户端（那个是 10s 连接 / 60s 读取）。
+     * 只要 HTTP 2xx 就算「有效」；超时、DNS 失败、连接失败、非 2xx 一律 onErr，
+     * 由 UI 统一显示为「超时」并把模块置为无效。
+     */
+    public void ping(long timeoutMs, final ApiCb<Long> cb) {
+        HttpUrl url = HttpUrl.parse(baseUrl() + "/healthz");
+        if (url == null) {
+            cb.onErr("地址无效");
+            return;
+        }
+        OkHttpClient probeClient = client.newBuilder()
+                .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .writeTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .build();
+        Request req = new Request.Builder().url(url).get().build();
+        final long t0 = System.currentTimeMillis();
+        probeClient.newCall(req).enqueue(new Callback() {
+            @Override public void onFailure(Call call, IOException e) {
+                MAIN.post(() -> cb.onErr("连接超时或不可达"));
+            }
+            @Override public void onResponse(Call call, Response resp) {
+                try (Response r = resp) {
+                    final boolean ok = r.isSuccessful();
+                    final int code = r.code();
+                    final long cost = System.currentTimeMillis() - t0;
+                    MAIN.post(() -> {
+                        if (ok) cb.onOk(cost);
+                        else cb.onErr("HTTP " + code);
+                    });
+                } catch (Exception e) {
+                    MAIN.post(() -> cb.onErr("连接测试失败"));
+                }
+            }
+        });
+    }
 }

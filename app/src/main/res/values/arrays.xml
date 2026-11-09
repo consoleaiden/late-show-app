@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 播放线路策略（VodSync v1.11.0）。显示项与传给后端的策略值按顺序一一对应，
+         见 SyncConsoleActivity.POLICY_VALUES。 -->
+    <string-array name="play_line_policy">
+        <item>inherit · 跟随全局</item>
+        <item>filter · 剔除分享页线路</item>
+        <item>off · 不过滤</item>
+        <item>whitelist · 仅保留直链</item>
+    </string-array>
+</resources>

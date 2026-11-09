@@ -1,0 +1,473 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 同步控制台（独立页面）：功能分区与 VodSync Web 管理面板逐项对齐。
+     沿用设置页的 SettingsCard + 可折叠手风琴视觉，同一时间只展开一个板块，
+     滚动超过半屏显示回到顶部 FAB。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ScrollView
+        android:id="@+id/scrollConsole"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:paddingBottom="24dp">
+
+            <!-- 页头 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="14dp">
+
+                <com.airbnb.lottie.LottieAnimationView
+                    android:id="@+id/btnConsoleBack"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:padding="7dp"
+                    android:background="@drawable/bg_circle"
+                    android:tag="ic_back"
+                    android:contentDescription="返回" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="10dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="同步控制台"
+                        android:textSize="23sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/t1" />
+
+                    <TextView
+                        style="@style/MetaLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="VODSYNC · 管理面板功能集成" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/btnConsoleRefresh"
+                    style="@style/Smbtn"
+                    android:text="↻ 立即刷新" />
+
+                <TextView
+                    android:id="@+id/tvAutoRefresh"
+                    style="@style/MetaLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:textAllCaps="false"
+                    android:text="5s 自动刷新" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvConsoleStatus"
+                style="@style/MetaLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textAllCaps="false"
+                android:text="正在连接 VodSync…" />
+
+            <!-- ① 运行概览 -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrOverview" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_sync" app:tint="@color/t3" android:contentDescription="运行概览" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="运行概览" />
+                    <TextView android:id="@+id/autoCount" style="@style/MetaLabel" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginLeft="8dp" android:textAllCaps="false" android:text="" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arOverview" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelOverview" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <LinearLayout android:id="@+id/statsSkeleton" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp" android:orientation="vertical" android:visibility="gone" />
+                    <LinearLayout android:id="@+id/statsGrid" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp" android:orientation="vertical" />
+                    <TextView android:id="@+id/tvRuntime" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp" android:textSize="10.5sp" android:textColor="@color/t3"
+                        android:lineSpacingMultiplier="1.6" android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ② 同步操作 -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrActions" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_play" app:tint="@color/t3" android:contentDescription="同步操作" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步操作" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arActions" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelActions" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
+                        <TextView android:id="@+id/btnSyncAll" android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp"
+                            android:gravity="center" android:background="@drawable/bg_btn_main" android:text="全站增量同步"
+                            android:textSize="12sp" android:textStyle="bold" android:textColor="@color/accInk" />
+                        <TextView android:id="@+id/btnRefresh" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="刷新源站列表" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                        <TextView android:id="@+id/btnFullSync" style="@style/OpBtn" android:text="全站全量同步" />
+                        <TextView android:id="@+id/btnRecount" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="条数校准" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                        <TextView android:id="@+id/btnAddCustom" style="@style/OpBtn" android:text="+ 添加自定义源站" android:textColor="@color/accText" />
+                        <TextView android:id="@+id/btnProxyStatus" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="代理状态" />
+                    </LinearLayout>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="全量同步仅建议数据异常时使用，耗时较长且会重跑全部页码。"
+                        android:textSize="10.5sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.6" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ③ 同步暂停控制 -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrPause" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_cache" app:tint="@color/t3" android:contentDescription="同步暂停控制" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步暂停控制" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arPause" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelPause" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="优雅停止：当前批次完成后保存断点再停，不丢数据；暂停状态重启后仍保留。"
+                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <TextView android:id="@+id/pauseWarn" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp" android:padding="10dp" android:background="@color/warnSoft"
+                        android:textSize="10.5sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.6" android:visibility="gone" />
+                    <LinearLayout android:id="@+id/pauseRows" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp" android:orientation="vertical" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ④ 聚合搜索 -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrSearch" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_app" app:tint="@color/t3" android:contentDescription="聚合搜索" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="聚合搜索" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arSearch" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelSearch" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="跨全部源站按名称搜索，结果按更新时间倒序。"
+                        android:textSize="10.5sp" android:textColor="@color/t2" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:orientation="horizontal" android:gravity="center_vertical">
+                        <EditText android:id="@+id/etSearch" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp"
+                            android:paddingLeft="12dp" android:paddingRight="12dp" android:background="@drawable/bg_field"
+                            android:hint="输入影视名称关键词" android:textSize="12sp" android:textColor="@color/t1"
+                            android:textColorHint="@color/t3" android:inputType="text" android:maxLines="1" android:imeOptions="actionSearch" />
+                        <TextView android:id="@+id/btnSearch" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="搜索" />
+                    </LinearLayout>
+                    <TextView android:id="@+id/searchInfo" style="@style/MetaLabel" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textAllCaps="false" android:text="" />
+                    <LinearLayout android:id="@+id/searchResults" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp" android:orientation="vertical" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑤ 数据表浏览（v1.12.0，只读） -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrTables" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_mode" app:tint="@color/t3" android:contentDescription="数据表浏览" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="数据表浏览" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arTables" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelTables" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="只读查看数据库内容；表行数为缓存值（点「条数校准」后更新）。"
+                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:orientation="horizontal" android:gravity="center_vertical">
+                        <Spinner android:id="@+id/spTable" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp"
+                            android:background="@drawable/bg_field" />
+                        <TextView android:id="@+id/btnTablesReload" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="↻ 表清单" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:orientation="horizontal" android:gravity="center_vertical">
+                        <EditText android:id="@+id/etTableQuery" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp"
+                            android:paddingLeft="12dp" android:paddingRight="12dp" android:background="@drawable/bg_field"
+                            android:hint="关键词（留空浏览全表）" android:textSize="12sp" android:textColor="@color/t1"
+                            android:textColorHint="@color/t3" android:inputType="text" android:maxLines="1" />
+                        <TextView android:id="@+id/btnTableSearch" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="查询" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:orientation="horizontal" android:gravity="center_vertical">
+                        <TextView android:id="@+id/btnTablePrev" style="@style/Smbtn" android:text="‹ 上一页" />
+                        <TextView android:id="@+id/tvTablePage" style="@style/MetaLabel" android:layout_width="0dp" android:layout_weight="1"
+                            android:layout_height="wrap_content" android:gravity="center" android:textAllCaps="false" android:text="-" />
+                        <TextView android:id="@+id/btnTableNext" style="@style/Smbtn" android:text="下一页 ›" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/tableResults" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp" android:orientation="vertical" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑥ 源站同步状态 -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrSources" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_source" app:tint="@color/t3" android:contentDescription="源站同步状态" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="源站同步状态" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arSources" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelSources" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:orientation="horizontal" android:gravity="center_vertical">
+                        <CheckBox android:id="@+id/chkAll" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="全选" android:textSize="12sp" android:textColor="@color/t2" />
+                        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                        <TextView android:id="@+id/btnAllOn" style="@style/Smbtn" android:text="全部开启" />
+                        <TextView android:id="@+id/btnAllOff" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="全部暂停" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"
+                        android:orientation="horizontal" android:gravity="center_vertical">
+                        <TextView android:id="@+id/selCount" style="@style/MetaLabel" android:layout_width="0dp" android:layout_weight="1"
+                            android:layout_height="wrap_content" android:textAllCaps="false" android:text="未选择源站" />
+                        <TextView android:id="@+id/btnSelOn" style="@style/Smbtn" android:text="开启所选" />
+                        <TextView android:id="@+id/btnSelOff" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="暂停所选" />
+                    </LinearLayout>
+                    <androidx.recyclerview.widget.RecyclerView android:id="@+id/srcList" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:nestedScrollingEnabled="false" android:layout_marginTop="4dp" />
+                    <LinearLayout android:id="@+id/srcSkeleton" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp" android:orientation="vertical" android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑦ 最近同步日志 -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrLogs" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_sync" app:tint="@color/t3" android:contentDescription="最近同步日志" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="最近同步日志" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arLogs" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelLogs" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="最多显示 20 条；每次自动刷新同步更新。"
+                        android:textSize="10.5sp" android:textColor="@color/t2" />
+                    <androidx.recyclerview.widget.RecyclerView android:id="@+id/logList" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:nestedScrollingEnabled="false" android:layout_marginTop="6dp" />
+                    <LinearLayout android:id="@+id/logSkeleton" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp" android:orientation="vertical" android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑧ 访问控制与 API Token -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrAuth" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_app" app:tint="@color/t3" android:contentDescription="访问控制" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="访问控制与 Token" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arAuth" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelAuth" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:id="@+id/tvAuthState" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp" android:textSize="11sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6"
+                        android:text="读取中…" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:orientation="horizontal" android:gravity="center_vertical">
+                        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                            android:text="启用授权访问（开启瞬间自动更换 Token）" android:textSize="12sp" android:textColor="@color/t1" />
+                        <Switch android:id="@+id/swAuthEnable" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                    </LinearLayout>
+                    <TextView android:id="@+id/tvTokenValue" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp" android:padding="10dp" android:background="@drawable/bg_field"
+                        android:textSize="11sp" android:fontFamily="monospace" android:textColor="@color/t2"
+                        android:text="（未读取）" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="horizontal">
+                        <TextView android:id="@+id/btnTokenCopy" style="@style/OpBtn" android:text="复制 Token" />
+                        <TextView android:id="@+id/btnTokenRotate" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="重新生成" />
+                    </LinearLayout>
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp" android:text="修改管理面板密码" />
+                    <EditText android:id="@+id/etPwOld" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="8dp"
+                        android:paddingLeft="12dp" android:paddingRight="12dp" android:background="@drawable/bg_field"
+                        android:hint="当前密码" android:textSize="12sp" android:textColor="@color/t1" android:textColorHint="@color/t3"
+                        android:inputType="textPassword" android:maxLines="1" />
+                    <EditText android:id="@+id/etPwNew" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="8dp"
+                        android:paddingLeft="12dp" android:paddingRight="12dp" android:background="@drawable/bg_field"
+                        android:hint="新密码（至少 6 位）" android:textSize="12sp" android:textColor="@color/t1" android:textColorHint="@color/t3"
+                        android:inputType="textPassword" android:maxLines="1" />
+                    <EditText android:id="@+id/etPwNew2" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="8dp"
+                        android:paddingLeft="12dp" android:paddingRight="12dp" android:background="@drawable/bg_field"
+                        android:hint="确认新密码" android:textSize="12sp" android:textColor="@color/t1" android:textColorHint="@color/t3"
+                        android:inputType="textPassword" android:maxLines="1" />
+                    <TextView android:id="@+id/btnChangePw" android:layout_width="match_parent" android:layout_height="40dp"
+                        android:layout_marginTop="8dp" android:gravity="center" android:background="@drawable/bg_btn_main"
+                        android:text="保存新密码" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/accInk" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑨ 明星词库 -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrStars" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_play" app:tint="@color/t3" android:contentDescription="明星词库" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="明星词库" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arStars" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelStars" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="词库主演名用于扫描缺失演员信息的标题与简介。支持 JSON 数组或逗号 / 顿号 / 竖线 / 换行分隔批量粘贴。"
+                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <EditText android:id="@+id/etStarTerms" android:layout_width="match_parent" android:layout_height="80dp"
+                        android:layout_marginTop="8dp" android:padding="10dp" android:gravity="top|start" android:background="@drawable/bg_field"
+                        android:hint="例如：张三，李四|王五" android:textSize="12sp" android:textColor="@color/t1"
+                        android:textColorHint="@color/t3" android:inputType="textMultiLine" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                        <TextView android:id="@+id/btnStarAdd" style="@style/OpBtn" android:text="批量添加" />
+                        <TextView android:id="@+id/btnStarRecompute" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="重算推荐" />
+                    </LinearLayout>
+                    <TextView android:id="@+id/tvStarStatus" style="@style/MetaLabel" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textAllCaps="false" android:text="" />
+                    <LinearLayout android:id="@+id/starList" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp" android:orientation="vertical" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑩ 诊断与维护 -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrMaint" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_cache" app:tint="@color/t3" android:contentDescription="诊断与维护" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="诊断与维护" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arMaint" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelMaint" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                        <TextView android:id="@+id/btnRelatedStatus" style="@style/OpBtn" android:text="相关推荐状态" />
+                        <TextView android:id="@+id/btnStarTagsStatus" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="明星标签状态" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                        <TextView android:id="@+id/btnRelatedRecompute" style="@style/OpBtn" android:text="重算相关推荐" />
+                        <TextView android:id="@+id/btnStarTagsBackfill" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="回填明星标签" />
+                    </LinearLayout>
+                    <TextView android:id="@+id/btnUntrackedStars" android:layout_width="match_parent" android:layout_height="40dp"
+                        android:layout_marginTop="8dp" android:gravity="center" android:background="@drawable/bg_smbtn"
+                        android:text="查看未跟踪明星" android:textSize="12sp" android:textColor="@color/t1" />
+                    <TextView android:id="@+id/tvMaintOutput" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp" android:padding="10dp" android:background="@drawable/bg_field"
+                        android:textSize="10.5sp" android:fontFamily="monospace" android:textColor="@color/t2"
+                        android:lineSpacingMultiplier="1.5" android:text="点击上方按钮查看运行态或触发维护任务。" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑪ 播放线路策略（v1.11.0） -->
+            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrLine" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_source" app:tint="@color/t3" android:contentDescription="播放线路策略" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放线路策略" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arLine" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelLine" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="inherit 跟随全局；filter 剔除 /share/ 分享页线路；off 不过滤；whitelist 只保留 m3u8 / mp4 直链。"
+                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <Spinner android:id="@+id/spLineSource" android:layout_width="match_parent" android:layout_height="42dp"
+                        android:layout_marginTop="8dp" android:background="@drawable/bg_field" />
+                    <Spinner android:id="@+id/spLinePolicy" android:layout_width="match_parent" android:layout_height="42dp"
+                        android:layout_marginTop="8dp" android:background="@drawable/bg_field"
+                        android:entries="@array/play_line_policy" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                        <TextView android:id="@+id/btnLineApply" style="@style/OpBtn" android:text="应用策略" />
+                        <TextView android:id="@+id/btnSourcePause" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="暂停 / 继续本站" />
+                    </LinearLayout>
+                    <TextView android:id="@+id/tvLineHint" style="@style/MetaLabel" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textAllCaps="false" android:text="" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView style="@style/MetaLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:gravity="center" android:layout_marginTop="16dp" android:textAllCaps="false"
+                android:text="数据与 VodSync 管理面板同源 · 需 API Token 授权" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 回到顶部：滚动超过半屏出现，与设置页 / 首页同款 -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabTop"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="12dp"
+        app:fabCustomSize="40dp"
+        app:maxImageSize="20dp"
+        app:backgroundTint="@color/ink700"
+        app:elevation="6dp"
+        android:contentDescription="回到顶部"
+        android:visibility="gone" />
+</FrameLayout>

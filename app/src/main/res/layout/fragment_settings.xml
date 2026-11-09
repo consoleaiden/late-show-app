@@ -221,12 +221,15 @@
 
                 <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放源与鉴权" />
 
+                <!-- 固定 SOURCE 文案改为播放源连接测试延迟：进入设置页自动测一次（3s 超时），
+                     成功显示 XXms（绿色），失败/超时显示「超时」（灰色），同时作为模块有效状态依据 -->
                 <TextView
+                    android:id="@+id/tvSourceLatency"
                     style="@style/MetaLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="8dp"
-                    android:text="SOURCE" />
+                    android:text="检测中" />
 
                 <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
@@ -420,252 +423,42 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="保存成功后会记录在这里（地址 + Token 一并保存），可一键切换、编辑、删除。" />
-            </LinearLayout>
-        </LinearLayout>
 
-        <!-- ④ 同步控制台（手风琴面板：运行概览 + 同步操作 + 暂停 + 源站状态 + 日志）——仅 NAS 模式可见 -->
-        <LinearLayout
-            android:id="@+id/cardSync"
-            style="@style/SettingsCard"
-            android:orientation="vertical">
-
-            <LinearLayout
-                android:id="@+id/hdrSync"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingTop="2dp"
-                android:paddingBottom="2dp"
-                android:background="@null">
-
-                <ImageView
-                    android:id="@+id/icSyncHeader"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_marginRight="7dp"
-                    android:src="@drawable/ic_set_sync"
-                    app:tint="@color/t3"
-                    android:contentDescription="同步控制台" />
-
-                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步控制台" />
-
-                <TextView
-                    android:id="@+id/autoCount"
-                    style="@style/MetaLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginLeft="8dp"
-                    android:text="--/--" />
-
-                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-
-                <com.airbnb.lottie.LottieAnimationView
-                    android:id="@+id/arSync"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:tag="ic_chevron_down"
-                    app:tint="@color/t3"
-                    android:contentDescription="展开" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/panelSync"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <!-- 运行概览 -->
+                <!-- 同步控制台独立页面入口：仅在播放源连接测试成功（模块有效）时显示 -->
                 <LinearLayout
-                    android:id="@+id/statsSkeleton"
+                    android:id="@+id/consoleEntry"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="14dp"
                     android:orientation="vertical"
-                    android:visibility="gone" />
-
-                <LinearLayout
-                    android:id="@+id/statsGrid"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:orientation="vertical" />
-
-                <!-- 运行态明细：同步负载 / 代理 / 连接池（v1.4.0+） -->
-                <TextView
-                    android:id="@+id/tvRuntime"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:textSize="10.5sp"
-                    android:textColor="@color/t3"
-                    android:lineSpacingMultiplier="1.6"
-                    android:visibility="gone" />
-
-                <!-- 同步操作 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:orientation="horizontal">
+                    android:visibility="gone">
 
                     <TextView
-                        android:id="@+id/btnSyncAll"
-                        android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp"
+                        android:id="@+id/btnOpenConsole"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
                         android:gravity="center"
-                        android:background="@drawable/bg_btn_main"
-                        android:text="全站增量同步"
-                        android:textSize="12sp"
+                        android:background="@drawable/bg_smbtn"
+                        android:text="打开同步控制台  ›"
+                        android:textSize="12.5sp"
                         android:textStyle="bold"
-                        android:textColor="@color/accInk" />
+                        android:textColor="@color/accText"
+                        android:contentDescription="打开同步控制台" />
 
                     <TextView
-                        android:id="@+id/btnRefresh"
-                        style="@style/OpBtn" android:text="刷新源站列表" android:layout_marginLeft="8dp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/btnFullSync"
-                        style="@style/OpBtn" android:text="全站全量同步" />
-
-                    <TextView
-                        android:id="@+id/btnRecount"
-                        style="@style/OpBtn" android:text="条数校准" android:layout_marginLeft="8dp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/btnAddCustom"
-                        style="@style/OpBtn" android:text="添加自定义源站" android:textColor="@color/accText" />
-
-                    <TextView
-                        android:id="@+id/btnProxyStatus"
-                        style="@style/OpBtn" android:text="代理状态" android:layout_marginLeft="8dp" />
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="全量同步仅建议数据异常时使用，耗时较长且会重跑全部页码。"
-                    android:textSize="10.5sp"
-                    android:textColor="@color/warn"
-                    android:lineSpacingMultiplier="1.6" />
-
-                <!-- 同步暂停 -->
-                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="同步暂停" />
-
-                <TextView
-                    android:id="@+id/pauseWarn"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:padding="10dp"
-                    android:background="@color/warnSoft"
-                    android:textSize="10.5sp"
-                    android:textColor="@color/warn"
-                    android:lineSpacingMultiplier="1.6"
-                    android:visibility="gone" />
-
-                <LinearLayout
-                    android:id="@+id/pauseRows"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:orientation="vertical" />
-
-                <!-- 源站同步状态 -->
-                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="源站同步状态" />
-
-                <!-- 批量工具条 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <CheckBox
-                        android:id="@+id/chkAll"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="全选"
-                        android:textSize="12sp"
-                        android:textColor="@color/t2" />
-
-                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-
-                    <TextView android:id="@+id/btnAllOn" style="@style/Smbtn" android:text="全部开启" />
-                    <TextView android:id="@+id/btnAllOff" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="全部暂停" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:id="@+id/selCount"
                         style="@style/MetaLabel"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="未选择源站" />
-
-                    <TextView android:id="@+id/btnSelOn" style="@style/Smbtn" android:text="开启所选" />
-                    <TextView android:id="@+id/btnSelOff" style="@style/Smbtn" android:layout_marginLeft="6dp" android:text="暂停所选" />
+                        android:layout_marginTop="5dp"
+                        android:textAllCaps="false"
+                        android:text="运行概览 · 同步操作 · 暂停控制 · 聚合搜索 · 数据表浏览 · 源站状态 · 日志 · 鉴权 · 词库 · 维护"
+                        android:lineSpacingMultiplier="1.5" />
                 </LinearLayout>
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/srcList"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:nestedScrollingEnabled="false"
-                    android:layout_marginTop="4dp" />
-
-                <!-- 源站列表骨架：/api/v1/sources 返回前占位，避免控制台一片空白 -->
-                <LinearLayout
-                    android:id="@+id/srcSkeleton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:orientation="vertical"
-                    android:visibility="gone" />
-
-                <!-- 最近同步日志 -->
-                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="最近同步日志" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/logList"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:nestedScrollingEnabled="false"
-                    android:layout_marginTop="6dp" />
-
-                <!-- 日志骨架：/api/v1/logs 返回前占位 -->
-                <LinearLayout
-                    android:id="@+id/logSkeleton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:orientation="vertical"
-                    android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
+
+        <!-- 同步控制台已迁为独立页面（SyncConsoleActivity），入口在「播放源与鉴权」面板内，
+             仅在播放源连接测试成功时显示。 -->
 
         <!-- ② 播放偏好（手风琴面板） -->
         <LinearLayout
@@ -757,6 +550,45 @@
                         android:inputType="number"
                         android:maxLength="3"
                         android:maxLines="1" />
+                </LinearLayout>
+
+                <!-- 播放地址工具条开关：控制播放页（内嵌 + 全屏）是否显示当前播放直链与下载按钮 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="显示播放地址与下载按钮"
+                            android:textSize="12.5sp"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            style="@style/MetaLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:textAllCaps="false"
+                            android:text="开启后播放页显示当前视频连接地址，可复制或调用系统下载"
+                            android:lineSpacingMultiplier="1.5" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/swStreamTools"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="10dp"
+                        android:contentDescription="显示播放地址与下载按钮" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>

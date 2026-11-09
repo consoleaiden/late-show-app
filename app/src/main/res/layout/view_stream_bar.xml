@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 播放地址工具条：内嵌播放器与全屏播放页共用。
+     显隐由设置页「播放偏好 → 显示播放地址与下载按钮」开关控制（PrefStore.showStreamTools）。
+     地址取归一化后真正在播的直链（DetailFragment.curPlayUrl / PlayerActivity 的 url extra）。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/streamBar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingLeft="8dp"
+    android:paddingRight="6dp"
+    android:paddingTop="5dp"
+    android:paddingBottom="5dp"
+    android:background="@drawable/bg_chip_dark"
+    android:alpha="0.92"
+    android:visibility="gone">
+
+    <TextView
+        android:id="@+id/tvStreamUrl"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="middle"
+        android:textSize="10sp"
+        android:fontFamily="monospace"
+        android:textColor="#FFFFFF"
+        android:hint="当前播放地址"
+        android:textColorHint="#88FFFFFF" />
+
+    <TextView
+        android:id="@+id/btnCopyStream"
+        android:layout_width="wrap_content"
+        android:layout_height="30dp"
+        android:gravity="center"
+        android:paddingLeft="9dp"
+        android:paddingRight="9dp"
+        android:text="复制"
+        android:textSize="11sp"
+        android:textColor="#FFFFFF"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="复制播放地址" />
+
+    <TextView
+        android:id="@+id/btnDownloadStream"
+        android:layout_width="wrap_content"
+        android:layout_height="30dp"
+        android:gravity="center"
+        android:paddingLeft="9dp"
+        android:paddingRight="9dp"
+        android:text="下载"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:textColor="#FF9A6A"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="下载当前视频" />
+</LinearLayout>

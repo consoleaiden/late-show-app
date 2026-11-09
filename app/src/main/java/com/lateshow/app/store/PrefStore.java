@@ -134,6 +134,47 @@ public final class PrefStore {
         saveSavedSources(list);
     }
 
+    /**
+     * 编辑已有播放源：按「编辑前的地址」定位，就地更新名称 / 地址 / Token，
+     * 并保持该条目在列表中的位置。绝不重新加载列表后按对象引用比对
+     * （savedSources() 每次反序列化出全新对象，引用比较永远为 false，
+     * 会把同名项误删导致条目消失、修改丢失）。
+     *
+     * 若新地址与列表中另一条重复，则删除那条旧项（保留被编辑项），避免列表出现两个同地址。
+     *
+     * @return 是否命中并更新了已有条目；false = 原地址已不存在，按新增处理
+     */
+    public boolean updateSavedSource(String oldUrl, String name, String url, String token) {
+        List<SavedSource> list = savedSources();
+        String oldKey = trimSlash(oldUrl == null ? "" : oldUrl.trim());
+        int target = -1;
+        for (int i = 0; i < list.size(); i++) {
+            SavedSource s = list.get(i);
+            if (s.url != null && trimSlash(s.url).equals(oldKey)) {
+                target = i;
+                break;
+            }
+        }
+        if (target < 0) {
+            // 编辑期间条目被别处删掉：按新地址补一条，保证「保存后条目仍在列表里」
+            upsertSavedSource(url, token, name);
+            return false;
+        }
+        String newUrl = trimSlash(url == null ? "" : url.trim());
+        SavedSource s = list.get(target);
+        s.name = (name == null || name.trim().isEmpty()) ? hostOf(newUrl) : name.trim();
+        s.url = newUrl;
+        if (token != null) s.token = token.trim();
+        // 新地址撞上别的条目：删除那条（保留被编辑项的原位置）
+        for (int i = list.size() - 1; i >= 0; i--) {
+            if (i == target) continue;
+            SavedSource other = list.get(i);
+            if (other.url != null && trimSlash(other.url).equals(newUrl)) list.remove(i);
+        }
+        saveSavedSources(list);
+        return true;
+    }
+
     public void removeSavedSource(String url) {
         List<SavedSource> list = savedSources();
         String key = trimSlash(url == null ? "" : url.trim());
@@ -315,6 +356,20 @@ public final class PrefStore {
     private static int clampSkip(int sec) {
         if (sec < 0) return 0;
         return Math.min(sec, 600); // 上限 10 分钟
+    }
+
+    // ---------- 播放偏好：播放地址 / 下载按钮显隐 ----------
+
+    /**
+     * 播放页（内嵌 + 全屏）是否显示「当前播放连接地址 + 下载 / 复制」工具条。
+     * 默认关闭：直链通常很长且带签名，日常观看不需要，避免遮挡画面。
+     */
+    public boolean showStreamTools() {
+        return sp.getBoolean("show_stream_tools", false);
+    }
+
+    public void setShowStreamTools(boolean show) {
+        sp.edit().putBoolean("show_stream_tools", show).apply();
     }
 
     // ---------- 播放倍速 ----------

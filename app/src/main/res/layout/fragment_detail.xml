@@ -176,6 +176,16 @@
                                         android:textColor="#FFFFFF"
                                         android:contentDescription="播放设置" />
                                 </LinearLayout>
+
+                                <!-- 播放地址 / 下载工具条：默认隐藏，由设置页「播放偏好」开关控制 -->
+                                <include
+                                    layout="@layout/view_stream_bar"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_margin="6dp"
+                                    app:layout_constraintStart_toStartOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent"
+                                    app:layout_constraintBottom_toBottomOf="parent" />
                             </androidx.constraintlayout.widget.ConstraintLayout>
 
                             <FrameLayout
