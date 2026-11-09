@@ -7,86 +7,99 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <ScrollView
-        android:id="@+id/scrollConsole"
+    <!-- 全屏纵向布局：页头固定，内容区以 weight 占满剩余高度，且是页面唯一滚动容器 -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true">
+        android:orientation="vertical">
 
+        <!-- 页头：返回按钮与标题同一行，标题 wrap_content + maxLines=1，不再被右侧控件挤压 -->
         <LinearLayout
+            android:id="@+id/consoleHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp"
-            android:paddingBottom="24dp">
+            android:paddingLeft="@dimen/console_pad"
+            android:paddingRight="@dimen/console_pad"
+            android:paddingTop="10dp"
+            android:paddingBottom="8dp">
 
-            <!-- 页头 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingTop="14dp">
+                android:gravity="center_vertical">
 
                 <com.airbnb.lottie.LottieAnimationView
                     android:id="@+id/btnConsoleBack"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
                     android:padding="7dp"
                     android:background="@drawable/bg_circle"
                     android:tag="ic_back"
                     android:contentDescription="返回" />
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/tvConsoleTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="9dp"
+                    android:text="同步控制台"
+                    android:textSize="23sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/t1"
+                    android:maxLines="1"
+                    android:includeFontPadding="false" />
+            </LinearLayout>
+
+            <!-- 状态行：连接状态占剩余宽度，上次刷新时间靠右；极窄窗口优先省略状态文案 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="7dp">
+
+                <TextView
+                    android:id="@+id/tvConsoleStatus"
+                    style="@style/MetaLabel"
                     android:layout_width="0dp"
                     android:layout_weight="1"
                     android:layout_height="wrap_content"
-                    android:layout_marginLeft="10dp"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="同步控制台"
-                        android:textSize="23sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/t1" />
-
-                    <TextView
-                        style="@style/MetaLabel"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="VODSYNC · 管理面板功能集成" />
-                </LinearLayout>
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textAllCaps="false"
+                    android:text="正在连接 VodSync…" />
 
                 <TextView
-                    android:id="@+id/btnConsoleRefresh"
-                    style="@style/Smbtn"
-                    android:text="↻ 立即刷新" />
-
-                <TextView
-                    android:id="@+id/tvAutoRefresh"
+                    android:id="@+id/tvConsoleTime"
                     style="@style/MetaLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginLeft="8dp"
+                    android:layout_marginLeft="6dp"
                     android:textAllCaps="false"
-                    android:text="5s 自动刷新" />
+                    android:text="上次刷新 --:--:--" />
             </LinearLayout>
+        </LinearLayout>
 
-            <TextView
-                android:id="@+id/tvConsoleStatus"
-                style="@style/MetaLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textAllCaps="false"
-                android:text="正在连接 VodSync…" />
+        <ScrollView
+            android:id="@+id/scrollConsole"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="false"
+            android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingLeft="@dimen/console_pad"
+            android:paddingRight="@dimen/console_pad"
+            android:paddingBottom="64dp">
 
             <!-- ① 运行概览 -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrOverview" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -112,7 +125,7 @@
             </LinearLayout>
 
             <!-- ② 同步操作 -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrActions" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -146,7 +159,7 @@
             </LinearLayout>
 
             <!-- ③ 同步暂停控制 -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrPause" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -171,7 +184,7 @@
             </LinearLayout>
 
             <!-- ④ 聚合搜索 -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrSearch" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -203,7 +216,7 @@
             </LinearLayout>
 
             <!-- ⑤ 数据表浏览（v1.12.0，只读） -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrTables" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -246,7 +259,7 @@
             </LinearLayout>
 
             <!-- ⑥ 源站同步状态 -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrSources" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -285,7 +298,7 @@
             </LinearLayout>
 
             <!-- ⑦ 最近同步日志 -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrLogs" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -309,7 +322,7 @@
             </LinearLayout>
 
             <!-- ⑧ 访问控制与 API Token -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrAuth" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -360,7 +373,7 @@
             </LinearLayout>
 
             <!-- ⑨ 明星词库 -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrStars" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -392,7 +405,7 @@
             </LinearLayout>
 
             <!-- ⑩ 诊断与维护 -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrMaint" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -424,7 +437,7 @@
             </LinearLayout>
 
             <!-- ⑪ 播放线路策略（v1.11.0） -->
-            <LinearLayout style="@style/SettingsCard" android:orientation="vertical">
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
                 <LinearLayout android:id="@+id/hdrLine" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
                     <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
@@ -455,10 +468,11 @@
             </LinearLayout>
 
             <TextView style="@style/MetaLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:gravity="center" android:layout_marginTop="16dp" android:textAllCaps="false"
+                android:gravity="center" android:layout_marginTop="10dp" android:textAllCaps="false"
                 android:text="数据与 VodSync 管理面板同源 · 需 API Token 授权" />
         </LinearLayout>
-    </ScrollView>
+        </ScrollView>
+    </LinearLayout>
 
     <!-- 回到顶部：滚动超过半屏出现，与设置页 / 首页同款 -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton

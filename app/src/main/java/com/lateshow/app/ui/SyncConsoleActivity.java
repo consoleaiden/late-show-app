@@ -58,7 +58,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
             R.id.arSources, R.id.arLogs, R.id.arAuth, R.id.arStars, R.id.arMaint, R.id.arLine};
     private static final String[] POLICY_VALUES = {"inherit", "filter", "off", "whitelist"};
 
-    private TextView tvConsoleStatus, autoCount, selCount, tvRuntime, pauseWarn, searchInfo,
+    private TextView tvConsoleStatus, tvConsoleTime, autoCount, selCount, tvRuntime, pauseWarn, searchInfo,
             tvTablePage, tvAuthState, tvTokenValue, tvStarStatus, tvMaintOutput, tvLineHint;
     private LinearLayout statsGrid, pauseRows, statsSkeleton, srcSkeleton, logSkeleton,
             searchResults, tableResults, starList, srcList, logList;
@@ -178,6 +178,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
 
     private void bindViews() {
         tvConsoleStatus = findViewById(R.id.tvConsoleStatus);
+        tvConsoleTime = findViewById(R.id.tvConsoleTime);
         autoCount = findViewById(R.id.autoCount);
         selCount = findViewById(R.id.selCount);
         tvRuntime = findViewById(R.id.tvRuntime);
@@ -212,10 +213,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
         etPwNew2 = findViewById(R.id.etPwNew2);
 
         findViewById(R.id.btnConsoleBack).setOnClickListener(v -> finish());
-        findViewById(R.id.btnConsoleRefresh).setOnClickListener(v -> {
-            refreshAll(true);
-            toast("已刷新");
-        });
+        // 手动刷新入口已按预览移除；数据仍由 onCreate 首次加载 + 5 秒轮询刷新
 
         spLinePolicy.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item,
@@ -316,6 +314,11 @@ public class SyncConsoleActivity extends AppCompatActivity {
     // ==================== ① 运行概览 / ③ 暂停 / ⑥ 源站 / ⑦ 日志 ====================
 
     private void refreshAll(boolean showSkeleton) {
+        // 状态行右侧的「上次刷新」：每轮请求发起时更新，替代已移除的手动刷新按钮
+        if (tvConsoleTime != null) {
+            tvConsoleTime.setText("上次刷新 " + android.text.format.DateFormat.format(
+                    "HH:mm:ss", new java.util.Date()));
+        }
         if (showSkeleton && !skelShown) {
             skelHandler.removeCallbacks(skelShowTask);
             skelHandler.postDelayed(skelShowTask, 220);

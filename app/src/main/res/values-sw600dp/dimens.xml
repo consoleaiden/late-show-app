@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 平板 / 大屏：适当加宽留白，避免内容贴边拉得过长 -->
+    <dimen name="console_pad">18dp</dimen>
+</resources>

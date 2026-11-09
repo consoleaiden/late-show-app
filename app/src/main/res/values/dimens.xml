@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 同步控制台页头与内容区的左右边距：手机尽量用满宽度 -->
+    <dimen name="console_pad">10dp</dimen>
+</resources>
