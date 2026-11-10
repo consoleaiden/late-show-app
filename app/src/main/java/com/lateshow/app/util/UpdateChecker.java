@@ -216,27 +216,38 @@ public final class UpdateChecker {
             if (!dir.exists()) //noinspection ResultOfMethodCallIgnored
                 dir.mkdirs();
             final File out = new File(dir, "late-show-update.apk");
+            //noinspection ResultOfMethodCallIgnored
+            out.delete();                       // 上一次没下完的残包不能用
             // 先花 2~8 秒探出「此刻真能连上的那条线路」，再整包下载：
             // 比「死线路下到一半超时再换」快得多，用户也不会看到长时间 0%
             String[] urls = buildUrlCandidates(info.apkUrl);
             String picked = urls.length > 1 ? pickReachable(urls) : null;
             final String[] order = reorder(urls, picked);
             String lastErr = "未知错误";
+            // 已落盘字节：换线路时带 Range 续传，不再从 0 重下（用户看到进度倒退会以为出故障）
+            final long[] written = {0L};
             for (int i = 0; i < order.length; i++) {
                 final int idx = i;
+                final long resumeAt = written[0];
+                final String why = idx == 0 ? "" : lastErr;
                 MAIN.post(() -> {
-                    if (!act.isFinishing() && !act.isDestroyed()) {
-                        d.setMessage((idx == 0 ? "正在连接 " : "切换线路（" + (idx + 1) + "/"
-                                + order.length + "）") + label(order[idx]) + "…");
+                    if (act.isFinishing() || act.isDestroyed()) return;
+                    if (idx == 0) {
+                        d.setMessage("正在连接 " + label(order[0]) + "…");
+                    } else {
+                        d.setMessage("已换线路 " + label(order[idx]) + "（" + (idx + 1) + "/"
+                                + order.length + "）" + (resumeAt > 0 ? " · 从 " + mb(resumeAt) + " 续传" : "")
+                                + (why.isEmpty() ? "" : "\n上次中断：" + why));
                     }
                 });
                 try {
-                    fetch(order[i], out, d, info);
+                    fetch(order[i], out, d, info, written);
                     // 下载完成后再校验包名与签名证书（摘要校验已在 fetch 内完成）
                     if (!verifyApkIdentity(act, out)) {
                         lastErr = "安装包签名或包名与当前应用不一致，已拒绝安装";
                         //noinspection ResultOfMethodCallIgnored
                         out.delete();
+                        written[0] = 0L;
                         continue;
                     }
                     MAIN.post(() -> {
@@ -248,6 +259,12 @@ public final class UpdateChecker {
                 } catch (Exception e) {
                     String m = e.getMessage();
                     lastErr = (m == null || m.trim().isEmpty()) ? e.getClass().getSimpleName() : m;
+                    // 内容不对（不是 APK / 摘要不符）就别再续传这堆字节了，下一条线路从头来
+                    if (lastErr.contains("不是 APK") || lastErr.contains("SHA-256")) {
+                        //noinspection ResultOfMethodCallIgnored
+                        out.delete();
+                        written[0] = 0L;
+                    }
                 }
             }
             final String err = lastErr;
@@ -333,44 +350,60 @@ public final class UpdateChecker {
     }
 
     /**
-     * 下载单个线路；成功返回（否则抛异常，由调用方切换下一条线路）。
-     * 校验：zip 头、Release 记录大小、SHA-256 digest。
+     * 下载单条线路，支持跨线路续传。
+     *
+     * <p>{@code written[0]} 是「已落盘字节」：进入时据此发 {@code Range: bytes=N-}，
+     * 服务端回 206 就接着写（先把已有前缀喂给摘要，保证整包 SHA-256 仍然正确）；
+     * 回 200 说明它忽略 Range，那就从 0 重来。失败时把实际落盘字节写回 {@code written[0]}，
+     * 下一条线路接着传——用户不会看到进度条倒退回 0（v1.5.116 起）。
+     *
+     * <p>校验：zip 头、Release 记录大小、SHA-256 digest。
      */
-    private static void fetch(String url, File out, ProgressDialog d, Info info) throws IOException {
-        // 进度文案带上当前线路：不同镜像速度差很多，用户能直观看到「在走哪条线」
+    private static void fetch(String url, File out, ProgressDialog d, Info info, long[] written)
+            throws IOException {
         final String line = label(url);
-        Request req = new Request.Builder()
+        long start = written == null ? 0 : written[0];
+        if (start > 0 && (!out.isFile() || out.length() < start)) start = 0;   // 残包对不上就重下
+
+        Request.Builder rb = new Request.Builder()
                 .url(url)
                 .header("User-Agent", UA)
-                .header("Accept", "application/octet-stream,application/vnd.android.package-archive,*/*")
-                .build();
-        try (Response r = DOWNLOAD.newCall(req).execute()) {
-            if (!r.isSuccessful() || r.body() == null) {
-                throw new IOException("HTTP " + r.code());
-            }
-            long total = r.body().contentLength();
-            if (total <= 0) total = info.size;
-            long got = 0;
-            int lastPct = -2;
-            byte[] head = new byte[2];
-            int headLen = 0;
+                .header("Accept", "application/octet-stream,application/vnd.android.package-archive,*/*");
+        if (start > 0) rb.header("Range", "bytes=" + start + "-");
+
+        try (Response r = DOWNLOAD.newCall(rb.build()).execute()) {
+            if (r.body() == null) throw new IOException("响应为空");
+            boolean partial = r.code() == 206;
+            if (!r.isSuccessful() && !partial) throw new IOException("HTTP " + r.code());
+            if (start > 0 && !partial) start = 0;      // 不支持续传：整包重来
+
             MessageDigest md;
             try {
                 md = MessageDigest.getInstance("SHA-256");
             } catch (Exception e) {
                 throw new IOException("无法初始化完整性校验");
             }
+            boolean headOk = true;
+            if (start > 0) headOk = feedPrefix(out, start, md);
+
+            long total = r.body().contentLength();
+            total = total > 0 ? start + total : (info.size > 0 ? info.size : 0);
+            long got = start;
+            int lastPct = -2;
+            byte[] head = new byte[2];
+            int headLen = 0;
             try (InputStream in = r.body().byteStream();
-                 FileOutputStream fo = new FileOutputStream(out)) {
+                 FileOutputStream fo = new FileOutputStream(out, start > 0)) {
                 byte[] buf = new byte[32 * 1024];
                 int n;
                 while ((n = in.read(buf)) > 0) {
-                    if (headLen < 2) {
+                    if (start == 0 && headLen < 2) {
                         for (int k = 0; k < n && headLen < 2; k++) head[headLen++] = buf[k];
                     }
                     fo.write(buf, 0, n);
                     md.update(buf, 0, n);
                     got += n;
+                    if (written != null) written[0] = got;      // 中断也能从这里接着传
                     // 只在百分比变化时刷新一次，避免每 32KB 就往主线程投一条消息
                     final int pct = total > 0 ? (int) Math.min(100, got * 100 / total) : -1;
                     if (pct != lastPct) {
@@ -384,11 +417,14 @@ public final class UpdateChecker {
                     }
                 }
             }
-            if (headLen < 2 || head[0] != 'P' || head[1] != 'K') {
+            if (start == 0 && (headLen < 2 || head[0] != 'P' || head[1] != 'K')) {
+                throw new IOException("下载内容不是 APK 文件");
+            }
+            if (start > 0 && !headOk) {
                 throw new IOException("下载内容不是 APK 文件");
             }
             if (info.size > 0 && got != info.size) {
-                throw new IOException("文件大小与 Release 记录不一致");
+                throw new IOException("文件大小与 Release 记录不一致（" + got + "/" + info.size + "）");
             }
             String want = expectedSha256(info.digest);
             if (want != null) {
@@ -402,6 +438,30 @@ public final class UpdateChecker {
             }
             if (got <= 0) throw new IOException("下载内容为空");
         }
+    }
+
+    /**
+     * 续传前把已落盘的前缀重新喂给摘要（MessageDigest 不能跨请求续算），
+     * 顺便确认开头确实是 ZIP（"PK"），防止把上次的坏残包接着写。
+     */
+    private static boolean feedPrefix(File f, long len, MessageDigest md) throws IOException {
+        byte[] buf = new byte[32 * 1024];
+        long left = len;
+        boolean headOk = true;
+        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            int n;
+            long pos = 0;
+            while (left > 0 && (n = in.read(buf, 0, (int) Math.min(buf.length, left))) > 0) {
+                if (pos == 0) {
+                    headOk = n >= 2 && buf[0] == 'P' && buf[1] == 'K';
+                }
+                md.update(buf, 0, n);
+                pos += n;
+                left -= n;
+            }
+            if (pos != len) return false;   // 文件比记录的短：当残包作废
+        }
+        return headOk;
     }
 
     /** GitHub digest 形如 "sha256:ab12…"；也兼容纯 64 位十六进制 */
