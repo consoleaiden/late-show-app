@@ -359,6 +359,18 @@ public class DetailFragment extends Fragment {
             }
         });
 
+        // 关键改造（真机 2026-11-10 根治「有声无画」）：播放器容器**常驻布局**，靠透明度显隐，
+        // 不再用 GONE。真机日志实锤：页面稳定后 GONE→VISIBLE 引发的重排会被上层吞掉
+        // （heroWrap 的 lp.height 已改成 713、getHeight() 却一直是 1117，ViewRootImpl 没收到
+        // 脏标记），容器永远量不出尺寸 → 画面纹理绑在 0×0 上 = 有声音没画面。
+        // 常驻后尺寸从第一次布局就绪，播放时只切 alpha，完全不依赖任何重排。
+        // 悬浮工具与手势同步关掉，触摸事件穿透给下层的海报。
+        playerContainer.setVisibility(View.VISIBLE);
+        playerContainer.setAlpha(0f);
+        playerView.setUseController(false);
+        View playerTools = v.findViewById(R.id.playerTools);
+        if (playerTools != null) playerTools.setVisibility(View.GONE);
+
         LottieIcon.bindTree(v);
         // 封面播放键在深色圆钮上，固定白色
         LottieIcon.tint(v.findViewById(R.id.imgPlayCover), 0xF2FFFFFF);
@@ -1950,10 +1962,13 @@ public class DetailFragment extends Fragment {
     private void leaveInline() {
         if (!inlineActive) return;
         inlineActive = false;
-        if (playerContainer != null) {
-            playerContainer.setVisibility(View.GONE);
-            playerContainer.setAlpha(1f);
+        if (playerContainer != null && playerView != null) {
+            // 常驻布局：只隐藏、不 GONE（见 onViewCreated 注释）
+            playerContainer.setAlpha(0f);
+            playerView.setUseController(false);
         }
+        View playerTools = getView() != null ? getView().findViewById(R.id.playerTools) : null;
+        if (playerTools != null) playerTools.setVisibility(View.GONE);
         if (btnPlayCover != null) btnPlayCover.setVisibility(View.VISIBLE);
         // 海报立刻回来（播放器下面一直是它，不淡入就不会闪白）
         if (cover != null) {
@@ -1975,14 +1990,18 @@ public class DetailFragment extends Fragment {
         triedHtmlResolve = false;
         headerRetry = false;
         // 播放器盖在海报之上（海报不隐藏在下面）：收起时播放器淡出，露出的仍是那面海报
-        playerContainer.setVisibility(View.VISIBLE);
+        // 常驻布局：容器已在视图树里（尺寸早已就绪），这里只切透明度（见 onViewCreated 注释）
         playerContainer.setAlpha(1f);
-        com.lateshow.app.util.PlayHeaders.diag("inline show vis=" + playerContainer.getVisibility()
+        playerView.setUseController(true);
+        View playerTools = getView() != null ? getView().findViewById(R.id.playerTools) : null;
+        if (playerTools != null) playerTools.setVisibility(View.VISIBLE);
+        com.lateshow.app.util.PlayHeaders.diag("inline show pv=" + playerView.getWidth() + "x"
+                + playerView.getHeight()
                 + " attached=" + playerContainer.isAttachedToWindow()
                 + " rootAttached=" + (getView() != null && getView().isAttachedToWindow())
                 + " hero=" + (heroWrap != null ? heroWrap.getHeight() : -1)
                 + " scrollY=" + (scrollPlay != null ? scrollPlay.getScrollY() : -1));
-        // GONE → VISIBLE 之后必须真有一次遍历，否则子树量不出尺寸（见 forceTraversal 注释）
+        // 高度动画（内容上弹）仍需要一次遍历；若被吞掉也只是画面区偏高，不影响出画
         forceTraversal();
         // 从 GONE 切到 VISIBLE 的那一帧不一定会立刻重排（真机 2026-11-10 实测：容器保持
         // 0×0，播放器把画面纹理绑在 0 尺寸上 → 有声音没画面）。显式请求一次布局
@@ -2433,7 +2452,9 @@ public class DetailFragment extends Fragment {
                 if (playerView.isControllerFullyVisible()) playerView.hideController();
                 else playerView.showController();
             }
-        });
+            // 常驻布局下播放器一直「在场上」，未播放时必须放行触摸，
+            // 否则海报的播放按钮/下拉手势会被这个透明层挡住
+        }, () -> inlineActive && player != null);
     }
 
     /** 点全屏按钮：暂停内嵌播放并携带当前进度进入横屏全屏 */

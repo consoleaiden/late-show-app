@@ -57,6 +57,16 @@ public final class GestureSeek {
      */
     public static void attach(View v, final float durationRatio, final Callback cb,
                               final VerticalCallback vcb) {
+        attach(v, durationRatio, cb, vcb, null);
+    }
+
+    /**
+     * @param enabled 手势开关（每根手指按下时判定）。传 null 表示始终开启；
+     *                关闭时 onTouch 返回 false，触摸事件穿透给下层视图（如海报的播放按钮）。
+     */
+    public static void attach(View v, final float durationRatio, final Callback cb,
+                              final VerticalCallback vcb,
+                              final java.util.function.BooleanSupplier enabled) {
         final float[] down = new float[2];
         final int[] mode = {MODE_NONE};
         final long[] base = {0};
@@ -65,6 +75,7 @@ public final class GestureSeek {
         final float[] vLast = {0f};
 
         v.setOnTouchListener((view, ev) -> {
+            if (enabled != null && !enabled.getAsBoolean()) return false;
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     down[0] = ev.getX();
