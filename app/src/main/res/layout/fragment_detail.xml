@@ -22,7 +22,8 @@
     android:layout_height="match_parent"
     android:clickable="true"
     android:focusable="true"
-    app:layoutDescription="@xml/motion_detail">
+    app:layoutDescription="@xml/motion_detail"
+    app:layoutDuringTransition="honorRequest">
 
     <!-- 压暗层：拖动收起时逐渐变透明，把下面的视频列表露出来 -->
     <View

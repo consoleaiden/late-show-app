@@ -40,6 +40,7 @@ import androidx.fragment.app.Fragment;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.VideoSize;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -2062,6 +2063,13 @@ public class DetailFragment extends Fragment {
                     updatePlayLabel();
                     syncKeepScreenOn();
                 }
+                // 视频尺寸就绪：内部画面帧（AspectRatioFrameLayout）按真实比例重新测量，
+                // fit 模式才会正确加黑边（否则 16:9 内容被拉伸填满容器 = 画面变形）。
+                // 这是一次 requestLayout，页面稳定或过渡中可能被 MotionLayout 吞掉
+                // （layoutDuringTransition=honorRequest 已在布局上放开，这里再兜一次底）
+                @Override public void onVideoSizeChanged(VideoSize videoSize) {
+                    if (playerView != null) playerView.post(DetailFragment.this::forceTraversal);
+                }
                 // 黑屏自愈：首帧已渲染但画面容器仍 0x0（偶发：容器可见后未触发重排），
                 // 立即按目标高度强制重排一次，仍为 0 就在下一帧重新绑定画面纹理
                 @Override public void onRenderedFirstFrame() {
@@ -2182,8 +2190,8 @@ public class DetailFragment extends Fragment {
                     + " req=" + (heroWrap != null && heroWrap.isLayoutRequested())
                     + " scrollY=" + (scrollPlay != null ? scrollPlay.getScrollY() : -1));
         }
-        if (surfaceHealTries >= 10) {
-            // 1.2 秒仍量不出尺寸：内嵌画面救不回来，直接切全屏播放器 ——
+        if (surfaceHealTries >= 15) {
+            // 1.8 秒仍量不出尺寸：内嵌画面救不回来，直接切全屏播放器 ——
             // 宁可换个界面，也不要「有声音没画面」的黑屏
             com.lateshow.app.util.PlayHeaders.diag("inline surface dead -> open fullscreen player");
             fallbackToFullscreen();
