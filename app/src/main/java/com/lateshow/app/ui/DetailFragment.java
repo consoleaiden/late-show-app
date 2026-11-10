@@ -237,6 +237,8 @@ public class DetailFragment extends Fragment {
     private DefaultHttpDataSource.Factory httpFactory;
     /** 本次播放是否已带 Referer 重试过：UA 防盗链（真机实测 403）的兜底 */
     private boolean headerRetry;
+    /** 画面绑定自愈的重试次数（见 {@link #healSurfaceStep()}） */
+    private int surfaceHealTries;
     private final Handler saveHandler = new Handler(Looper.getMainLooper());
 
     /** 全屏播放返回后带回进度，无缝续播内嵌播放 */
@@ -343,6 +345,17 @@ public class DetailFragment extends Fragment {
         playerView = v.findViewById(R.id.playerView);
         seekOverlay = v.findViewById(R.id.seekOverlay);
         playerContainer = v.findViewById(R.id.playerContainer);
+        // 排障（真机 2026-11-10 黑屏）：只在「0×0 ↔ 有尺寸」之间变化时记一行，
+        // 避免跟随海报高度动画每帧刷日志
+        playerContainer.addOnLayoutChangeListener((vv, l, t, r, b, ol, ot, or, ob) -> {
+            int w = r - l, h = b - t, ow = or - ol, oh = ob - ot;
+            boolean zeroNow = (w == 0 || h == 0);
+            boolean zeroBefore = (ow == 0 || oh == 0);
+            if (zeroNow != zeroBefore) {
+                com.lateshow.app.util.PlayHeaders.diag(
+                        "container " + w + "x" + h + " (was " + ow + "x" + oh + ")");
+            }
+        });
 
         LottieIcon.bindTree(v);
         // 封面播放键在深色圆钮上，固定白色
@@ -1960,6 +1973,10 @@ public class DetailFragment extends Fragment {
         // 播放器盖在海报之上（海报不隐藏在下面）：收起时播放器淡出，露出的仍是那面海报
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.setAlpha(1f);
+        // 从 GONE 切到 VISIBLE 的那一帧不一定会立刻重排（真机 2026-11-10 实测：容器保持
+        // 0×0，播放器把画面纹理绑在 0 尺寸上 → 有声音没画面）。显式请求一次布局
+        playerContainer.requestLayout();
+        if (heroWrap != null) heroWrap.requestLayout();
         // 确保盖在海报与渐变之上（某些 ROM 上子 View 的合成顺序不完全按布局顺序）
         playerContainer.bringToFront();
         btnPlayCover.setVisibility(View.GONE);
@@ -1989,6 +2006,8 @@ public class DetailFragment extends Fragment {
                     .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
                     .build();
             playerView.setPlayer(player);
+            // 绑定时若画面容器还没量出尺寸（0×0），等首次布局完成再重新绑定画面纹理
+            ensurePlayerSurfaceBound();
             // 控制栏/半透明遮罩 2 秒后自动隐藏
             playerView.setControllerShowTimeoutMs(2000);
             // 点全屏按钮才进入横屏全屏
@@ -2014,15 +2033,18 @@ public class DetailFragment extends Fragment {
                     syncKeepScreenOn();
                 }
                 // 黑屏自愈：首帧已渲染但画面容器仍 0x0（偶发：容器可见后未触发重排），
-                // 立即按目标高度强制重排一次，避免「有声音没画面」
+                // 立即按目标高度强制重排一次，仍为 0 就在下一帧重新绑定画面纹理
                 @Override public void onRenderedFirstFrame() {
                     if (playerView != null && (playerView.getWidth() == 0 || playerView.getHeight() == 0)) {
                         com.lateshow.app.util.PlayHeaders.diag(
                                 "firstFrame but playerView " + playerView.getWidth() + "x"
                                         + playerView.getHeight() + " -> force relayout");
-                        setPlayerTopInset(statusBarInsetPx());
-                        setHeroHeight(statusBarInsetPx() + playerHeightPx(), false);
+                        int inset = statusBarInsetPx();
+                        setPlayerTopInset(inset);
+                        setHeroHeight(inset + playerHeightPx(), false);
+                        if (playerContainer != null) playerContainer.requestLayout();
                         playerView.requestLayout();
+                        playerView.post(DetailFragment.this::ensurePlayerSurfaceBound);
                     }
                 }
                 @Override public void onPlayerError(PlaybackException error) {
@@ -2059,6 +2081,51 @@ public class DetailFragment extends Fragment {
                             + " container=" + (playerContainer != null ? playerContainer.getWidth() + "x" + playerContainer.getHeight() : "null")
                             + " pv=" + playerView.getWidth() + "x" + playerView.getHeight()));
         }
+    }
+
+    /**
+     * 画面绑定自愈（真机 2026-11-10，第二种情况必现）。
+     *
+     * <p>现象：第二次进详情页点「继续播放」，声音正常但画面全黑。日志显示绑定播放器那一刻
+     * playerContainer / playerView 都是 0×0，之后解码器照常启动（720×1280）却再没重排
+     * —— 画面纹理被绑在 0 尺寸上，等于没有画面。
+     *
+     * <p>处理：绑定时尺寸为 0 → 标记待修复，按 120ms 步进最多重试 8 次（每次先强制重排
+     * 海报区高度，让 GONE→VISIBLE 的子树真正量出尺寸）；一旦量出宽高就重新绑定一次播放器
+     * （media3 会重建画面纹理），保证纹理尺寸与视图一致。
+     */
+    private void ensurePlayerSurfaceBound() {
+        if (playerView == null || player == null) return;
+        if (playerView.getWidth() > 0 && playerView.getHeight() > 0) return;
+        com.lateshow.app.util.PlayHeaders.diag("bind with 0x0 view -> heal scheduled");
+        surfaceHealTries = 0;
+        healSurfaceStep();
+    }
+
+    private void healSurfaceStep() {
+        if (playerView == null || player == null) return;
+        int w = playerView.getWidth();
+        int h = playerView.getHeight();
+        if (w > 0 && h > 0) {
+            // 尺寸就绪：重新绑定一次，让画面纹理按新尺寸重建
+            com.lateshow.app.util.PlayHeaders.diag(
+                    "view " + w + "x" + h + " -> rebind surface (try " + surfaceHealTries + ")");
+            playerView.setPlayer(null);
+            playerView.setPlayer(player);
+            return;
+        }
+        if (surfaceHealTries >= 8) {
+            com.lateshow.app.util.PlayHeaders.diag("surface still 0x0 after " + surfaceHealTries + " tries");
+            return;
+        }
+        surfaceHealTries++;
+        // 强制重排：容器从 GONE 切 VISIBLE 后，部分 ROM 不会主动重排该子树
+        int inset = statusBarInsetPx();
+        setPlayerTopInset(inset);
+        setHeroHeight(inset + playerHeightPx(), false);
+        if (playerContainer != null) playerContainer.requestLayout();
+        playerView.requestLayout();
+        playerView.postDelayed(this::healSurfaceStep, 120);
     }
 
     /** 真正下发给播放器的地址：网页播放页先归一化成直链（见 {@link #guessStreamUrl}） */
