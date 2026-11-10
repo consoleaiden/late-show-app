@@ -6,7 +6,7 @@
  * 源码来自 https://github.com/QmDeve/AndroidLiquidGlassView（MIT License）。
  */
 
-package com.qmdeve.liquidglass;
+package com.qmdeve.liquidglass.impl;
 
 import android.graphics.Canvas;
 
