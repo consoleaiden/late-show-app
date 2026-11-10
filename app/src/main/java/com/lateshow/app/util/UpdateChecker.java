@@ -207,7 +207,8 @@ public final class UpdateChecker {
         }
         if (act.isFinishing() || act.isDestroyed()) return;
         final ProgressDialog d = new ProgressDialog(act,
-                "正在下载更新 v" + info.version, "准备中…");
+                "正在下载更新 v" + info.version + (info.size > 0 ? " · " + mb(info.size) : ""),
+                "正在选择线路…");
         d.show();
 
         new Thread(() -> {
@@ -311,11 +312,19 @@ public final class UpdateChecker {
         }
     }
 
+    /** 字节数 → "3.7 MB"（下载进度用） */
+    private static String mb(long bytes) {
+        if (bytes <= 0) return "0 MB";
+        return String.format(Locale.US, "%.1f MB", bytes / 1048576.0);
+    }
+
     /**
      * 下载单个线路；成功返回（否则抛异常，由调用方切换下一条线路）。
      * 校验：zip 头、Release 记录大小、SHA-256 digest。
      */
     private static void fetch(String url, File out, ProgressDialog d, Info info) throws IOException {
+        // 进度文案带上当前线路：不同镜像速度差很多，用户能直观看到「在走哪条线」
+        final String line = label(url);
         Request req = new Request.Builder()
                 .url(url)
                 .header("User-Agent", UA)
@@ -328,6 +337,7 @@ public final class UpdateChecker {
             long total = r.body().contentLength();
             if (total <= 0) total = info.size;
             long got = 0;
+            int lastPct = -2;
             byte[] head = new byte[2];
             int headLen = 0;
             MessageDigest md;
@@ -347,11 +357,15 @@ public final class UpdateChecker {
                     fo.write(buf, 0, n);
                     md.update(buf, 0, n);
                     got += n;
-                    if (total > 0) {
-                        final int p = (int) Math.min(100, got * 100 / total);
+                    // 只在百分比变化时刷新一次，避免每 32KB 就往主线程投一条消息
+                    final int pct = total > 0 ? (int) Math.min(100, got * 100 / total) : -1;
+                    if (pct != lastPct) {
+                        lastPct = pct;
+                        final long g = got, t = total;
                         MAIN.post(() -> {
-                            d.setProgress(p);
-                            d.setMessage("已下载 " + p + "%");
+                            if (pct >= 0) d.setProgress(pct);
+                            d.setMessage(line + " · " + (pct >= 0 ? pct + "% · " : "")
+                                    + mb(g) + (t > 0 ? " / " + mb(t) : ""));
                         });
                     }
                 }
