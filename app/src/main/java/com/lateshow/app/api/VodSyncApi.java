@@ -34,8 +34,9 @@ import java.util.concurrent.TimeUnit;
 /**
  * VodSync API 封装。
  *
- * 约定：成功 = HTTP 2xx + 业务 {@code code:1}（或不含 code 的纯数据响应）；
- * 失败 = HTTP 4xx/5xx + detail，或 200 但 {@code code:0 / ok:false}。
+ * 约定（B-11）：成功 = HTTP 2xx 且业务 {@code code:0}（或纯数据响应不含 code / ok）；
+ * 失败 = HTTP 4xx/5xx + detail，或 2xx 但 {@code code != 0} / {@code ok:false}。
+ * v1.14 起后端统一为 {@code code:0} 表示成功，{@code code:1} 的旧口径已废弃。
  *
  * 审计 A-11/A-20/A-30/C-06/C-07/A-06：
  * <ul>

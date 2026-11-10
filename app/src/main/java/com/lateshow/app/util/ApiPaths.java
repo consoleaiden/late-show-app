@@ -16,6 +16,8 @@ public final class ApiPaths {
     public static final String HEALTHZ = "/healthz";
     public static final String AUTH_STATE = V1 + "/auth/state";
     public static final String AUTH_TOKEN = V1 + "/auth/token";
+    /** v1.14.0 起：具名 Token 清单 / 新增（不动现有 Token，可为 TV / 车机单独发只读 Token） */
+    public static final String AUTH_TOKENS = V1 + "/auth/tokens";
     public static final String AUTH_SETTINGS = V1 + "/auth/settings";
     public static final String AUTH_PASSWORD = V1 + "/auth/password";
 
@@ -48,6 +50,9 @@ public final class ApiPaths {
     public static final String MAINTENANCE_RECOUNT = V1 + "/maintenance/recount";
     public static final String MAINTENANCE_RELATED = V1 + "/maintenance/related-recompute";
     public static final String MAINTENANCE_STAR_TAGS = V1 + "/maintenance/star-tags";
+    /** v1.14.0：标签倒排索引运维（status 读就绪度，tag-index 触发回填） */
+    public static final String TAG_STATUS = V1 + "/tag/status";
+    public static final String MAINTENANCE_TAG_INDEX = V1 + "/maintenance/tag-index";
 
     public static String video(String slug, long vodId) {
         return VIDEOS + "/" + slug + "/" + vodId;
@@ -77,6 +82,11 @@ public final class ApiPaths {
         return STAR_TERMS + "/" + id;
     }
 
+    /** 吊销具名 Token（id=0 是存量单 Token，后端不允许单独吊销） */
+    public static String authToken(long id) {
+        return AUTH_TOKENS + "/" + id;
+    }
+
     public static String tableRows(String table) {
         return ADMIN_TABLES + "/" + table + "/rows";
     }
@@ -89,9 +99,19 @@ public final class ApiPaths {
         return source(slug) + "/resume";
     }
 
-    /** 免鉴权路径：这些请求不注入 Token，避免后端收紧 auth 接口校验后形成引导死锁（C-07） */
+    /**
+     * 免鉴权路径：这些请求不注入 Token，避免后端收紧 auth 接口校验后形成引导死锁（C-07）。
+     *
+     * <p>只放行真正的「引导前」端点，与后端 {@code auth.PUBLIC_PATHS} 对齐：
+     * {@code /healthz} 与 {@code /api/v1/auth/state}。
+     *
+     * <p>此前这里用 {@code startsWith("/api/v1/auth/")} 把整个 auth 分组都当公开路径，
+     * 后果是 {@code /auth/settings}、{@code /auth/token}、{@code /auth/password}、
+     * {@code /auth/tokens} 都不带 Token —— 一旦后端开启授权访问，控制台这些操作会
+     * 直接 401（而后端 {@code requires_admin} 对 {@code /api/v1/auth/*} 明确要求 admin）。
+     */
     public static boolean isPublic(String path) {
         if (path == null) return false;
-        return path.equals(HEALTHZ) || path.startsWith(V1 + "/auth/");
+        return path.equals(HEALTHZ) || path.equals(AUTH_STATE);
     }
 }

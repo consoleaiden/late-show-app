@@ -162,6 +162,42 @@ public final class Models {
         @SerializedName("query_ms") public Double queryMs;
         public int total;
         public List<VideoSummary> list;
+
+        // ---- 以下为 v1.14 起 /api/v1/search 的检索质量字段（F4）----
+        /** 实际使用的每页条数（后端回填生效值） */
+        @SerializedName("page_size") public Integer pageSize;
+        /** 检索关键词（后端归一化后回显） */
+        public String wd;
+        /** true = 结果不完整：有源站超时/截断，total 只是已搜到的部分 */
+        @SerializedName("total_is_partial") public boolean totalIsPartial;
+        /** 被截断（达到单源上限）的源站 slug */
+        @SerializedName("truncated_sources") public List<String> truncatedSources;
+        /** 检索失败/超时被跳过的源站 slug */
+        @SerializedName("sources_failed") public List<String> sourcesFailed;
+        /** 本次真正参与检索的源站数 */
+        @SerializedName("sources_searched") public Integer sourcesSearched;
+        @SerializedName("elapsed_ms") public Double elapsedMs;
+        /**
+         * true = 本次请求原本走 {@code ?tag=} 精确检索，但标签索引未覆盖该词
+         * （{@code tag_found=false} 且结果为 0），客户端已自动改用 {@code ?wd=} 全文检索。
+         *
+         * <p>后端不返回此字段，是客户端 {@code SyncCatalog} 回退后打的标记，
+         * 声明为 {@code transient} 保证不会被 Gson 反序列化覆盖。
+         */
+        public transient boolean fullTextFallback;
+        /** 标签检索是否命中索引（后端仅 {@code ?tag=} 请求返回；null = 未用 tag 模式） */
+        @SerializedName("tag_found") public Boolean tagFound;
+
+        /** 检索结果是否「不完整」（有源站失败或被截断），UI 据此提示 */
+        public boolean partial() {
+            if (totalIsPartial) return true;
+            return sourcesFailed != null && !sourcesFailed.isEmpty();
+        }
+
+        /** 失败源站数（无数据时 0） */
+        public int failedSourceCount() {
+            return sourcesFailed == null ? 0 : sourcesFailed.size();
+        }
     }
 
     public static class DetailResp {
@@ -382,5 +418,87 @@ public final class Models {
         @SerializedName("token_hint") public String tokenHint;
         @SerializedName("password_changed_at") public String passwordChangedAt;
         @SerializedName("token_created_at") public String tokenCreatedAt;
+    }
+
+    // ==================== v1.14 新增：具名 Token 与标签索引 ====================
+
+    /** GET /api/v1/auth/tokens 的单个 Token（**永不返回明文**） */
+    public static class AuthToken {
+        /** 0 = 存量单 Token（只能通过「重置」轮换，不能单独吊销） */
+        public int id;
+        /** legacy / scoped */
+        public String kind;
+        /** read / admin */
+        public String scope;
+        public String note;
+        @SerializedName("created_at") public String createdAt;
+        @SerializedName("last_used_at") public String lastUsedAt;
+        public boolean present;
+
+        public boolean legacy() { return "legacy".equals(kind) || id == 0; }
+    }
+
+    public static class AuthTokenList {
+        public int code;
+        public List<AuthToken> list;
+    }
+
+    /** POST /api/v1/auth/tokens 响应：{@code token} 是**一次性明文**，只在本次响应里出现 */
+    public static class TokenCreateResp {
+        public int code;
+        public int id;
+        public String token;
+        public String scope;
+        public String note;
+        @SerializedName("created_at") public String createdAt;
+    }
+
+    /**
+     * GET /api/v1/tag/status：标签倒排索引就绪度。
+     * 后端用它决定 {@code /healthz} 是否声明 {@code tag_search}。
+     */
+    public static class TagStatusResp {
+        public int code;
+        /** 索引可用（可以对外声明 tag_search） */
+        public boolean ready;
+        /** 后端是否启用标签索引功能 */
+        public boolean enabled;
+        /** 同步入库时是否增量维护索引 */
+        @SerializedName("on_sync") public boolean onSync;
+        /** 正在回填的源站（元素形态随版本变化，用 JsonElement 兜底） */
+        public List<com.google.gson.JsonElement> building;
+        /** 已建索引行数 */
+        public long rows;
+        /** 逐站进度 */
+        public List<TagSourceProgress> sources;
+
+        public int buildingCount() {
+            return building == null ? 0 : building.size();
+        }
+    }
+
+    /** 单个源站的标签索引进度 */
+    public static class TagSourceProgress {
+        public String slug;
+        /** pending / running / done / error */
+        public String status;
+        public long cursor;
+        public long processed;
+        public long total;
+        public long indexed;
+        public double progress;
+        public String error;
+        @SerializedName("finished_at") public String finishedAt;
+    }
+
+    /** POST /api/v1/maintenance/tag-index 响应 */
+    public static class TagIndexRebuildResp {
+        public int code;
+        /** true = 本次受理；false = 已有同类任务在跑，未重复提交 */
+        public boolean accepted;
+        public boolean force;
+        /** "all" 或具体 slug */
+        public String targets;
+        public String msg;
     }
 }

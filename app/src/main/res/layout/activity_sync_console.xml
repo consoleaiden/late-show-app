@@ -369,6 +369,23 @@
                     <TextView android:id="@+id/btnChangePw" android:layout_width="match_parent" android:layout_height="40dp"
                         android:layout_marginTop="8dp" android:gravity="center" android:background="@drawable/bg_btn_main"
                         android:text="保存新密码" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/accInk" />
+
+                    <!-- 具名 Token（v1.14.0）：不动现有 Token，单独给 TV / 车机发只读 Token -->
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp" android:text="具名 Token" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+                        android:text="不动当前 Token，另发一枚只读 Token 给电视 / 车机用；清单不回显明文，新 Token 只在签发时显示一次。"
+                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <TextView android:id="@+id/tvTokenListHint" style="@style/MetaLabel" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textAllCaps="false"
+                        android:text="读取中…" />
+                    <LinearLayout android:id="@+id/tokenList" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="4dp" android:orientation="vertical" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+                        <TextView android:id="@+id/btnTokenNew" style="@style/OpBtn" android:text="签发只读 Token" />
+                        <TextView android:id="@+id/btnTokenListRefresh" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="刷新清单" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
@@ -464,6 +481,38 @@
                     </LinearLayout>
                     <TextView android:id="@+id/tvLineHint" style="@style/MetaLabel" android:layout_width="match_parent"
                         android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textAllCaps="false" android:text="" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑫ 标签索引（决定「搜索是否搜得到」） -->
+            <LinearLayout style="@style/ConsoleCard" android:orientation="vertical">
+                <LinearLayout android:id="@+id/hdrTagIdx" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="2dp">
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_marginRight="7dp"
+                        android:src="@drawable/ic_set_cache" app:tint="@color/t3" android:contentDescription="标签索引" />
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="标签索引" />
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arTagIdx" android:layout_width="18dp" android:layout_height="18dp"
+                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelTagIdx" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:id="@+id/tvTagIdxState" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp" android:textSize="11sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6"
+                        android:text="读取中…" />
+                    <TextView android:id="@+id/tvTagCapability" style="@style/MetaLabel" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textAllCaps="false" android:text="" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"
+                        android:text="标签索引覆盖不足时，首页点标签会搜不到片。App 已加兜底（自动改用全文检索），这里可以看覆盖率和手动重建。"
+                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+                        <TextView android:id="@+id/btnTagIdxStatus" style="@style/OpBtn" android:text="刷新状态" />
+                        <TextView android:id="@+id/btnTagIdxRebuild" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="重建索引" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/tagIdxList" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="vertical" />
                 </LinearLayout>
             </LinearLayout>
 

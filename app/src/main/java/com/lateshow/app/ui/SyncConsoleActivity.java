@@ -49,19 +49,23 @@ public class SyncConsoleActivity extends AppCompatActivity {
 
     private static final int[] HEADERS = {
             R.id.hdrOverview, R.id.hdrActions, R.id.hdrPause, R.id.hdrSearch, R.id.hdrTables,
-            R.id.hdrSources, R.id.hdrLogs, R.id.hdrAuth, R.id.hdrStars, R.id.hdrMaint, R.id.hdrLine};
+            R.id.hdrSources, R.id.hdrLogs, R.id.hdrAuth, R.id.hdrStars, R.id.hdrMaint, R.id.hdrLine,
+            R.id.hdrTagIdx};
     private static final int[] BODIES = {
             R.id.panelOverview, R.id.panelActions, R.id.panelPause, R.id.panelSearch, R.id.panelTables,
-            R.id.panelSources, R.id.panelLogs, R.id.panelAuth, R.id.panelStars, R.id.panelMaint, R.id.panelLine};
+            R.id.panelSources, R.id.panelLogs, R.id.panelAuth, R.id.panelStars, R.id.panelMaint, R.id.panelLine,
+            R.id.panelTagIdx};
     private static final int[] ARROWS = {
             R.id.arOverview, R.id.arActions, R.id.arPause, R.id.arSearch, R.id.arTables,
-            R.id.arSources, R.id.arLogs, R.id.arAuth, R.id.arStars, R.id.arMaint, R.id.arLine};
+            R.id.arSources, R.id.arLogs, R.id.arAuth, R.id.arStars, R.id.arMaint, R.id.arLine,
+            R.id.arTagIdx};
     private static final String[] POLICY_VALUES = {"inherit", "filter", "off", "whitelist"};
 
     private TextView tvConsoleStatus, tvConsoleTime, autoCount, selCount, tvRuntime, pauseWarn, searchInfo,
-            tvTablePage, tvAuthState, tvTokenValue, tvStarStatus, tvMaintOutput, tvLineHint;
+            tvTablePage, tvAuthState, tvTokenValue, tvStarStatus, tvMaintOutput, tvLineHint,
+            tvTokenListHint, tvTagIdxState, tvTagCapability;
     private LinearLayout statsGrid, pauseRows, statsSkeleton, srcSkeleton, logSkeleton,
-            searchResults, tableResults, starList, srcList, logList;
+            searchResults, tableResults, starList, srcList, logList, tokenList, tagIdxList;
     private CheckBox chkAll;
     private Switch swAuthEnable;
     private Spinner spTable, spLineSource, spLinePolicy;
@@ -88,6 +92,8 @@ public class SyncConsoleActivity extends AppCompatActivity {
         tvTokenValue.setTextColor(color(R.color.t2));
     };
     private Models.PauseState pauseState = new Models.PauseState();
+    /** 全库视频数：标签索引卡用它算覆盖率（来自 /stats，0 表示尚未取到） */
+    private int videosTotal = 0;
 
     private final ObjectAnimator[] animStats = new ObjectAnimator[1];
     private final ObjectAnimator[] animSrc = new ObjectAnimator[1];
@@ -150,9 +156,10 @@ public class SyncConsoleActivity extends AppCompatActivity {
 
     private void onSectionOpened(int idx) {
         if (idx == 4) loadTables();                       // 数据表浏览
-        else if (idx == 7) loadAuthSection();             // 访问控制与 Token
+        else if (idx == 7) { loadAuthSection(); loadAuthTokens(); }  // 访问控制与 Token
         else if (idx == 8) loadStarTerms();               // 明星词库
         else if (idx == 10) refreshLineSourceSpinner();   // 播放线路策略
+        else if (idx == 11) loadTagIndex();               // 标签索引
     }
 
     private void togglePanel(int idx) {
@@ -206,6 +213,11 @@ public class SyncConsoleActivity extends AppCompatActivity {
         tvStarStatus = findViewById(R.id.tvStarStatus);
         tvMaintOutput = findViewById(R.id.tvMaintOutput);
         tvLineHint = findViewById(R.id.tvLineHint);
+        tvTokenListHint = findViewById(R.id.tvTokenListHint);
+        tvTagIdxState = findViewById(R.id.tvTagIdxState);
+        tvTagCapability = findViewById(R.id.tvTagCapability);
+        tagIdxList = findViewById(R.id.tagIdxList);
+        tokenList = findViewById(R.id.tokenList);
         statsGrid = findViewById(R.id.statsGrid);
         pauseRows = findViewById(R.id.pauseRows);
         statsSkeleton = findViewById(R.id.statsSkeleton);
@@ -319,6 +331,14 @@ public class SyncConsoleActivity extends AppCompatActivity {
         // ⑪ 播放线路策略
         findViewById(R.id.btnLineApply).setOnClickListener(v -> applyLinePolicy());
         findViewById(R.id.btnSourcePause).setOnClickListener(v -> toggleSourcePause());
+
+        // ⑧ 具名 Token（v1.14.0）：签发 / 刷新 / 逐条吊销
+        findViewById(R.id.btnTokenNew).setOnClickListener(v -> showCreateTokenDialog());
+        findViewById(R.id.btnTokenListRefresh).setOnClickListener(v -> loadAuthTokens());
+
+        // ⑫ 标签索引
+        findViewById(R.id.btnTagIdxStatus).setOnClickListener(v -> loadTagIndex());
+        findViewById(R.id.btnTagIdxRebuild).setOnClickListener(v -> confirmTagRebuild());
     }
 
     /** 首次进入预取一些不常变的数据，避免展开板块时空白 */
@@ -406,6 +426,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
     }
 
     private void renderStats(Models.StatsResp s) {
+        videosTotal = s.videosTotal;
         autoCount.setText("自动同步 " + s.sourcesEnabled + "/" + s.sourcesTotal);
         String[][] row1 = {
                 {TimeUtil.thousands(s.sourcesTotal), "源站总数 · 已启用 " + s.sourcesEnabled},
@@ -776,7 +797,8 @@ public class SyncConsoleActivity extends AppCompatActivity {
     // ==================== ④ 聚合搜索 ====================
 
     private void doSearch() {
-        final String kw = etSearch.getText().toString().trim();
+        // 后端 wd 是 max_length=64（M2），控制台同样截断，避免直接吃 422
+        final String kw = com.lateshow.app.api.SyncCatalog.clamp(etSearch.getText().toString());
         if (kw.isEmpty()) { toast("请输入关键词"); return; }
         hideKeyboard();
         searchInfo.setText("搜索中…");
@@ -788,8 +810,13 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 JsonArray arr = arrayOf(r, "list");
                 int total = intOf(r, "total");
                 int ms = intOf(r, "elapsed_ms");
+                boolean partial = r != null && r.has("total_is_partial")
+                        && r.get("total_is_partial").getAsBoolean();
+                int failed = arrayOf(r, "sources_failed").size();
                 searchInfo.setText("找到 " + total + " 条 · 耗时 " + ms + "ms · 已搜 "
-                        + intOf(r, "sources_searched") + " 个源站");
+                        + intOf(r, "sources_searched") + " 个源站"
+                        + (partial ? " · 结果不完整" : "")
+                        + (failed > 0 ? "（" + failed + " 源失败）" : ""));
                 if (arr.size() == 0) {
                     addResult(searchResults, "没有匹配的影片", "换个关键词试试，或先在「源站同步状态」确认已同步数据");
                     return;
@@ -998,6 +1025,262 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 @Override public void onErr(String m) { toast(m); }
             });
         } catch (Exception e) { toast("请求构造失败：" + e.getMessage()); }
+    }
+
+    // ==================== ⑧-b 具名 Token（v1.14.0） ====================
+
+    /**
+     * GET /api/v1/auth/tokens —— 已签发 Token 清单（**后端不回显明文**）。
+     *
+     * <p>与「重新生成」的区别：重置会立刻作废当前 Token，签发具名 Token 不动现有的。
+     * 典型用法是给电视 / 车机单独发一枚只读 Token，admin 留给本控制台（B-08）。
+     */
+    private void loadAuthTokens() {
+        if (!uiAlive() || tvTokenListHint == null) return;
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.AUTH_TOKENS, null,
+                Models.AuthTokenList.class, new VodSyncApi.ApiCb<Models.AuthTokenList>() {
+            @Override public void onOk(Models.AuthTokenList r) {
+                if (!uiAlive()) return;
+                List<Models.AuthToken> list = r != null && r.list != null ? r.list : new ArrayList<>();
+                int admin = 0, read = 0;
+                for (Models.AuthToken t : list) {
+                    if ("admin".equals(t.scope)) admin++; else read++;
+                }
+                tvTokenListHint.setText("● 共 " + list.size() + " 枚 · 管理 " + admin + " / 只读 " + read);
+                tokenList.removeAllViews();
+                if (list.isEmpty()) {
+                    addResult(tokenList, "没有可用 Token", "点「签发只读 Token」新建一枚");
+                    return;
+                }
+                for (Models.AuthToken t : list) addTokenRow(t);
+            }
+            @Override public void onErr(String m) {
+                if (uiAlive()) tvTokenListHint.setText("● 清单读取失败：" + m);
+            }
+        });
+    }
+
+    /** 清单单行：作用域 / 备注 / 签发与最近使用时间 + 吊销（存量单 Token 只能重置不能单独吊销） */
+    private void addTokenRow(final Models.AuthToken t) {
+        String sub = timeShort(t.createdAt) + " 签发"
+                + (t.lastUsedAt == null || t.lastUsedAt.isEmpty() ? " · 从未使用" : " · 最近 " + timeShort(t.lastUsedAt))
+                + (t.note == null || t.note.isEmpty() ? "" : " · " + t.note);
+        LinearLayout box = addResult(tokenList,
+                (t.legacy() ? "存量 Token" : "具名 Token #" + t.id)
+                        + " · " + ("admin".equals(t.scope) ? "管理" : "只读"),
+                sub);
+        if (t.legacy()) return;   // id=0 只能通过「重新生成」轮换
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(smallBtn("吊销", v -> confirmRevokeToken(t)));
+        box.addView(row);
+    }
+
+    private void confirmRevokeToken(final Models.AuthToken t) {
+        if (!uiAlive()) return;
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("吊销 Token #" + t.id)
+                .setMessage("该 Token 立即失效；正在用它的设备会 401，需要重新配置。继续？")
+                .setPositiveButton("吊销", (d, w) -> revokeToken(t))
+                .setNegativeButton("取消", null).show();
+    }
+
+    private void revokeToken(final Models.AuthToken t) {
+        VodSyncApi.get().delete(com.lateshow.app.util.ApiPaths.authToken(t.id), null,
+                JsonObject.class, new VodSyncApi.ApiCb<JsonObject>() {
+            @Override public void onOk(JsonObject r) {
+                if (!uiAlive()) return;
+                toast("Token #" + t.id + " 已吊销");
+                loadAuthTokens();
+            }
+            @Override public void onErr(String m) { if (uiAlive()) toast(m); }
+        });
+    }
+
+    /** 签发对话框：作用域（只读 / 管理）+ 可选备注 */
+    private void showCreateTokenDialog() {
+        if (!uiAlive()) return;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad / 2, pad, 0);
+
+        final Spinner sp = new Spinner(this);
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item,
+                new String[]{"只读 read（推荐：TV / 车机）", "管理 admin（可改同步与配置）"});
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        sp.setAdapter(ad);
+        box.addView(sp);
+
+        final EditText note = new EditText(this);
+        note.setHint("备注（可选，例如：客厅电视）");
+        note.setTextSize(12f);
+        note.setSingleLine(true);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = pad / 2;
+        box.addView(note, lp);
+
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("签发具名 Token")
+                .setView(box)
+                .setPositiveButton("签发", (d, w) -> createToken(
+                        sp.getSelectedItemPosition() == 1 ? "admin" : "read",
+                        note.getText().toString().trim()))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void createToken(String scope, String note) {
+        try {
+            org.json.JSONObject body = new org.json.JSONObject().put("scope", scope);
+            if (!note.isEmpty()) body.put("note", note);
+            VodSyncApi.get().postJson(com.lateshow.app.util.ApiPaths.AUTH_TOKENS, body.toString(),
+                    Models.TokenCreateResp.class, new VodSyncApi.ApiCb<Models.TokenCreateResp>() {
+                @Override public void onOk(Models.TokenCreateResp r) {
+                    if (!uiAlive()) return;
+                    loadAuthTokens();
+                    if (r == null || r.token == null || r.token.isEmpty()) {
+                        toast("已签发，但响应里没有明文（请到服务端查看）");
+                        return;
+                    }
+                    showIssuedToken(r);
+                }
+                @Override public void onErr(String m) { if (uiAlive()) toast(m); }
+            });
+        } catch (Exception e) { toast("请求构造失败：" + e.getMessage()); }
+    }
+
+    /** 明文只在这里出现一次（后端不存明文），所以必须让用户当场抄走 */
+    private void showIssuedToken(final Models.TokenCreateResp r) {
+        TextView tv = new TextView(this);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        tv.setPadding(pad, pad / 2, pad, 0);
+        tv.setTextSize(12f);
+        tv.setTextIsSelectable(true);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        tv.setText(r.token);
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("新 Token（只显示这一次）")
+                .setMessage("作用域：" + r.scope + (r.note == null || r.note.isEmpty() ? "" : " · " + r.note)
+                        + "\n关闭后无法再查看，请立刻填到目标设备。")
+                .setView(tv)
+                .setPositiveButton("复制", (d, w) -> {
+                    Object svc = getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (svc instanceof android.content.ClipboardManager) {
+                        ((android.content.ClipboardManager) svc)
+                                .setPrimaryClip(android.content.ClipData.newPlainText("VodSync Token", r.token));
+                        toast("已复制 · 用完记得从剪贴板清掉");
+                    }
+                })
+                .setNegativeButton("知道了", null)
+                .show();
+    }
+
+    /** "2026-11-10T08:12:09.384515" → "11-10 08:12"；解析失败原样返回 */
+    private static String timeShort(String iso) {
+        if (iso == null || iso.isEmpty()) return "-";
+        try {
+            String d = iso.length() >= 16 ? iso.substring(0, 16) : iso;   // yyyy-MM-ddTHH:mm
+            return d.substring(5).replace('T', ' ');
+        } catch (Exception e) { return iso; }
+    }
+
+    // ==================== ⑫ 标签索引（搜索可用性） ====================
+
+    /**
+     * GET /api/v1/tag/status —— 标签倒排索引就绪度。
+     *
+     * <p>这张卡存在的唯一理由：{@code tag_search} 能力声明与索引覆盖率可能不一致。
+     * 后端声明了能力、客户端就会走 {@code ?tag=}，一旦索引只覆盖 3%，用户点标签
+     * 搜不到片还不知道为什么。这里把 rows / 覆盖率 / 在途站点摊开，能一眼看出
+     * 「是没数据还是没建索引」。
+     */
+    private void loadTagIndex() {
+        if (!uiAlive() || tvTagIdxState == null) return;
+        VodSyncApi.get().get(com.lateshow.app.util.ApiPaths.TAG_STATUS, null,
+                Models.TagStatusResp.class, new VodSyncApi.ApiCb<Models.TagStatusResp>() {
+            @Override public void onOk(Models.TagStatusResp r) {
+                if (!uiAlive() || r == null) return;
+                StringBuilder sb = new StringBuilder();
+                sb.append(r.ready ? "● 索引已就绪" : "● 索引未就绪")
+                  .append(r.enabled ? " · 功能已启用" : " · 功能已关闭")
+                  .append(r.onSync ? " · 同步时增量维护" : " · 同步不维护");
+                sb.append("\n已建索引 ").append(TimeUtil.thousands((int) Math.min(r.rows, Integer.MAX_VALUE)))
+                  .append(" 行");
+                if (videosTotal > 0) {
+                    double pct = r.rows * 100.0 / videosTotal;
+                    sb.append(" · 覆盖约 ").append(String.format(java.util.Locale.US, "%.1f", pct)).append("%")
+                      .append(pct < 30 ? "（偏低：标签检索会漏片）" : "");
+                }
+                int building = r.buildingCount();
+                if (building > 0) sb.append("\n正在回填 ").append(building).append(" 个源站（后台串行，可断点续跑）");
+                tvTagIdxState.setText(sb.toString());
+
+                // 能力声明与数据是否一致：这是 M5 的现场证据
+                boolean declared = com.lateshow.app.api.ServerCaps.supports(
+                        com.lateshow.app.api.ServerCaps.CAP_TAG_SEARCH);
+                boolean consistent = declared == r.ready;
+                tvTagCapability.setTextColor(color(consistent ? R.color.t3 : R.color.warn));
+                tvTagCapability.setText("能力声明 tag_search = " + (declared ? "是" : "否")
+                        + " · 索引 ready = " + (r.ready ? "是" : "否")
+                        + (consistent ? " · 一致" : " · 不一致：客户端会按声明走，可能搜不到片"));
+
+                renderTagSources(r);
+            }
+            @Override public void onErr(String m) {
+                if (uiAlive()) tvTagIdxState.setText("● 状态读取失败：" + m);
+            }
+        });
+    }
+
+    /** 逐站进度：只列「在跑 / 失败 / 有索引行」的，避免 57 行刷屏 */
+    private void renderTagSources(Models.TagStatusResp r) {
+        if (tagIdxList == null) return;
+        tagIdxList.removeAllViews();
+        List<Models.TagSourceProgress> src = r.sources != null ? r.sources : new ArrayList<>();
+        int shown = 0;
+        for (Models.TagSourceProgress s : src) {
+            boolean busy = "running".equals(s.status) || "pending".equals(s.status);
+            boolean bad = "error".equals(s.status);
+            if (!busy && !bad && s.indexed <= 0) continue;
+            if (shown >= 12) break;
+            String sub = (busy ? "回填中 " : bad ? "失败 " : "已建 ")
+                    + String.format(java.util.Locale.US, "%.0f", s.progress) + "%"
+                    + " · 索引 " + s.indexed + " 行 / 源站 " + s.total + " 条"
+                    + (s.error == null || s.error.isEmpty() ? "" : " · " + s.error);
+            addResult(tagIdxList, s.slug, sub);
+            shown++;
+        }
+        if (shown == 0) addResult(tagIdxList, "尚未建立逐站索引",
+                "点「重建索引」让后端按源站逐站回填（可断点续跑）");
+        else if (src.size() > shown) addResult(tagIdxList, "… 还有 " + (src.size() - shown) + " 个源站", "仅显示前 12 条");
+    }
+
+    private void confirmTagRebuild() {
+        if (!uiAlive()) return;
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("重建标签索引")
+                .setMessage("默认按增量补齐（快，不动已有索引）。\n"
+                        + "「强制重建」会先清空标签行再从头跑，耗时很长，只在怀疑索引与数据不一致时用。")
+                .setPositiveButton("增量补齐", (d, w) -> rebuildTagIndex(false))
+                .setNeutralButton("强制重建", (d, w) -> rebuildTagIndex(true))
+                .setNegativeButton("取消", null).show();
+    }
+
+    private void rebuildTagIndex(boolean force) {
+        Map<String, String> p = HomeFragment.map("slug", "", "force", String.valueOf(force));
+        VodSyncApi.get().post(com.lateshow.app.util.ApiPaths.MAINTENANCE_TAG_INDEX, p,
+                Models.TagIndexRebuildResp.class, new VodSyncApi.ApiCb<Models.TagIndexRebuildResp>() {
+            @Override public void onOk(Models.TagIndexRebuildResp r) {
+                if (!uiAlive()) return;
+                toast(r != null && r.msg != null && !r.msg.isEmpty()
+                        ? r.msg
+                        : (r != null && r.accepted ? "回填任务已受理" : "已有同类任务在执行，本次未重复提交"));
+                loadTagIndex();
+            }
+            @Override public void onErr(String m) { if (uiAlive()) toast(m); }
+        });
     }
 
     // ==================== ⑨ 明星词库 ====================

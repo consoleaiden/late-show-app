@@ -11,9 +11,14 @@ import java.util.Set;
  * 客户端用它决定能不能使用新版参数（例如 {@code tag_search}），避免「后端还没上、前端已经发新参数」
  * 或「后端已经上、旧客户端按老契约解析」的错配。
  *
- * <p>判定策略（双保险，后端只要满足其一即可）：
- * 1) capabilities 显式包含该能力；
- * 2) 版本号达到该能力约定的最低版本（见 {@link #MIN_VERSION_FOR_CAP}）。
+ * <p>判定策略（B-10 修订）：
+ * 1) 服务端下发了非空 {@code capabilities} → **以它为准**，不含该能力就是不支持；
+ * 2) 服务端没下发 {@code capabilities}（老版本只给 version）→ 回退按版本号判断
+ *    （见 {@link #MIN_VERSION_FOR_CAP}）。
+ *
+ * <p>为什么不再「两者取或」：后端修复问题时可以把能力从清单里摘掉（例如标签索引
+ * 覆盖不足时摘 {@code tag_search}），但如果客户端还拿版本号兜底，摘了等于没摘——
+ * 客户端照样发新参数。能力清单是服务端的显式承诺，必须优先于版本推断。
  */
 public final class ServerCaps {
 
@@ -43,9 +48,21 @@ public final class ServerCaps {
 
     public static boolean supports(String cap) {
         if (cap == null) return false;
-        if (sCaps.contains(cap)) return true;
+        // 服务端明确给了能力清单：清单即契约，没有就是没有（B-10）
+        if (!sCaps.isEmpty()) return sCaps.contains(cap);
+        // 老服务端只给 version：按能力约定的最低版本推断
         String min = MIN_VERSION_FOR_CAP.get(cap);
         return min != null && !sVersion.isEmpty() && compare(sVersion, min) >= 0;
+    }
+
+    /** 服务端是否显式下发了能力清单（区分「能力为空」与「没有这个字段」） */
+    public static boolean hasCapabilityList() {
+        return !sCaps.isEmpty();
+    }
+
+    /** 供控制台展示：当前生效的能力清单（只读副本） */
+    public static java.util.Set<String> current() {
+        return sCaps;
     }
 
     /** 语义化版本比较，忽略后缀（1.14.0-rc1 → 1.14.0）；非数字段按 0 处理。纯函数，可单测。 */

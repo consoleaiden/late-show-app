@@ -2,6 +2,7 @@ package com.lateshow.app.ui;
 
 import android.os.Bundle;
 import android.text.Editable;
+import android.text.InputFilter;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -54,6 +55,8 @@ public class HomeFragment extends Fragment {
     private String curName = "全部源站";
     private String curCategory = null; // null = 全部
     private String keyword = "";
+    /** metaSync 的默认字色：检索质量提示借用该行，提示消失后要还原 */
+    private int metaSyncColor;
 
     /** 首页视图还没建好时收到「详情页标签快捷搜索」：先存下，onViewCreated 里补上 */
     private String pendingTagKeyword, pendingTagSlug, pendingTagName;
@@ -114,12 +117,19 @@ public class HomeFragment extends Fragment {
         com.lateshow.app.util.LottieIcon.loop(btnSourceIcon, "ic_menu_list");
         com.lateshow.app.util.LottieIcon.loop(v.findViewById(R.id.imgSearch), "ic_search");
         inputSearch = v.findViewById(R.id.inputSearch);
+        // M2：后端 wd / tag 都是 max_length=64，超长会 422 并在界面上糊一段英文错误。
+        // 输入层直接挡住，用户不会先打满再被打回。
+        if (inputSearch != null) {
+            inputSearch.setFilters(new InputFilter[]{
+                    new InputFilter.LengthFilter(com.lateshow.app.api.SyncCatalog.MAX_QUERY_LEN)});
+        }
         setupSearchHistory(v);
         setupSkeleton(v);
         chips = v.findViewById(R.id.chips);
         grid = v.findViewById(R.id.grid);
         metaCount = v.findViewById(R.id.metaCount);
         metaSync = v.findViewById(R.id.metaSync);
+        if (metaSync != null) metaSyncColor = metaSync.getCurrentTextColor();
         emptyView = v.findViewById(R.id.emptyView);
 
         curSlug = PrefStore.get().currentSourceSlug();
@@ -213,9 +223,9 @@ public class HomeFragment extends Fragment {
             curSlug = pendingTagSlug != null ? pendingTagSlug : "";
             curName = pendingTagName != null ? pendingTagName : "全部源站";
             curCategory = null;
-            keyword = pendingTagKeyword;
+            keyword = com.lateshow.app.api.SyncCatalog.clamp(pendingTagKeyword);
             inputSearch.setText(keyword);   // 触发 afterTextChanged → 防抖 reload
-            inputSearch.setSelection(keyword.length());
+            caretToEnd();
             inputSearch.clearFocus();
             // 标签跳转：能力门控就绪时由 SyncCatalog 消费该意图改用 tag 参数（B-01）
             com.lateshow.app.api.SearchIntent.setTag(keyword);
@@ -231,7 +241,7 @@ public class HomeFragment extends Fragment {
      * 复用首页的搜索框 / 分类芯片 / 海报墙，不新建页面；关键词同时记入搜索历史。
      */
     public void searchFromTag(String word, String slug, String sourceName) {
-        final String k = word == null ? "" : word.trim();
+        final String k = com.lateshow.app.api.SyncCatalog.clamp(word);
         if (k.isEmpty()) return;
         final String s = slug == null ? "" : slug;
         final String n = sourceName == null || sourceName.isEmpty()
@@ -257,7 +267,7 @@ public class HomeFragment extends Fragment {
         }
         // 必须在防抖任务执行前设置：SyncCatalog.videos 会消费它决定是否用 tag 参数
         com.lateshow.app.api.SearchIntent.setTag(k);
-        inputSearch.setSelection(k.length());
+        caretToEnd();
         toastShort("在「" + n + "」中搜索：" + k);
     }
 
@@ -390,7 +400,7 @@ public class HomeFragment extends Fragment {
 
     /** 提交搜索：记录历史（去重置顶）→ 收起面板与键盘 → 按关键词重新加载 */
     private void submitSearch(String raw) {
-        String k = raw == null ? "" : raw.trim();
+        String k = clampQuery(raw);
         if (k.isEmpty()) { // 空关键词不记录，仅展示历史
             showHistory();
             return;
@@ -400,7 +410,7 @@ public class HomeFragment extends Fragment {
         hideHistory();
         if (!k.equals(inputSearch.getText().toString().trim())) {
             inputSearch.setText(k); // 触发 afterTextChanged → reload
-            inputSearch.setSelection(k.length());
+            caretToEnd();
         } else {
             keyword = k;
             reload();
@@ -408,7 +418,8 @@ public class HomeFragment extends Fragment {
     }
 
     /** 点击历史 tag：回填关键词并检索（同时把该记录置顶） */
-    private void applyHistory(String k) {
+    private void applyHistory(String k0) {
+        String k = clampQuery(k0);
         PrefStore.get().addSearchHistory(k);
         histPageNo = 0;
         hideKeyboard();
@@ -418,8 +429,27 @@ public class HomeFragment extends Fragment {
             reload();
         } else {
             inputSearch.setText(k); // 触发 afterTextChanged → reload
-            inputSearch.setSelection(k.length());
+            caretToEnd();
         }
+    }
+
+    /**
+     * 检索词归一（M2）：截断到后端 {@code max_length=64} 并给出可视提示。
+     * 输入框已有 {@link InputFilter.LengthFilter} 挡着，这里覆盖「历史记录回填」
+     * 「详情页标签跳转」这类绕过键盘的路径。
+     */
+    private String clampQuery(String raw) {
+        String t = raw == null ? "" : raw.trim();
+        String c = com.lateshow.app.api.SyncCatalog.clamp(t);
+        if (c.length() < t.length()) toastShort("关键词最长 64 字，已截断后检索");
+        return c;
+    }
+
+    /** 光标移到末尾：按实际文本长度算，避免文本被过滤器截断后越界 */
+    private void caretToEnd() {
+        if (inputSearch == null) return;
+        int n = inputSearch.getText() == null ? 0 : inputSearch.getText().length();
+        inputSearch.setSelection(n);
     }
 
     /** 展开历史面板（首次展开回到第一页，已展开时保持当前页） */
@@ -1049,7 +1079,15 @@ public class HomeFragment extends Fragment {
         }
         // 分类接口失败时，用首页数据兜底生成分类
         if (catFailed && reqPage == 1) buildCatsFromItems();
-        emptyView.setVisibility(videoAdapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
+        boolean empty = videoAdapter.getItemCount() == 0;
+        emptyView.setVisibility(empty ? View.VISIBLE : View.GONE);
+        if (empty) {
+            // 空态文案随场景变：检索无结果 ≠ 源站没数据，别让用户以为是后端挂了
+            emptyView.setText(keyword != null && !keyword.isEmpty()
+                    ? "没搜到「" + keyword + "」\n换个关键词，或切回「全部源站」再试"
+                    : "暂无内容\n换个分类或切换源站重试");
+        }
+        if (reqPage == 1) showSearchQuality(r);
         if (fromCache && getContext() != null) {
             metaSync.setText("● 离线缓存 · " + TimeUtil.nowHm());
             android.widget.Toast.makeText(getContext(), "网络不可用，显示本地缓存内容",
@@ -1057,8 +1095,34 @@ public class HomeFragment extends Fragment {
         }
     }
 
-    private CardItem toCard(Models.VideoSummary v) {
-        CardItem c = new CardItem();
+    /**
+     * 检索质量提示（M5 + F4）。占用 metaSync 那一行，比再插一条横幅省空间：
+     * <ul>
+     *   <li>标签索引没覆盖该词、已自动改用全文检索 → 说明这次是全文结果；</li>
+     *   <li>有源站超时 / 被单源上限截断 → 说明结果不完整，别让用户以为「就这么多」。</li>
+     * </ul>
+     */
+    private void showSearchQuality(Models.VideoListResp r) {
+        if (metaSync == null || r == null || getContext() == null) return;
+        boolean searching = keyword != null && !keyword.isEmpty();
+        if (r.fullTextFallback) {
+            metaSync.setTextColor(getResources().getColor(R.color.warn, null));
+            metaSync.setText("● 标签未收录该词 · 已改用全文检索");
+            toastShort("标签索引未覆盖该词，已自动改用全文检索");
+            return;
+        }
+        if (searching && r.partial()) {
+            int failed = r.failedSourceCount();
+            metaSync.setTextColor(getResources().getColor(R.color.warn, null));
+            metaSync.setText(failed > 0
+                    ? "● 结果可能不完整 · " + failed + " 个源站未响应"
+                    : "● 结果可能不完整 · 部分源站被截断");
+            return;
+        }
+        metaSync.setTextColor(metaSyncColor);
+    }
+
+    private CardItem toCard(Models.VideoSummary v) {        CardItem c = new CardItem();
         c.kind = CardItem.KIND_HOME;
         c.slug = v.source;
         String name = v.sourceName != null && !v.sourceName.isEmpty() ? v.sourceName : null;
