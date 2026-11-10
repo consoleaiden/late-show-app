@@ -17,8 +17,6 @@ import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 
-import com.google.gson.Gson;
-import com.google.gson.annotations.SerializedName;
 import com.lateshow.app.BuildConfig;
 
 import java.io.File;
@@ -27,7 +25,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -54,7 +51,6 @@ public final class UpdateChecker {
     public static final String API_LATEST = "https://api.github.com/repos/" + REPO + "/releases/latest";
     public static final String RELEASES_PAGE = "https://github.com/" + REPO + "/releases";
 
-    private static final Gson GSON = new Gson();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .dns(com.lateshow.app.api.SmartDns.INSTANCE)
@@ -73,13 +69,37 @@ public final class UpdateChecker {
             .callTimeout(150, TimeUnit.SECONDS)
             .build();
 
-    /** 备用加速线路；仅加速，完整性由 digest + 签名证书保证 */
+    /**
+     * 选线路用：只取前 2 个字节，超时压到 6~8 秒。
+     * 没有这一层时，一条挂掉的镜像要等满 connect/read 超时（12+45 秒）才轮到下一条，
+     * 用户看到的就是「进度条卡住不动」。
+     */
+    private static final OkHttpClient PROBE = new OkHttpClient.Builder()
+            .dns(com.lateshow.app.api.SmartDns.INSTANCE)
+            .followRedirects(true)
+            .followSslRedirects(false)
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
+            .callTimeout(8, TimeUnit.SECONDS)
+            .build();
+
+    /**
+     * 下载加速线路（用户实测可用，顺序＝优先尝试顺序）。
+     *
+     * <p>用法是「前缀 + 完整 GitHub 直链」，例如：
+     * {@code https://ghproxy.net/https://github.com/owner/repo/releases/download/v1.5.110/xx.apk}。
+     *
+     * <p>安全性：镜像只负责搬运字节，完整性由 Release 的 SHA-256 digest + 安装包签名证书
+     * 双重校验（见 {@link #fetch} 与 {@link #verifyApkIdentity}）。即使镜像返回了被篡改的
+     * 内容，也会在安装前被拒绝并自动切下一条线路，不会装进用户手机。
+     */
     private static final String[] MIRRORS = {
             "https://gh-proxy.com/",
-            "https://ghps.cc/",
-            "https://ghproxy.net/",
-            "https://ghfast.top/"
+            "https://ghfast.top/",
+            "https://ghproxy.net/"
     };
+
+    private static final String UA = "Mozilla/5.0 (Linux; Android) LateShow-App";
 
     private UpdateChecker() { }
 
@@ -103,20 +123,11 @@ public final class UpdateChecker {
         void onResult(Info info, String error);
     }
 
-    private static class Release {
-        @SerializedName("tag_name") String tagName;
-        @SerializedName("html_url") String htmlUrl;
-        String body;
-        List<Asset> assets;
-    }
-
-    private static class Asset {
-        String name;
-        @SerializedName("browser_download_url") String downloadUrl;
-        long size;
-        /** GitHub 自 2023 起为 asset 提供，例如 "sha256:ab12..." */
-        String digest;
-    }
+    /**
+     * 解析 GitHub Release 的活交给 {@link ReleaseReader}：它用 JsonObject 显式取值，
+     * 不依赖 Gson 反射，R8 改名不会再把 {@code assets} 弄丢
+     * （v1.5.107~111「检测到更新但没有可下载的 APK」的根因，详见该类注释）。
+     */
 
     /** 检查更新（子线程请求，回调在主线程） */
     public static void check(final Cb cb) {
@@ -132,28 +143,20 @@ public final class UpdateChecker {
                         fail(cb, "GitHub 返回 HTTP " + r.code());
                         return;
                     }
-                    Release rel = GSON.fromJson(r.body().string(), Release.class);
-                    if (rel == null || TextUtils.isEmpty(rel.tagName)) {
+                    ReleaseReader.Release rel = ReleaseReader.read(r.body().string());
+                    if (rel == null || TextUtils.isEmpty(rel.version)) {
                         fail(cb, "尚未发布任何版本");
                         return;
                     }
-                    String latest = rel.tagName;
-                    if (latest.startsWith("v") || latest.startsWith("V")) latest = latest.substring(1);
+                    String latest = rel.version;
 
                     Info info = new Info();
                     info.version = latest;
-                    info.notes = rel.body != null ? rel.body : "";
-                    info.pageUrl = rel.htmlUrl;
-                    if (rel.assets != null) {
-                        for (Asset a : rel.assets) {
-                            if (a.name != null && a.name.endsWith(".apk")) {
-                                info.apkUrl = a.downloadUrl;
-                                info.size = a.size;
-                                info.digest = a.digest;
-                                break;
-                            }
-                        }
-                    }
+                    info.notes = rel.notes;
+                    info.pageUrl = rel.pageUrl;
+                    info.apkUrl = rel.apkUrl;
+                    info.size = rel.size;
+                    info.digest = rel.digest;
                     boolean newer = isNewer(latest, BuildConfig.VERSION_NAME);
                     final Info out = newer ? info : null;
                     MAIN.post(() -> cb.onResult(out, null));
@@ -194,10 +197,12 @@ public final class UpdateChecker {
         return out;
     }
 
-    /** 下载 APK 并唤起系统安装器（带进度条；直连失败自动切换加速线路） */
+    /** 下载 APK 并唤起系统安装器（带进度条；加速线路优先，逐条失败自动切换） */
     public static void downloadAndInstall(final Activity act, final Info info) {
         if (info == null || TextUtils.isEmpty(info.apkUrl)) {
-            Toast.makeText(act, "该版本没有可下载的 APK", Toast.LENGTH_SHORT).show();
+            // 拿不到直链（例如 Release 只上传了校验文件）：别让用户卡死，直接打开发布页
+            Toast.makeText(act, "未获取到安装包直链，正在打开发布页…", Toast.LENGTH_SHORT).show();
+            openReleasePage(act, info);
             return;
         }
         if (act.isFinishing() || act.isDestroyed()) return;
@@ -210,18 +215,22 @@ public final class UpdateChecker {
             if (!dir.exists()) //noinspection ResultOfMethodCallIgnored
                 dir.mkdirs();
             final File out = new File(dir, "late-show-update.apk");
+            // 先花 2~8 秒探出「此刻真能连上的那条线路」，再整包下载：
+            // 比「死线路下到一半超时再换」快得多，用户也不会看到长时间 0%
             String[] urls = buildUrlCandidates(info.apkUrl);
+            String picked = urls.length > 1 ? pickReachable(urls) : null;
+            final String[] order = reorder(urls, picked);
             String lastErr = "未知错误";
-            for (int i = 0; i < urls.length; i++) {
+            for (int i = 0; i < order.length; i++) {
                 final int idx = i;
                 MAIN.post(() -> {
                     if (!act.isFinishing() && !act.isDestroyed()) {
-                        d.setMessage(idx == 0 ? "直连 GitHub…"
-                                : "切换线路 " + idx + "/" + (urls.length - 1) + "…");
+                        d.setMessage((idx == 0 ? "正在连接 " : "切换线路（" + (idx + 1) + "/"
+                                + order.length + "）") + label(order[idx]) + "…");
                     }
                 });
                 try {
-                    fetch(urls[i], out, d, info);
+                    fetch(order[i], out, d, info);
                     // 下载完成后再校验包名与签名证书（摘要校验已在 fetch 内完成）
                     if (!verifyApkIdentity(act, out)) {
                         lastErr = "安装包签名或包名与当前应用不一致，已拒绝安装";
@@ -249,11 +258,57 @@ public final class UpdateChecker {
         }).start();
     }
 
+    /**
+     * 候选顺序：加速镜像在前，官方直链兜底。
+     * 国内直连 {@code release-assets.githubusercontent.com} 经常被限速甚至连不上，
+     * 而镜像只是把同一个 URL 的字节转发回来（完整性由 digest + 签名校验保证），
+     * 所以默认先走镜像；镜像全挂了才回官方。
+     */
     private static String[] buildUrlCandidates(String apkUrl) {
-        String[] out = new String[1 + MIRRORS.length];
-        out[0] = apkUrl;
-        for (int i = 0; i < MIRRORS.length; i++) out[i + 1] = MIRRORS[i] + apkUrl;
+        String[] out = new String[MIRRORS.length + 1];
+        for (int i = 0; i < MIRRORS.length; i++) out[i] = MIRRORS[i] + apkUrl;
+        out[MIRRORS.length] = apkUrl;
         return out;
+    }
+
+    /** 用 Range: bytes=0-1 探一条线路是否真的能出数据；不读正文，探完立刻断开 */
+    private static String pickReachable(String[] urls) {
+        for (String u : urls) {
+            Request req = new Request.Builder()
+                    .url(u)
+                    .header("User-Agent", UA)
+                    .header("Range", "bytes=0-1")
+                    .build();
+            try (Response r = PROBE.newCall(req).execute()) {
+                if (r.isSuccessful() || r.code() == 206) return u;
+            } catch (Exception ignored) {
+                // 这条不通，试下一条
+            }
+        }
+        return null;
+    }
+
+    /** 把探测命中的线路排到第一位，其余保持原顺序 */
+    private static String[] reorder(String[] urls, String first) {
+        if (first == null) return urls;
+        String[] out = new String[urls.length];
+        out[0] = first;
+        int j = 1;
+        for (String u : urls) if (!u.equals(first)) out[j++] = u;
+        return out;
+    }
+
+    /** 进度文案用的线路名：镜像显示域名，官方直链显示「GitHub 直连」 */
+    private static String label(String url) {
+        try {
+            String host = Uri.parse(url).getHost();
+            if (host == null) return "线路";
+            String h = host.toLowerCase(Locale.US);
+            if (h.equals("github.com") || h.endsWith(".github.com")) return "GitHub 直连";
+            return host;
+        } catch (Exception e) {
+            return "线路";
+        }
     }
 
     /**
@@ -263,7 +318,7 @@ public final class UpdateChecker {
     private static void fetch(String url, File out, ProgressDialog d, Info info) throws IOException {
         Request req = new Request.Builder()
                 .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android) LateShow-App")
+                .header("User-Agent", UA)
                 .header("Accept", "application/octet-stream,application/vnd.android.package-archive,*/*")
                 .build();
         try (Response r = DOWNLOAD.newCall(req).execute()) {

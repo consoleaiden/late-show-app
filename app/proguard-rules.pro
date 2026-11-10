@@ -4,6 +4,10 @@
 -keep class com.lateshow.app.store.PrefStore$FavItem { *; }
 -keep class com.lateshow.app.store.PrefStore$HistItem { *; }
 -keep class com.lateshow.app.store.PrefStore$SavedSource { *; }
+# 检查更新：GitHub Release JSON 已改为 JsonObject 显式取值（util/ReleaseReader），
+# 不再依赖反射映射，这里无需 keep；保留下面这条注释是为了防止有人改回 POJO 反射。
+# 本地缓存信封：字段名参与落盘 JSON，保证升级后旧缓存仍能读出来
+-keep class com.lateshow.app.util.ApiCache$Wrapper { *; }
 -keepclassmembers,allowobfuscation class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
