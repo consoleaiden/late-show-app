@@ -100,11 +100,15 @@ public class PlayerActivity extends AppCompatActivity {
 
         pv = findViewById(R.id.playerView);
 
-        // 播放源站多为 m3u8 直链，不带 Referer（见 API 文档 §9.7/9.8）
+        // 播放源站多为 m3u8 直链，不带 Referer（见 API 文档 §9.7/9.8）；
+        // 真机实测（2026-11-10）：源站 CDN 对 ExoPlayer 默认 UA 返回 403，统一带浏览器 UA
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(10000)
-                .setReadTimeoutMs(30000);
+                .setReadTimeoutMs(30000)
+                .setUserAgent(com.lateshow.app.util.PlayHeaders.UA);
+        httpFactory.setDefaultRequestProperties(
+                com.lateshow.app.util.PlayHeaders.props(url, false));
 
         player = new ExoPlayer.Builder(this)
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
@@ -158,6 +162,7 @@ public class PlayerActivity extends AppCompatActivity {
         });
 
         streamUrl = com.lateshow.app.api.VodSyncApi.get().decorate(url);
+        com.lateshow.app.util.PlayHeaders.diag("fullscreen play " + streamUrl + " startMs=" + startMs);
         MediaItem mi = MediaItem.fromUri(streamUrl);
         player.setMediaItem(mi, Math.max(0, startMs));
         player.prepare();
@@ -184,9 +189,20 @@ public class PlayerActivity extends AppCompatActivity {
                         // 已知总时长，立即补一条总时长
                         saveProgress(player.getCurrentPosition() / 1000, dur);
                     }
+                    // 黑屏自愈：画面容器偶发 0x0（有声音没画面）时强制重排一次
+                    if (pv.getWidth() == 0 || pv.getHeight() == 0) {
+                        com.lateshow.app.util.PlayHeaders.diag("ready but pv 0x0 -> relayout");
+                        pv.requestLayout();
+                    }
                 } else if (state == Player.STATE_ENDED) {
                     saveProgress(player.getDuration() / 1000, player.getDuration() / 1000);
                 }
+            }
+
+            @Override
+            public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                com.lateshow.app.util.PlayHeaders.diag("error " + error.getErrorCodeName()
+                        + " stream=" + streamUrl);
             }
 
             @Override

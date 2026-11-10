@@ -233,6 +233,10 @@ public class DetailFragment extends Fragment {
     private TextView seekOverlay;
     private View playerContainer;
     private String curUrl;
+    /** 播放数据源工厂（ UA / Referer 防盗链重试时需要按次更新默认请求头） */
+    private DefaultHttpDataSource.Factory httpFactory;
+    /** 本次播放是否已带 Referer 重试过：UA 防盗链（真机实测 403）的兜底 */
+    private boolean headerRetry;
     private final Handler saveHandler = new Handler(Looper.getMainLooper());
 
     /** 全屏播放返回后带回进度，无缝续播内嵌播放 */
@@ -1952,6 +1956,7 @@ public class DetailFragment extends Fragment {
         curUrl = url;
         inlineActive = true;
         triedHtmlResolve = false;
+        headerRetry = false;
         // 播放器盖在海报之上（海报不隐藏在下面）：收起时播放器淡出，露出的仍是那面海报
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.setAlpha(1f);
@@ -1973,10 +1978,13 @@ public class DetailFragment extends Fragment {
         // 点「播放」时页面通常停在简介/选集处，滚回顶部让画面可见，否则会以为没播
         scrollPlay.smoothScrollTo(0, 0);
         if (player == null) {
-            DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+            httpFactory = new DefaultHttpDataSource.Factory()
                     .setAllowCrossProtocolRedirects(true)
                     .setConnectTimeoutMs(10000)
-                    .setReadTimeoutMs(30000);
+                    .setReadTimeoutMs(30000)
+                    // 真机实测（2026-11-10）：源站 CDN 对 ExoPlayer 默认 UA 返回 403，
+                    // 浏览器 UA 可正常访问 —— 播放请求统一带浏览器 UA
+                    .setUserAgent(com.lateshow.app.util.PlayHeaders.UA);
             player = new ExoPlayer.Builder(requireContext())
                     .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
                     .build();
@@ -2005,7 +2013,21 @@ public class DetailFragment extends Fragment {
                     updatePlayLabel();
                     syncKeepScreenOn();
                 }
+                // 黑屏自愈：首帧已渲染但画面容器仍 0x0（偶发：容器可见后未触发重排），
+                // 立即按目标高度强制重排一次，避免「有声音没画面」
+                @Override public void onRenderedFirstFrame() {
+                    if (playerView != null && (playerView.getWidth() == 0 || playerView.getHeight() == 0)) {
+                        com.lateshow.app.util.PlayHeaders.diag(
+                                "firstFrame but playerView " + playerView.getWidth() + "x"
+                                        + playerView.getHeight() + " -> force relayout");
+                        setPlayerTopInset(statusBarInsetPx());
+                        setHeroHeight(statusBarInsetPx() + playerHeightPx(), false);
+                        playerView.requestLayout();
+                    }
+                }
                 @Override public void onPlayerError(PlaybackException error) {
+                    com.lateshow.app.util.PlayHeaders.diag("error " + error.getErrorCodeName()
+                            + " raw=" + curRawUrl + " stream=" + curPlayUrl);
                     // 有些源站的 "播放地址" 其实是一个网页播放页，ExoPlayer 拿到 HTML 必然失败：
                     // 先尝试从页面里把真正的 m3u8 抠出来重试一次，还不行才提示（并建议换线路）
                     if (!triedHtmlResolve && isPlayPage(curRawUrl)) {
@@ -2013,22 +2035,44 @@ public class DetailFragment extends Fragment {
                         resolvePlayPage(curRawUrl, curStartMs);
                         return;
                     }
+                    // UA 防盗链兜底：首次失败（典型 403）带同源 Referer 重试一次
+                    if (!headerRetry) {
+                        headerRetry = true;
+                        com.lateshow.app.util.PlayHeaders.diag("retry with Referer " + curPlayUrl);
+                        playUrl(curRawUrl, curStartMs);
+                        return;
+                    }
                     toast("播放失败：" + describe(error) + "，可试试切换线路");
+                    // 失败不再停留在「播放中」的空壳态：收起播放器、恢复海报（真机截图 1 的灰屏）
+                    leaveInline();
                 }
             });
             attachSeekGesture();
             saveHandler.postDelayed(saveTick, 5000);
         }
         playUrl(url, startMs);
+        // 排障（真机 2026-11-10「有声音没画面」）：记录容器可见后的实际尺寸，
+        // 若下一帧仍是 0x0 说明重排被跳过，配合 onRenderedFirstFrame 的自愈兜底
+        if (playerView != null) {
+            playerView.post(() -> com.lateshow.app.util.PlayHeaders.diag(
+                    "inline layout hero=" + (heroWrap != null ? heroWrap.getHeight() : -1)
+                            + " container=" + (playerContainer != null ? playerContainer.getWidth() + "x" + playerContainer.getHeight() : "null")
+                            + " pv=" + playerView.getWidth() + "x" + playerView.getHeight()));
+        }
     }
 
     /** 真正下发给播放器的地址：网页播放页先归一化成直链（见 {@link #guessStreamUrl}） */
     private void playUrl(String rawUrl, long startMs) {
-        if (player == null) return;
+        if (player == null || httpFactory == null) return;
         curRawUrl = rawUrl;
         curStartMs = startMs;
         curPlayUrl = guessStreamUrl(rawUrl);
         String playUrl = VodSyncApi.get().decorate(curPlayUrl);
+        // 防盗链重试：首次失败后带同源 Referer 再请求一次（UA 已固定浏览器标识）
+        httpFactory.setDefaultRequestProperties(
+                com.lateshow.app.util.PlayHeaders.props(curPlayUrl, headerRetry));
+        com.lateshow.app.util.PlayHeaders.diag("play " + playUrl
+                + " startMs=" + startMs + " referer=" + headerRetry);
         // 切换线路 / 自动连播换集时，地址条同步显示真正在播的直链
         com.lateshow.app.util.StreamBar.bind(getView(), playUrl);
         player.setMediaItem(MediaItem.fromUri(playUrl), Math.max(0, startMs));
@@ -2118,7 +2162,7 @@ public class DetailFragment extends Fragment {
         if (e == null) return "未知错误";
         switch (e.errorCode) {
             case PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS:
-                return "地址返回异常";
+                return "源站拒绝访问（403 防盗链或地址失效）";
             case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED:
                 return "网络连接失败";
             case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT:
