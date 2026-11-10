@@ -61,6 +61,12 @@ public class HomeFragment extends Fragment {
     /** 首页视图还没建好时收到「详情页标签快捷搜索」：先存下，onViewCreated 里补上 */
     private String pendingTagKeyword, pendingTagSlug, pendingTagName;
 
+    /**
+     * 正在回填标签词：afterTextChanged 默认把「文本变化」当作用户输入、
+     * 回到 wd 全文模式；标签跳转要先立 tag 模式再改文本，用这个标记跳过清除。
+     */
+    private boolean tagJumpInProgress;
+
     /** 列表每页条数：翻页终止条件要拿它和本页实际返回条数比 */
     private static final int PAGE_SIZE = 18;
 
@@ -209,8 +215,9 @@ public class HomeFragment extends Fragment {
             @Override public void afterTextChanged(Editable s) {
                 keyword = s.toString().trim();
                 if (!keyword.isEmpty()) hideHistory(); // 输入中收起历史，把空间让给结果列表
-                // 普通输入不是标签跳转：清掉可能残留的一次性标签意图
-                com.lateshow.app.api.SearchIntent.clear();
+                // 普通输入 = 搜索框检索，一律回到 wd= 全文模式（后端约定）；
+                // 标签跳转会在回填文本前把 tagJumpInProgress 置位，跳过这里的清除
+                if (!tagJumpInProgress) com.lateshow.app.api.SearchIntent.clear();
                 if (suppressSearchReload) return;   // 代码回填不再触发一次重载（A-27）
                 scheduleReload();
             }
@@ -224,11 +231,13 @@ public class HomeFragment extends Fragment {
             curName = pendingTagName != null ? pendingTagName : "全部源站";
             curCategory = null;
             keyword = com.lateshow.app.api.SyncCatalog.clamp(pendingTagKeyword);
+            // 先立标签模式再回填文本：afterTextChanged 见到 tagJumpInProgress 就不会清掉它
+            tagJumpInProgress = true;
+            com.lateshow.app.api.SearchIntent.setTag(keyword);
             inputSearch.setText(keyword);   // 触发 afterTextChanged → 防抖 reload
+            tagJumpInProgress = false;
             caretToEnd();
             inputSearch.clearFocus();
-            // 标签跳转：能力门控就绪时由 SyncCatalog 消费该意图改用 tag 参数（B-01）
-            com.lateshow.app.api.SearchIntent.setTag(keyword);
             pendingTagKeyword = null;
         }
 
@@ -260,13 +269,16 @@ public class HomeFragment extends Fragment {
         hideHistory();
         hideKeyboard();
         keyword = k;
+        // 标签胶囊点击 = 精确标签检索（后端约定：走 tag=，索引里有就必命中）。
+        // 先立模式再回填文本，避免 afterTextChanged 把它当普通输入清掉
+        tagJumpInProgress = true;
+        com.lateshow.app.api.SearchIntent.setTag(k);
         if (!k.equals(inputSearch.getText().toString().trim())) {
             inputSearch.setText(k);          // afterTextChanged → 防抖 reload
         } else {
             scheduleReload();                // 同关键词也要重新按新源站加载
         }
-        // 必须在防抖任务执行前设置：SyncCatalog.videos 会消费它决定是否用 tag 参数
-        com.lateshow.app.api.SearchIntent.setTag(k);
+        tagJumpInProgress = false;
         caretToEnd();
         toastShort("在「" + n + "」中搜索：" + k);
     }
@@ -408,6 +420,9 @@ public class HomeFragment extends Fragment {
         PrefStore.get().addSearchHistory(k);
         hideKeyboard();
         hideHistory();
+        // 搜索框输入一律走 wd= 全文检索（后端约定）：先退出标签模式，
+        // 否则关键词与上次点的标签相同时会继续按 tag= 查
+        com.lateshow.app.api.SearchIntent.clear();
         if (!k.equals(inputSearch.getText().toString().trim())) {
             inputSearch.setText(k); // 触发 afterTextChanged → reload
             caretToEnd();
@@ -424,6 +439,7 @@ public class HomeFragment extends Fragment {
         histPageNo = 0;
         hideKeyboard();
         hideHistory();
+        com.lateshow.app.api.SearchIntent.clear();   // 历史词 = 全文检索，同上
         if (k.equals(inputSearch.getText().toString().trim())) {
             keyword = k;
             reload();
@@ -1053,10 +1069,15 @@ public class HomeFragment extends Fragment {
             });
     }
 
-    /** 列表缓存 key：模式 + 源站 + 分类 + 关键词 + 页码（第 1 页才落盘） */
+    /** 列表缓存 key：模式 + 源站 + 分类 + 检索模式 + 关键词 + 页码（第 1 页才落盘） */
     private String listCacheKey(int p) {
+        // 同一个词可能是「标签检索」也可能是「全文检索」，结果集完全不同，
+        // 必须在 key 里区分，否则点标签会直接命中上次全文搜索的缓存（M5）
+        String tag = com.lateshow.app.api.SearchIntent.currentTag();
+        String mode = tag.isEmpty() ? "wd" : "tag:" + tag;
         return "videos|" + com.lateshow.app.api.Catalogs.cacheTag() + "|" + curSlug
                 + "|" + (curCategory == null ? "" : curCategory)
+                + "|" + mode
                 + "|" + keyword + "|" + p;
     }
 
@@ -1081,12 +1102,7 @@ public class HomeFragment extends Fragment {
         if (catFailed && reqPage == 1) buildCatsFromItems();
         boolean empty = videoAdapter.getItemCount() == 0;
         emptyView.setVisibility(empty ? View.VISIBLE : View.GONE);
-        if (empty) {
-            // 空态文案随场景变：检索无结果 ≠ 源站没数据，别让用户以为是后端挂了
-            emptyView.setText(keyword != null && !keyword.isEmpty()
-                    ? "没搜到「" + keyword + "」\n换个关键词，或切回「全部源站」再试"
-                    : "暂无内容\n换个分类或切换源站重试");
-        }
+        if (empty) emptyView.setText(emptyHint(r));
         if (reqPage == 1) showSearchQuality(r);
         if (fromCache && getContext() != null) {
             metaSync.setText("● 离线缓存 · " + TimeUtil.nowHm());
@@ -1096,19 +1112,42 @@ public class HomeFragment extends Fragment {
     }
 
     /**
+     * 空态文案：分清三种「没有」，别让用户把「这个标签在当前源站没片」当成后端挂了。
+     * <ul>
+     *   <li>标签检索 · 索引里没这个词（且全文也没兜到）→ 建议换词；</li>
+     *   <li>标签检索 · 索引命中了但当前筛选下为空 → 建议切源站/换分类；</li>
+     *   <li>普通浏览 / 全文检索 → 原有文案。</li>
+     * </ul>
+     */
+    private String emptyHint(Models.VideoListResp r) {
+        String tag = com.lateshow.app.api.SearchIntent.currentTag();
+        if (!tag.isEmpty() && r != null && Boolean.FALSE.equals(r.tagFound)) {
+            return "标签「" + tag + "」暂未收录\n已经用全文检索找过，换个关键词试试";
+        }
+        if (!tag.isEmpty()) {
+            return "「" + tag + "」在" + curName + "下暂无内容\n试试切回「全部源站」或换个分类";
+        }
+        if (keyword != null && !keyword.isEmpty()) {
+            return "没搜到「" + keyword + "」\n换个关键词，或切回「全部源站」再试";
+        }
+        return "暂无内容\n换个分类或切换源站重试";
+    }
+
+    /**
      * 检索质量提示（M5 + F4）。占用 metaSync 那一行，比再插一条横幅省空间：
      * <ul>
-     *   <li>标签索引没覆盖该词、已自动改用全文检索 → 说明这次是全文结果；</li>
+     *   <li>标签索引没有该词、已自动改用全文检索 → 说明这次是全文结果；</li>
      *   <li>有源站超时 / 被单源上限截断 → 说明结果不完整，别让用户以为「就这么多」。</li>
      * </ul>
      */
     private void showSearchQuality(Models.VideoListResp r) {
         if (metaSync == null || r == null || getContext() == null) return;
+        String tag = com.lateshow.app.api.SearchIntent.currentTag();
         boolean searching = keyword != null && !keyword.isEmpty();
-        if (r.fullTextFallback) {
+        if (r.fullTextFallback && r.total > 0) {
             metaSync.setTextColor(getResources().getColor(R.color.warn, null));
-            metaSync.setText("● 标签未收录该词 · 已改用全文检索");
-            toastShort("标签索引未覆盖该词，已自动改用全文检索");
+            metaSync.setText("● 标签「" + (tag.isEmpty() ? keyword : tag) + "」未收录 · 已改用全文检索");
+            toastShort("标签索引未收录该词，已自动改用全文检索");
             return;
         }
         if (searching && r.partial()) {

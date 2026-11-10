@@ -12,12 +12,12 @@ import java.util.Map;
  * 审计 A-30 / B-01：标签检索按后端能力门控。后端 capabilities 含 {@code tag_search}
  * 时，标签点击走精确的 {@code tag} 参数；否则退化为原有的 {@code wd} 全文检索。
  *
- * <p>M2 / M5（2026-11-10 接口核对）：
+ * <p>M2 / M5（2026-11-10 与后端对齐）：
  * <ul>
  *   <li>后端 {@code wd}/{@code tag} 都是 {@code max_length=64}，超长直接 422，
  *       所以所有检索词在这里统一截断，UI 层再给一次可视提示；</li>
- *   <li>tag 索引覆盖不足时后端会返回 {@code tag_found=false} 且 0 条，
- *       客户端自动用同词的全文检索兜一次，避免「明明有片却搜不到」。</li>
+ *   <li>标签胶囊点击走 {@code tag=}（索引命中的词必命中），搜索框输入始终走 {@code wd=}；
+ *       只有后端明确回 {@code tag_found=false} 时才用同词全文检索兜一次。</li>
  * </ul>
  */
 public final class SyncCatalog implements Catalog {
@@ -56,14 +56,18 @@ public final class SyncCatalog implements Catalog {
         if (slug != null && !slug.isEmpty()) params.put("source", slug);
         if (typeName != null && !typeName.isEmpty()) params.put("type_name", typeName);
 
-        // 一次性标签意图：能力就绪时改用 tag 参数，不再把标签当全文关键词（B-01）
-        final String tag = clamp(SearchIntent.consumeTag());
+        // 标签模式是「粘性状态」而不是一次性意图：翻页时仍要带同一个 tag，
+        // 否则第 2 页会退回 wd=，出现两页结果口径不一致（M5 对齐后端约定）
+        final String tag = clamp(SearchIntent.currentTag());
         final boolean tagMode = !tag.isEmpty() && ServerCaps.supports(ServerCaps.CAP_TAG_SEARCH);
 
         final String path;
         if (tagMode) {
             params.put("tag", tag);
-            path = ApiPaths.SEARCH;
+            // tag 是本地标签索引上的过滤条件，走列表接口即可：
+            // 语义与普通浏览一致（同一张表、同一套分页），且完整支持 source / type_name 过滤；
+            // 走 /search 只会额外背上一堆聚合字段，对 tag 检索没有意义。
+            path = ApiPaths.VIDEOS;
         } else if (searching) {
             params.put("wd", kw);
             path = ApiPaths.SEARCH;
@@ -89,21 +93,22 @@ public final class SyncCatalog implements Catalog {
     }
 
     /**
-     * tag 模式的自愈层（M5）：标签索引没覆盖该词时（{@code tag_found=false} 或 0 条），
-     * 用同一个词再走一次 {@code ?wd=} 全文检索，并给结果打上
-     * {@link Models.VideoListResp#fullTextFallback} 让 UI 说明「这次是全文检索的结果」。
+     * tag 模式的自愈层（M5，按后端约定实现）：只在后端明确回 {@code tag_found=false}
+     * （索引里没有这个词）时，用同一个词再走一次 {@code ?wd=} 全文检索，并给结果打上
+     * {@link Models.VideoListResp#fullTextFallback}，让 UI 说明「这次是全文检索的结果」。
      *
-     * <p>为什么放在客户端而不是等后端补数据：后端补齐 658 万条标签要时间，期间用户
-     * 点标签就是「搜不到」。多一次请求换「一定能搜到」，这笔账划算；回退也只发生在
-     * 标签结果为空的场景，正常命中时零额外开销。
+     * <p><b>为什么不是「0 条就回退」</b>：{@code tag_found=true} 但结果为 0，是「标签存在、
+     * 只是当前筛选（源站/分类）下没有片」——这是真实结论，回退到全文检索会跨源站
+     * 塞进一堆无关结果，比空列表更误导。后端给的判据是 {@code tag_found}，就只认它。
+     *
+     * <p>老后端不返回该字段时，退化为「0 条即回退」，保证前后端版本错配也不会白屏。
      */
     private static VodSyncApi.ApiCb<Models.VideoListResp> tagFallbackCb(
             final String tag, final Map<String, String> base,
             final VodSyncApi.ApiCb<Models.VideoListResp> cb) {
         return new VodSyncApi.ApiCb<Models.VideoListResp>() {
             @Override public void onOk(Models.VideoListResp r) {
-                boolean empty = r == null || r.total <= 0;
-                if (!empty) { cb.onOk(r); return; }
+                if (!tagMissed(r)) { cb.onOk(r); return; }
 
                 Map<String, String> p = new HashMap<>(base);
                 p.remove("tag");
@@ -114,15 +119,31 @@ public final class SyncCatalog implements Catalog {
                         if (r2 != null && r2.total > 0) {
                             r2.fullTextFallback = true;
                             cb.onOk(r2);
+                        } else if (r != null) {
+                            r.fullTextFallback = true;   // 全文也没结果：交给空态文案说明
+                            cb.onOk(r);
                         } else {
-                            cb.onOk(r);       // 兜底也没结果：交回原始（空）结果
+                            cb.onOk(r2);
                         }
                     }
-                    @Override public void onErr(String m) { cb.onOk(r); }
+                    @Override public void onErr(String m) {
+                        if (r != null) { r.fullTextFallback = true; cb.onOk(r); }
+                        else cb.onErr(m);
+                    }
                 });
             }
             @Override public void onErr(String m) { cb.onErr(m); }
         };
+    }
+
+    /**
+     * 后端是否明确表示「标签索引里没有这个词」。
+     * 有 {@code tag_found} 就只认它；没有（老版本后端）才退回「0 条」判断。
+     */
+    private static boolean tagMissed(Models.VideoListResp r) {
+        if (r == null) return true;
+        if (r.tagFound != null) return !r.tagFound;
+        return r.total <= 0 && (r.list == null || r.list.isEmpty());
     }
 
     @Override

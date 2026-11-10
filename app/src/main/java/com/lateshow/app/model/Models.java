@@ -178,13 +178,14 @@ public final class Models {
         @SerializedName("sources_searched") public Integer sourcesSearched;
         @SerializedName("elapsed_ms") public Double elapsedMs;
         /**
-         * true = 本次请求原本走 {@code ?tag=} 精确检索，但标签索引未覆盖该词
-         * （{@code tag_found=false} 且结果为 0），客户端已自动改用 {@code ?wd=} 全文检索。
+         * true = 本次请求原本走 {@code ?tag=} 精确检索，但后端回 {@code tag_found=false}
+         * （标签索引里没有这个词），客户端已自动改用 {@code ?wd=} 全文检索。
          *
-         * <p>后端不返回此字段，是客户端 {@code SyncCatalog} 回退后打的标记，
-         * 声明为 {@code transient} 保证不会被 Gson 反序列化覆盖。
+         * <p>后端不返回此字段，是客户端 {@code SyncCatalog} 回退后打的标记。
+         * 不加 {@code transient}：让首页缓存也带上它，命中缓存时同样能提示
+         * 「这是全文检索结果」，不会因为走缓存而把说明弄丢。
          */
-        public transient boolean fullTextFallback;
+        public boolean fullTextFallback;
         /** 标签检索是否命中索引（后端仅 {@code ?tag=} 请求返回；null = 未用 tag 模式） */
         @SerializedName("tag_found") public Boolean tagFound;
 
