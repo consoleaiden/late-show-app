@@ -392,7 +392,10 @@ public final class UpdateChecker {
             }
             String want = expectedSha256(info.digest);
             if (want != null) {
-                String gotHex = Credentials.sha256Hex(md.digest());
+                // 注意：md.digest() 已经是摘要结果，只需要转十六进制；
+                // 早前误用 Credentials.sha256Hex(md.digest()) 等于又算了一遍摘要，
+                // 导致正确文件也永远校验失败（v1.5.114/115）。
+                String gotHex = DigestUtil.hex(md.digest());
                 if (!want.equalsIgnoreCase(gotHex)) {
                     throw new IOException("SHA-256 校验失败，安装包可能被篡改");
                 }
