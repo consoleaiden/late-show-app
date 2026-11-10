@@ -46,7 +46,23 @@ public class SearchIntentTest {
         SearchIntent.setTag("夜店");
         SearchIntent.clear();
         assertFalse(SearchIntent.isTagMode());
-        assertNull(SearchIntent.currentTag());
+        assertEquals("", SearchIntent.currentTag());
+    }
+
+    /**
+     * 回归：非标签模式下 currentTag() 必须返回空串而不是 null。
+     * v1.5.111/112 因为这里返回 null，首页 listCacheKey() 里 tag.isEmpty() 直接 NPE，
+     * 一启动就崩（AndroidRuntime: Attempt to invoke virtual method 'boolean
+     * java.lang.String.isEmpty()' on a null object reference）。
+     */
+    @Test
+    public void currentTagIsNeverNull() {
+        SearchIntent.clear();
+        assertEquals("", SearchIntent.currentTag());
+        SearchIntent.setTag(null);
+        assertEquals("", SearchIntent.currentTag());
+        SearchIntent.setTag("   ");
+        assertEquals("", SearchIntent.currentTag());
     }
 
     @Test

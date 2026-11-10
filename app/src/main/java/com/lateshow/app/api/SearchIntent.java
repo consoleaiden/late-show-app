@@ -29,9 +29,16 @@ public final class SearchIntent {
         sTag = (tag == null || tag.trim().isEmpty()) ? null : tag.trim();
     }
 
-    /** 读取当前标签（不清除）：翻页与切换筛选靠它保持同一检索模式 */
+    /**
+     * 读取当前标签（不清除）：翻页与切换筛选靠它保持同一检索模式。
+     *
+     * <p><b>永不返回 null</b>：调用方普遍写成 {@code tag.isEmpty()}（缓存 key、空态文案），
+     * 早期版本这里返回 null 导致首页一启动就 NPE 崩溃（v1.5.111/112）。
+     * 「没有标签」用空串表达，语义仍由 {@link #isTagMode()} 判定。
+     */
     public static String currentTag() {
-        return sTag;
+        String t = sTag;
+        return t == null ? "" : t;
     }
 
     public static boolean isTagMode() {
