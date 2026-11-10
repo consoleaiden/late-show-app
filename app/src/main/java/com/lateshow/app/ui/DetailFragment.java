@@ -239,6 +239,8 @@ public class DetailFragment extends Fragment {
     private boolean headerRetry;
     /** 画面绑定自愈的重试次数（见 {@link #healSurfaceStep()}） */
     private int surfaceHealTries;
+    /** 线路兜底已自动切换的次数（地址 404/403 失效时换线路，见 {@link #tryNextLineFallback()}） */
+    private int lineFallbackTries;
     private final Handler saveHandler = new Handler(Looper.getMainLooper());
 
     /** 全屏播放返回后带回进度，无缝续播内嵌播放 */
@@ -1197,6 +1199,7 @@ public class DetailFragment extends Fragment {
                     curLine = pos;
                     curEp = 0;
                     epPage = 0;
+                    lineFallbackTries = 0;   // 用户手动换线路：自动兜底计数复位
                     notifyDataSetChanged();
                     renderEpisodes();
                 });
@@ -1800,6 +1803,7 @@ public class DetailFragment extends Fragment {
 
         // 先写一条历史占位（播放器内会持续更新进度）
         saveProgress(startMs / 1000, h != null ? h.totalSec : 0);
+        lineFallbackTries = 0;   // 用户点播（非自动兜底）：线路兜底计数复位
         startInline(e.url, startMs);
     }
 
@@ -1973,6 +1977,11 @@ public class DetailFragment extends Fragment {
         // 播放器盖在海报之上（海报不隐藏在下面）：收起时播放器淡出，露出的仍是那面海报
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.setAlpha(1f);
+        com.lateshow.app.util.PlayHeaders.diag("inline show vis=" + playerContainer.getVisibility()
+                + " attached=" + playerContainer.isAttachedToWindow()
+                + " rootAttached=" + (getView() != null && getView().isAttachedToWindow())
+                + " hero=" + (heroWrap != null ? heroWrap.getHeight() : -1)
+                + " scrollY=" + (scrollPlay != null ? scrollPlay.getScrollY() : -1));
         // 从 GONE 切到 VISIBLE 的那一帧不一定会立刻重排（真机 2026-11-10 实测：容器保持
         // 0×0，播放器把画面纹理绑在 0 尺寸上 → 有声音没画面）。显式请求一次布局
         playerContainer.requestLayout();
@@ -2064,6 +2073,10 @@ public class DetailFragment extends Fragment {
                         playUrl(curRawUrl, curStartMs);
                         return;
                     }
+                    // 线路兜底（真机 2026-11-10：源站目录已删除 → index.m3u8 恒定 404）：
+                    // 地址失效是「这一条线路的地址过期」，不是视频没资源 —— 自动换到同一集
+                    // 在其它线路的地址，用户无感继续看，成功率远高于直接报错
+                    if (isHttpStatusError(error) && tryNextLineFallback(error)) return;
                     toast("播放失败：" + describe(error) + "，可试试切换线路");
                     // 失败不再停留在「播放中」的空壳态：收起播放器、恢复海报（真机截图 1 的灰屏）
                     leaveInline();
@@ -2114,18 +2127,65 @@ public class DetailFragment extends Fragment {
             playerView.setPlayer(player);
             return;
         }
-        if (surfaceHealTries >= 8) {
-            com.lateshow.app.util.PlayHeaders.diag("surface still 0x0 after " + surfaceHealTries + " tries");
+        if (surfaceHealTries == 0 || surfaceHealTries == 4) {
+            com.lateshow.app.util.PlayHeaders.diag("heal#" + surfaceHealTries
+                    + " pv=0x0 vis=" + (playerContainer != null ? playerContainer.getVisibility() : -1)
+                    + " attached=" + playerView.isAttachedToWindow()
+                    + " shown=" + playerView.isShown()
+                    + " hero=" + (heroWrap != null ? heroWrap.getHeight() : -1)
+                    + " heroLp=" + (heroWrap != null && heroWrap.getLayoutParams() != null
+                        ? heroWrap.getLayoutParams().height : -1)
+                    + " scrollY=" + (scrollPlay != null ? scrollPlay.getScrollY() : -1));
+        }
+        if (surfaceHealTries >= 10) {
+            // 1.2 秒仍量不出尺寸：内嵌画面救不回来（视图树没在布局，或容器被裁成 0），
+            // 直接切全屏播放器 —— 宁可换个界面，也不要「有声音没画面」的黑屏
+            com.lateshow.app.util.PlayHeaders.diag("inline surface dead -> open fullscreen player");
+            fallbackToFullscreen();
             return;
         }
         surfaceHealTries++;
-        // 强制重排：容器从 GONE 切 VISIBLE 后，部分 ROM 不会主动重排该子树
         int inset = statusBarInsetPx();
+        int target = inset + playerHeightPx();
         setPlayerTopInset(inset);
-        setHeroHeight(inset + playerHeightPx(), false);
-        if (playerContainer != null) playerContainer.requestLayout();
-        playerView.requestLayout();
+        if (surfaceHealTries <= 3) {
+            setHeroHeight(target, false);
+            if (playerContainer != null) playerContainer.requestLayout();
+            playerView.requestLayout();
+        } else if (surfaceHealTries <= 7) {
+            // 高度 ±1px 抖动：同值 setLayoutParams 不产生 layout 请求，
+            // 换个值才能真正把「父 → 子」整条测量的脏标记立起来
+            setHeroHeight(target + 1, false);
+            if (heroWrap != null) heroWrap.post(() -> setHeroHeight(target, false));
+        } else {
+            // 摘挂一次 PlayerView：清掉测量缓存，并让 media3 重新建画面纹理
+            if (playerContainer instanceof ViewGroup) {
+                ViewGroup g = (ViewGroup) playerContainer;
+                if (playerView.getParent() == g) {
+                    g.removeView(playerView);
+                    g.addView(playerView, 0);
+                }
+            }
+            if (playerContainer != null) {
+                playerContainer.setVisibility(View.GONE);
+                playerContainer.setVisibility(View.VISIBLE);
+            }
+        }
         playerView.postDelayed(this::healSurfaceStep, 120);
+    }
+
+    /** 内嵌画面救不回来时的兜底：收起内嵌、带当前进度进全屏播放器（保证有画面能看到） */
+    private void fallbackToFullscreen() {
+        long pos = player != null ? player.getCurrentPosition() : 0;
+        leaveInline();
+        if (player != null) player.pause();
+        if (pos > 0) curStartMs = pos;
+        try {
+            goFullscreen();
+            toast("内嵌画面异常，已切换到全屏播放");
+        } catch (Exception ignore) {
+            // Fragment 已不可用：什么都不做，交给正常的生命周期收尾
+        }
     }
 
     /** 真正下发给播放器的地址：网页播放页先归一化成直链（见 {@link #guessStreamUrl}） */
@@ -2225,11 +2285,66 @@ public class DetailFragment extends Fragment {
         }).start();
     }
 
+    /** 取 HTTP 状态码（403/404 这类「地址被拒/已删除」才能靠换线路救；0 表示不是 HTTP 层错误） */
+    private static int httpStatusOf(PlaybackException e) {
+        Throwable c = e != null ? e.getCause() : null;
+        if (c instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+            return ((androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) c).responseCode;
+        }
+        return 0;
+    }
+
+    private static boolean isHttpStatusError(PlaybackException e) {
+        if (e == null) return false;
+        if (e.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) return true;
+        int code = httpStatusOf(e);
+        return code == 403 || code == 404 || code == 410 || code == 500 || code == 502 || code == 503;
+    }
+
+    /**
+     * 线路级兜底：当前集的地址已失效（源站删目录 → 恒定 404，或 CDN 403）时，
+     * 自动换到「同一集、别的线路」再播一次。
+     *
+     * <p>真机实测（2026-11-10）：{@code vip.ffzy-play10.com/20261109/75835_f44305f2/index.m3u8}
+     * 在 PC、手机浏览器上一律 404（同域根路径 403 = nginx 正常目录禁止，其它视频正常），
+     * 说明是源站把该目录删了 —— 这种地址 App 侧无法「修好」，但视频在别的线路仍然有货。
+     * 所以处理方式是换线路，而不是弹错误。
+     */
+    private boolean tryNextLineFallback(PlaybackException error) {
+        if (lineFallbackTries >= 2) return false;
+        List<Models.PlayLine> ls = playList();
+        if (ls.size() < 2) return false;
+        long resumeMs = player != null && player.getCurrentPosition() > 0
+                ? player.getCurrentPosition() : curStartMs;
+        for (int k = 1; k < ls.size(); k++) {
+            int idx = (curLine + k) % ls.size();
+            Models.PlayLine pl = ls.get(idx);
+            if (pl == null || !pl.isPlayable() || pl.episodes == null
+                    || curEp >= pl.episodes.size()) continue;
+            Models.Episode e = pl.episodes.get(curEp);
+            if (e == null || TextUtils.isEmpty(e.url) || !e.isPlayable()) continue;
+            lineFallbackTries++;
+            curLine = idx;
+            String name = pl.name != null && !pl.name.isEmpty() ? pl.name : "线路" + (idx + 1);
+            com.lateshow.app.util.PlayHeaders.diag("line " + curLine + " dead (" + describe(error)
+                    + ") -> fallback to " + name + " resume=" + resumeMs);
+            renderLines();
+            renderEpisodes();
+            toast("该线路地址已失效，已切到「" + name + "」");
+            startInline(e.url, resumeMs);
+            return true;
+        }
+        return false;
+    }
+
     private static String describe(PlaybackException e) {
         if (e == null) return "未知错误";
         switch (e.errorCode) {
             case PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS:
-                return "源站拒绝访问（403 防盗链或地址失效）";
+                int code = httpStatusOf(e);
+                if (code == 404 || code == 410) return "该集地址已失效（" + code + "）";
+                if (code == 403) return "源站拒绝访问（403 防盗链）";
+                return code > 0 ? "源站返回异常（" + code + "）" : "源站拒绝访问（403 防盗链或地址失效）";
             case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED:
                 return "网络连接失败";
             case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT:
