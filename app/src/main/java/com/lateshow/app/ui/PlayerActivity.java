@@ -122,8 +122,11 @@ public class PlayerActivity extends AppCompatActivity {
                 findViewById(R.id.btnSpeed), findViewById(R.id.btnGear), player);
         com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
         // 胶囊跟随控制栏显隐：轻点屏幕出现、约 2 秒后随控制栏自动隐藏（与内嵌一致）
-        pv.setControllerVisibilityListener(visibility ->
-                playerTools.setVisibility(visibility == View.VISIBLE ? View.VISIBLE : View.GONE));
+        pv.setControllerVisibilityListener(new androidx.media3.ui.PlayerView.ControllerVisibilityListener() {
+            @Override public void onVisibilityChanged(int visibility) {
+                playerTools.setVisibility(visibility == View.VISIBLE ? View.VISIBLE : View.GONE);
+            }
+        });
 
         // 手势：横向滑动快进/快退（划满全屏 = 总时长 1/2，半屏 = 1/4）；
         // 纵向滑动：右半屏调亮度、左半屏调音量；轻点显隐控制栏

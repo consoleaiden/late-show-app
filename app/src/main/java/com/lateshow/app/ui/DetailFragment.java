@@ -374,10 +374,12 @@ public class DetailFragment extends Fragment {
         // 倍速/设置胶囊跟随控制栏显隐：轻点屏幕出现、约 2 秒后随控制栏一起自动隐藏，
         // 与全屏页行为一致（media3 控制栏超时 = setControllerShowTimeoutMs(2000)）。
         // 海报态 setUseController(false) 会回调 GONE，胶囊保持隐藏，正好是我们想要的
-        playerView.setControllerVisibilityListener(visibility -> {
-            View tools = getView() != null ? getView().findViewById(R.id.playerTools) : null;
-            if (tools != null) tools.setVisibility(
-                    visibility == View.VISIBLE && inlineActive ? View.VISIBLE : View.GONE);
+        playerView.setControllerVisibilityListener(new androidx.media3.ui.PlayerView.ControllerVisibilityListener() {
+            @Override public void onVisibilityChanged(int visibility) {
+                View tools = getView() != null ? getView().findViewById(R.id.playerTools) : null;
+                if (tools != null) tools.setVisibility(
+                        visibility == View.VISIBLE && inlineActive ? View.VISIBLE : View.GONE);
+            }
         });
 
         LottieIcon.bindTree(v);
