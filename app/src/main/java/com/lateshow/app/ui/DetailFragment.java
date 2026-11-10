@@ -1947,13 +1947,32 @@ public class DetailFragment extends Fragment {
     /**
      * 旋转（MainActivity 已声明 orientation configChanges，不再重建）：
      * 重算画面区几何；播放中同步一次内容上弹位移（shift 由新尺寸决定）。
+     *
+     * <p>真机 2026-11-10（v1.5.129）：竖→横正常，横→竖后视频下方到信息带之间露出一段
+     * 黑底 —— 位移丢了。原因：旋转触发整树重新测量，MotionLayout 在自己的
+     * measure/layout 过程中把子 View 的 translationY 重置回约束值，我们在
+     * onConfigurationChanged 里设的位移（发生在该次测量之前）被清掉。因此位移必须
+     * post 到旋转布局完成之后再补一次。
      */
     @Override public void onConfigurationChanged(@NonNull android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         applyPlayerGeometry();
         if (inlineActive) {
-            movePlayingBand(playingBandShift(), false);
-            forceTraversal();
+            com.lateshow.app.util.PlayHeaders.diag("rotate -> posterH=" + posterH
+                    + " pvH=" + playerHeightPx() + " shift=" + playingBandShift());
+            if (getView() != null) {
+                View root = getView();
+                root.post(() -> {
+                    if (!inlineActive) return;
+                    movePlayingBand(playingBandShift(), false);
+                    forceTraversal();
+                });
+                // 二次补偿：MotionLayout 过渡帧期间仍可能重置 translation，
+                // 布局稳定后再校正一次（位移是幂等的，多设无害）
+                root.postDelayed(() -> {
+                    if (inlineActive) movePlayingBand(playingBandShift(), false);
+                }, 200);
+            }
         }
     }
 
