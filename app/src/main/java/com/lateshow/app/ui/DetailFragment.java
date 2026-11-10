@@ -371,6 +371,22 @@ public class DetailFragment extends Fragment {
         playerView.setUseController(false);
         View playerTools = v.findViewById(R.id.playerTools);
         if (playerTools != null) playerTools.setVisibility(View.GONE);
+        // 液态玻璃工具条（源码集成自 QmDeve/AndroidLiquidGlassView，MIT）：
+        // 玻璃层 bind playerView，在胶囊区域实时折射 + 色散底层视频画面。
+        // Android 13+ 生效；低版本库内部自动保持透明，不影响原样式。
+        if (v.findViewById(R.id.glassPlayerTools)
+                instanceof com.qmdeve.liquidglass.widget.LiquidGlassView) {
+            com.qmdeve.liquidglass.widget.LiquidGlassView glass =
+                    (com.qmdeve.liquidglass.widget.LiquidGlassView)
+                            v.findViewById(R.id.glassPlayerTools);
+            float d = com.qmdeve.liquidglass.util.Utils.dp2px(getResources(), 1f);
+            glass.setCornerRadius(13f * d);          // 胶囊高 26dp 的一半 = 药丸圆角
+            glass.setRefractionHeight(16f * d);      // 折射带高度
+            glass.setDispersion(0.35f);              // 色散强度（适度，避免彩边过艳）
+            glass.setBlurRadius(4f);                 // 轻微磨砂
+            glass.setTintAlpha(0.06f);               // 极淡白色调，提升玻璃质感
+            glass.bind(playerView);
+        }
         // 倍速/设置胶囊跟随控制栏显隐：轻点屏幕出现、约 2 秒后随控制栏一起自动隐藏，
         // 与全屏页行为一致（media3 控制栏超时 = setControllerShowTimeoutMs(2000)）。
         // 海报态 setUseController(false) 会回调 GONE，胶囊保持隐藏，正好是我们想要的
