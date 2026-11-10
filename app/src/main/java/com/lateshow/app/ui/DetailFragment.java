@@ -2454,7 +2454,7 @@ public class DetailFragment extends Fragment {
             }
             // 常驻布局下播放器一直「在场上」，未播放时必须放行触摸，
             // 否则海报的播放按钮/下拉手势会被这个透明层挡住
-        }, () -> inlineActive && player != null);
+        }, null, () -> inlineActive && player != null);
     }
 
     /** 点全屏按钮：暂停内嵌播放并携带当前进度进入横屏全屏 */
