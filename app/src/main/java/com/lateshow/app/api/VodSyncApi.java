@@ -365,14 +365,24 @@ public final class VodSyncApi {
         }
     }
 
-    /** 只把「明确的业务失败」判为错误；纯数据响应（无 code / 无 ok）一律放行 */
+    /**
+     * 只把「明确的业务失败」判为错误；纯数据响应（无 code / 无 ok）一律放行。
+     *
+     * <p>业务码语义（后端协同报告 B-11，2026-11-09 起生效）：
+     * 成功 = HTTP 2xx 且 {@code code == 0}；业务失败 = {@code code != 0}。
+     * 旧版「code:1 为成功」的约定已废弃，后端 v1.14.x 全部接口已切到 code:0（实测 /stats、
+     * /videos、/sources、/search、detail 均为 {"code":0,...}）。
+     */
     private static String businessError(String body) {
         if (body == null || body.isEmpty() || body.charAt(0) != '{') return null;
         try {
             JSONObject o = new JSONObject(body);
-            if (o.has("code") && o.optInt("code", 1) == 0) {
-                String m = o.optString("msg", "");
+            if (o.has("code") && o.optInt("code", 0) != 0) {
+                String m = o.optString("error", "");
+                if (m.isEmpty()) m = o.optString("msg", "");
                 if (m.isEmpty()) m = o.optString("detail", "操作失败");
+                // 2xx 里不该出现 40101，但万一出现仍按 token 失效引导，避免死循环提示
+                if (o.optInt("code", 0) == 40101) return tokenErrMsg(m);
                 return "业务失败：" + m;
             }
             if (o.has("ok") && !o.optBoolean("ok", true)) {
@@ -548,8 +558,9 @@ public final class VodSyncApi {
                     }
                     String statsBody = execute(probe, new Request.Builder().url(statsUrl).get().build());
                     JSONObject st = new JSONObject(statsBody);
-                    if (st.has("code") && st.optInt("code", 1) == 0) {
-                        MAIN.post(() -> cb.onErr("Token 无效或未授权"));
+                    // B-11 语义：2xx 且 code==0 才是成功；探测已带 token，401 在 execute() 里抛出
+                    if (st.has("code") && st.optInt("code", 0) != 0) {
+                        MAIN.post(() -> cb.onErr(tokenErrMsg(st.optString("error", ""))));
                         return;
                     }
                 }
