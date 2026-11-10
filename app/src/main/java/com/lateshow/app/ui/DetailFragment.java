@@ -400,6 +400,29 @@ public class DetailFragment extends Fragment {
         hlp.height = posterH;
         heroWrap.setLayoutParams(hlp);
 
+        // 画面区尺寸在「初始布局」时一次定死（真机 2026-11-10 反复实测：MotionLayout 会吞掉
+        // 页面稳定后的 requestLayout —— lp.height 改了、测量永不执行，所以播放态绝不能再
+        // 依赖任何布局变化）：
+        //   · 播放器容器 topMargin = 状态栏（播放态让位状态栏；海报态容器不可见，无影响）
+        //   · PlayerView 高度 = 宽 9/16（不超过海报区），顶对齐
+        // 之后播放/停止只切透明度、平移信息带（渲染属性），画面比例恒正确
+        int inset0 = statusBarInsetPx();
+        ViewGroup.MarginLayoutParams clp =
+                (ViewGroup.MarginLayoutParams) playerContainer.getLayoutParams();
+        if (clp != null && clp.topMargin != inset0) {
+            clp.topMargin = inset0;
+            playerContainer.setLayoutParams(clp);
+        }
+        ViewGroup.LayoutParams pvLp = playerView.getLayoutParams();
+        int pvH = Math.min(playerHeightPx(), Math.max(dp(1), posterH - inset0));
+        if (pvLp instanceof androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) {
+            androidx.constraintlayout.widget.ConstraintLayout.LayoutParams cl =
+                    (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) pvLp;
+            cl.height = pvH;
+            cl.verticalBias = 0f;   // 固定高度后不再上下贴满，顶对齐到容器顶
+            playerView.setLayoutParams(cl);
+        }
+
         tvTitle.setText(title);
         String srcLabel = sourceName != null && !sourceName.isEmpty() ? sourceName : slug;
         if (srcLabel != null && !srcLabel.isEmpty()) chipSource.setText(srcLabel);
@@ -1874,7 +1897,7 @@ public class DetailFragment extends Fragment {
         return (int) argb.evaluate(t, getColor(fromRes), getColor(toRes));
     }
 
-    /** 播放态切换：底色/文字色过渡（与 setHeroHeight 的 240ms 减速曲线保持一致） */
+    /** 播放态切换：底色/文字色过渡（与内容上弹的 240ms 减速曲线保持一致） */
     private void animateBandTint(float to) {
         if (bandAnim != null) bandAnim.cancel();
         final float from = bandTint;
@@ -1904,61 +1927,45 @@ public class DetailFragment extends Fragment {
         return id > 0 ? getResources().getDimensionPixelSize(id) : dp(24);
     }
 
-    /**
-     * 播放器容器距顶边距。容器在 heroWrap 里上下都贴着父容器，
-     * 所以把 topMargin 设成状态栏高度、bottomMargin 保持 0，
-     * 画面高度就会自动变成「海报区高度 - 状态栏」，随高度动画一起收敛，不需要额外插值。
-     */
-    private void setPlayerTopInset(int inset) {
-        if (playerContainer == null) return;
-        ViewGroup.LayoutParams lp = playerContainer.getLayoutParams();
-        if (!(lp instanceof ViewGroup.MarginLayoutParams)) return;
-        ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
-        if (mlp.topMargin == inset) return;
-        mlp.topMargin = inset;
-        playerContainer.setLayoutParams(mlp);
-    }
-
     private int playerHeightPx() {
         int w = motion != null && motion.getWidth() > 0
                 ? motion.getWidth() : getResources().getDisplayMetrics().widthPixels;
         return Math.round(w * 9f / 16f);
     }
 
-    /**
-     * 改海报区高度。
-     *
-     * <p>播放时收到 16:9、退出播放时恢复成海报高度，两种情况下 heroBand 以下的
-     * 信息模块 / 简介 / 选集都会跟着重新排版，视觉上就是“内容自动上弹 / 回落”。
-     */
-    private void setHeroHeight(int target, boolean animate) {
-        if (heroWrap == null) return;
-        ViewGroup.LayoutParams lp = heroWrap.getLayoutParams();
-        if (lp == null || lp.height == target) return;
-        if (!animate) {
-            lp.height = target;
-            heroWrap.setLayoutParams(lp);
-            return;
-        }
-        final int from = lp.height;
-        ValueAnimator va = ValueAnimator.ofInt(from, target);
-        va.setDuration(240);
-        va.setInterpolator(new DecelerateInterpolator(1.6f));
-        va.addUpdateListener(a -> {
-            ViewGroup.LayoutParams p = heroWrap.getLayoutParams();
-            if (p == null) return;
-            p.height = (int) a.getAnimatedValue();
-            heroWrap.setLayoutParams(p);
-        });
-        va.start();
+    /** 播放态「内容上弹」位移量 = 海报区高度 -（状态栏 + 画面高）；横屏放不下 16:9 时为 0 */
+    private int playingBandShift() {
+        int inset = statusBarInsetPx();
+        int pvH = Math.min(playerHeightPx(), Math.max(dp(1), posterH - inset));
+        return Math.max(0, posterH - inset - pvH);
     }
 
     /**
-     * 退出内嵌播放：播放器收起、海报区恢复原高度。
+     * 平移信息模块与内容列，实现播放态的内容上弹 / 退出时的回落。
      *
-     * <p>恢复高度会让下面的内容整体下沉 delta 像素，所以同时把 ScrollView 前滚同样的距离，
-     * 内容在屏幕上原地不动 —— 看起来只是“视频变回海报”，不会整页跳一下。
-     * 恢复后再重算收起终点（收起形变按海报高度对齐，两者必须一致）。
+     * <p>translation 是渲染属性，不经过布局遍历 —— MotionLayout 吞布局请求也影响不到它
+     * （真机 2026-11-10：页面稳定后 heroWrap 的 lp.height 改了却永不重测，位移方案免疫）。
+     * 代价：播放中滚到页面最底部时会多出一段与位移等高的空白，属可接受的取舍。
+     */
+    private void movePlayingBand(float shift, boolean animate) {
+        View[] targets = {infoModule, contentCol};
+        for (View v : targets) {
+            if (v == null) continue;
+            v.animate().cancel();
+            if (animate) {
+                v.animate().translationY(shift).setDuration(240)
+                        .setInterpolator(new DecelerateInterpolator(1.6f)).start();
+            } else {
+                v.setTranslationY(shift);
+            }
+        }
+    }
+
+    /**
+     * 退出内嵌播放：播放器收起、信息带/内容列平移回原位。
+     *
+     * <p>播放态的上弹是 translation（见 {@link #movePlayingBand}），退出时归零即可，
+     * 不需要滚动补偿 —— 布局尺寸从头到尾没变过。
      */
     private void leaveInline() {
         if (!inlineActive) return;
@@ -1976,12 +1983,11 @@ public class DetailFragment extends Fragment {
             cover.animate().cancel();
             cover.setAlpha(1f);
         }
-        setPlayerTopInset(0);   // 下次播放重新按状态栏让位
+        // 容器 topMargin 常驻状态栏让位、不随播放态回拨（见 onViewCreated 注释）
         if (bandAnim != null) bandAnim.cancel();
         applyBandTint(0f);      // 海报瞬间回来，信息带配色也跟着瞬间回到深色态
-        int delta = posterH - heroWrap.getHeight();
-        setHeroHeight(posterH, false);
-        if (delta != 0 && scrollPlay != null) scrollPlay.scrollBy(0, delta);
+        // 内容列平移回原位（播放态的上弹是 translation，退出时归零即可）
+        movePlayingBand(0f, true);
         buildClosedState();
     }
 
@@ -2011,13 +2017,8 @@ public class DetailFragment extends Fragment {
         // 确保盖在海报与渐变之上（某些 ROM 上子 View 的合成顺序不完全按布局顺序）
         playerContainer.bringToFront();
         btnPlayCover.setVisibility(View.GONE);
-        // 播放态：播放器顶部让出状态栏高度（画面不压状态栏），海报随即淡出，
-        // 让位露出的那条由 heroBand 底色填充（深色，状态栏图标仍可读）。
-        // 高度 = 状态栏 + 16:9 画面：比「屏幕一半」的海报矮，下面的信息/选集跟着上移，
-        // 不会在播放器下面留一块空白（视觉上就是点播放后内容上弹一截）
-        int inset = statusBarInsetPx();
-        setPlayerTopInset(inset);
-        setHeroHeight(inset + playerHeightPx(), true);
+        // 播放态：海报随即淡出，让位露出的那条由 heroBand 底色填充（深色，状态栏图标仍可读）。
+        // 画面顶部让位与高度在初始布局已定死，这里不再动布局（见 onViewCreated 注释）。
         animateBandTint(1f);   // 信息带同时淡入「内容区同色 + 主题文字」
         if (cover != null) {
             cover.animate().cancel();
@@ -2025,6 +2026,11 @@ public class DetailFragment extends Fragment {
         }
         // 点「播放」时页面通常停在简介/选集处，滚回顶部让画面可见，否则会以为没播
         scrollPlay.smoothScrollTo(0, 0);
+        // 画面区高度已在初始布局定死（见 onViewCreated 注释），播放态不再改任何布局参数；
+        // 「内容上弹」改用平移：信息模块 + 内容列整体上移画面下方的空隙（translation 是
+        // 渲染属性，不经过布局遍历，MotionLayout 吞不掉）。退出播放时平移回 0。
+        int shift = playingBandShift();
+        if (shift > 0) movePlayingBand(-shift, true);
         if (player == null) {
             httpFactory = new DefaultHttpDataSource.Factory()
                     .setAllowCrossProtocolRedirects(true)
@@ -2071,17 +2077,15 @@ public class DetailFragment extends Fragment {
                     if (playerView != null) playerView.post(DetailFragment.this::forceTraversal);
                 }
                 // 黑屏自愈：首帧已渲染但画面容器仍 0x0（偶发：容器可见后未触发重排），
-                // 立即按目标高度强制重排一次，仍为 0 就在下一帧重新绑定画面纹理
+                // 立即强制重排一次，仍为 0 就在下一帧重新绑定画面纹理
                 @Override public void onRenderedFirstFrame() {
                     if (playerView != null && (playerView.getWidth() == 0 || playerView.getHeight() == 0)) {
                         com.lateshow.app.util.PlayHeaders.diag(
                                 "firstFrame but playerView " + playerView.getWidth() + "x"
                                         + playerView.getHeight() + " -> force relayout");
-                        int inset = statusBarInsetPx();
-                        setPlayerTopInset(inset);
-                        setHeroHeight(inset + playerHeightPx(), false);
                         if (playerContainer != null) playerContainer.requestLayout();
                         playerView.requestLayout();
+                        forceTraversal();
                         playerView.post(DetailFragment.this::ensurePlayerSurfaceBound);
                     }
                 }
@@ -2198,17 +2202,10 @@ public class DetailFragment extends Fragment {
             return;
         }
         surfaceHealTries++;
-        int inset = statusBarInsetPx();
-        int target = inset + playerHeightPx();
-        setPlayerTopInset(inset);
-        if (surfaceHealTries <= 3) {
-            setHeroHeight(target, false);
-        } else if (surfaceHealTries <= 7) {
-            // 高度 ±1px 抖动：同值 setLayoutParams 不产生 layout 请求，
-            // 换个值才能真正把「父 → 子」整条测量的脏标记立起来
-            setHeroHeight(target + 1, false);
-            if (heroWrap != null) heroWrap.post(() -> setHeroHeight(target, false));
-        } else {
+        // 画面区尺寸已在初始布局定死（见 onViewCreated 注释），不再摆弄布局参数 ——
+        // MotionLayout 会吞掉页面稳定后的 requestLayout，摆弄也没用。只做两件事：
+        // 强制遍历 + 摘挂重建画面纹理
+        if (surfaceHealTries > 6) {
             // 摘挂一次 PlayerView：清掉测量缓存，并让 media3 重新建画面纹理
             if (playerContainer instanceof ViewGroup) {
                 ViewGroup g = (ViewGroup) playerContainer;
