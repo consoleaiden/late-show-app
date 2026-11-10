@@ -522,8 +522,10 @@ public final class UpdateChecker {
         if (act == null || act.isFinishing() || act.isDestroyed()) return;
         new MaterialAlertDialogBuilder(act)
                 .setTitle("下载失败")
-                .setMessage(err + "\n\n可以改用浏览器下载安装包。")
-                .setPositiveButton("浏览器下载", (d, w) -> openReleasePage(act, info))
+                .setMessage(err + "\n\n已尝试全部下载线路。可以重试（会从已下载的部分续传），"
+                        + "或改用浏览器直接下载安装包。")
+                .setPositiveButton("重试", (d, w) -> downloadAndInstall(act, info))
+                .setNeutralButton("浏览器下载", (d, w) -> openReleasePage(act, info))
                 .setNegativeButton("取消", null)
                 .show();
     }
