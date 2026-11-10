@@ -97,6 +97,11 @@ public class MainActivity extends AppCompatActivity {
         if (favFragment == null) favFragment = new FavFragment();
         if (settingsFragment == null) settingsFragment = new SettingsFragment();
 
+        // 详情页必须先于 switchTab 恢复：switchTab 的 hide 循环是「隐藏除 detailFragment
+        // 外的所有 Fragment」，此时 detailFragment 还是 null 就会把详情页一起藏掉 ——
+        // 表现为「全屏播放返回 / 旋屏重建后直接回到首页」（真机 2026-11-10）
+        detailFragment = (DetailFragment) fm.findFragmentByTag(DetailFragment.TAG);
+
         findViewById(TAB_IDS[0]).setOnClickListener(v -> switchTab(homeFragment, 0));
         findViewById(TAB_IDS[1]).setOnClickListener(v -> switchTab(favFragment, 1));
         findViewById(TAB_IDS[2]).setOnClickListener(v -> switchTab(settingsFragment, 2));
@@ -106,9 +111,8 @@ public class MainActivity extends AppCompatActivity {
         if (startTab < 0 || startTab >= TAB_COUNT) startTab = 0;
         switchTab(fragmentAt(startTab), startTab);
 
-        // 详情页浮层（配置变更/切主题后由 FragmentManager 自动恢复）
+        // 详情页浮层（配置变更/切主题后由 FragmentManager 自动恢复；上面已提前恢复引用）
         detailHost = findViewById(R.id.detailHost);
-        detailFragment = (DetailFragment) fm.findFragmentByTag(DetailFragment.TAG);
         // 「详情页内跳详情」会短暂同时存在两张详情页（新的叠在旧的上面，展开后再摘旧的）。
         // 如果正好在这个窗口里重建（切主题/旋屏），把底下那张清理掉，只保留最上面一张
         java.util.ArrayList<DetailFragment> details = new java.util.ArrayList<>();
