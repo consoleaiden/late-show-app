@@ -715,7 +715,7 @@ public class SettingsFragment extends Fragment {
             if (notes.length() > 500) notes = notes.substring(0, 500) + "…";
             new MaterialAlertDialogBuilder(getContext())
                     .setTitle("发现新版本 v" + info.version)
-                    .setMessage("当前 v" + UpdateChecker.currentVersion() + "\n\n" + notes)
+                    .setMessage(UpdateChecker.brief(info) + "\n\n" + notes)
                     .setPositiveButton("立即更新", (d, w) -> {
                         if (getActivity() != null) UpdateChecker.downloadAndInstall(getActivity(), info);
                     })

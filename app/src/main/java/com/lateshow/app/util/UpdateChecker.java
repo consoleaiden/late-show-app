@@ -312,6 +312,20 @@ public final class UpdateChecker {
         }
     }
 
+    /**
+     * 更新弹窗正文首行：当前版本 → 新版本 · 安装包大小。
+     * 体积来自 Release asset（由 {@link ReleaseReader} 解析），拿不到就不显示，
+     * 避免出现「安装包 0 MB」这种废话。
+     */
+    public static String brief(Info info) {
+        String cur = "当前 v" + currentVersion();
+        if (info == null) return cur;
+        StringBuilder sb = new StringBuilder(cur);
+        if (info.version != null) sb.append(" → v").append(info.version);
+        if (info.size > 0) sb.append(" · 安装包 ").append(mb(info.size));
+        return sb.toString();
+    }
+
     /** 字节数 → "3.7 MB"（下载进度用） */
     private static String mb(long bytes) {
         if (bytes <= 0) return "0 MB";

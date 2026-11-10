@@ -242,7 +242,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 new MaterialAlertDialogBuilder(this)
                         .setTitle("发现新版本 v" + info.version)
-                        .setMessage("当前 v" + com.lateshow.app.util.UpdateChecker.currentVersion() + "\n\n" + notes)
+                        .setMessage(com.lateshow.app.util.UpdateChecker.brief(info) + "\n\n" + notes)
                         .setPositiveButton("立即更新", (d, w) -> com.lateshow.app.util.UpdateChecker.downloadAndInstall(this, info))
                         .setNegativeButton("稍后", null)
                         .show();
