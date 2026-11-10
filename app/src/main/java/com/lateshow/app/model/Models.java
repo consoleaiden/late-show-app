@@ -227,10 +227,39 @@ public final class Models {
         /** v1.11+ 源站线路策略与失败计数（审计 C-08）：控制台可据此展示策略效果 */
         @SerializedName("fail_streak") public Integer failStreak;
         @SerializedName("skip_until") public String skipUntil;
-        @SerializedName("play_line") public String playLine;
+        /**
+         * v1.14+：线路统计。后端为对象 {"lines":..,"dropped":..,"fallback":..}；
+         * 用 JsonElement 容错（兼容历史版本返回字符串或 null 的形态），解析失败不再拖垮整个列表。
+         */
+        @SerializedName("play_line") public com.google.gson.JsonElement playLine;
         @SerializedName("play_line_effective") public String playLineEffective;
         @SerializedName("play_line_policy") public String playLinePolicy;
         public boolean pick; // UI 勾选态
+
+        /** 线路总数（play_line.lines，取不到返回 0） */
+        public int playLineLines() {
+            return playLineInt("lines");
+        }
+
+        /** 被丢弃线路数（play_line.dropped） */
+        public int playLineDropped() {
+            return playLineInt("dropped");
+        }
+
+        /** 回退线路数（play_line.fallback） */
+        public int playLineFallback() {
+            return playLineInt("fallback");
+        }
+
+        private int playLineInt(String key) {
+            try {
+                if (playLine != null && playLine.isJsonObject()
+                        && playLine.getAsJsonObject().has(key)) {
+                    return playLine.getAsJsonObject().get(key).getAsInt();
+                }
+            } catch (Exception ignored) { }
+            return 0;
+        }
     }
 
     public static class SyncSourcesResp {

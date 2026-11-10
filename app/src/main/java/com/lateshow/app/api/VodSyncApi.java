@@ -360,9 +360,24 @@ public final class VodSyncApi {
             }
             MAIN.post(() -> cb.onOk(out));
         } catch (Exception e) {
-            String msg = "解析失败：" + e.getMessage();
-            MAIN.post(() -> cb.onErr(msg));
+            MAIN.post(() -> cb.onErr("解析失败：" + friendlyParseError(e)));
         }
+    }
+
+    /**
+     * 把 Gson/JSON 的底层异常翻译成用户能看懂的一句话，并截断长度，
+     * 避免首页/控制台弹出几十行的原始堆栈（后端字段类型变更时常见）。
+     */
+    private static String friendlyParseError(Exception e) {
+        String raw = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        String up = raw.toUpperCase();
+        if (raw.contains("JsonSyntaxException") || raw.contains("MalformedJsonException")
+                || up.contains("EXPECTED") || up.contains("BEGIN_OBJECT")
+                || up.contains("BEGIN_ARRAY") || raw.contains("IllegalStateException")) {
+            return "服务器数据格式与 App 版本不匹配，请检查 App 或后端是否已更新";
+        }
+        if (raw.length() > 100) raw = raw.substring(0, 100) + "…";
+        return raw;
     }
 
     /**
