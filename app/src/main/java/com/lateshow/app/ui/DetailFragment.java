@@ -371,6 +371,14 @@ public class DetailFragment extends Fragment {
         playerView.setUseController(false);
         View playerTools = v.findViewById(R.id.playerTools);
         if (playerTools != null) playerTools.setVisibility(View.GONE);
+        // 倍速/设置胶囊跟随控制栏显隐：轻点屏幕出现、约 2 秒后随控制栏一起自动隐藏，
+        // 与全屏页行为一致（media3 控制栏超时 = setControllerShowTimeoutMs(2000)）。
+        // 海报态 setUseController(false) 会回调 GONE，胶囊保持隐藏，正好是我们想要的
+        playerView.setControllerVisibilityListener(visibility -> {
+            View tools = getView() != null ? getView().findViewById(R.id.playerTools) : null;
+            if (tools != null) tools.setVisibility(
+                    visibility == View.VISIBLE && inlineActive ? View.VISIBLE : View.GONE);
+        });
 
         LottieIcon.bindTree(v);
         // 封面播放键在深色圆钮上，固定白色
@@ -406,22 +414,9 @@ public class DetailFragment extends Fragment {
         //   · 播放器容器 topMargin = 状态栏（播放态让位状态栏；海报态容器不可见，无影响）
         //   · PlayerView 高度 = 宽 9/16（不超过海报区），顶对齐
         // 之后播放/停止只切透明度、平移信息带（渲染属性），画面比例恒正确
-        int inset0 = statusBarInsetPx();
-        ViewGroup.MarginLayoutParams clp =
-                (ViewGroup.MarginLayoutParams) playerContainer.getLayoutParams();
-        if (clp != null && clp.topMargin != inset0) {
-            clp.topMargin = inset0;
-            playerContainer.setLayoutParams(clp);
-        }
-        ViewGroup.LayoutParams pvLp = playerView.getLayoutParams();
-        int pvH = Math.min(playerHeightPx(), Math.max(dp(1), posterH - inset0));
-        if (pvLp instanceof androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) {
-            androidx.constraintlayout.widget.ConstraintLayout.LayoutParams cl =
-                    (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) pvLp;
-            cl.height = pvH;
-            cl.verticalBias = 0f;   // 固定高度后不再上下贴满，顶对齐到容器顶
-            playerView.setLayoutParams(cl);
-        }
+        // 旋转时由 onConfigurationChanged 重新调用 applyPlayerGeometry()（MainActivity 已
+        // 声明 configChanges，旋转不再重建 Activity，播放不中断）
+        applyPlayerGeometry();
 
         tvTitle.setText(title);
         String srcLabel = sourceName != null && !sourceName.isEmpty() ? sourceName : slug;
@@ -1914,6 +1909,52 @@ public class DetailFragment extends Fragment {
      * <p>本页是边到边（{@code setDecorFitsSystemWindows(false)}）：海报态要铺到屏幕最上沿，
      * 所以不能给根布局加 padding；只有播放态才把播放器顶部让出这块高度。
      */
+    /**
+     * 按当前屏幕尺寸重算画面区几何：海报区半屏高、容器让位状态栏、画面 9/16 顶对齐。
+     * 初始化与旋转（onConfigurationChanged）共用；旋转时整棵视图树本来就要重新测量，
+     * 这里改的 lp 一定会在本次遍历中被执行，不会被 MotionLayout 吞掉。
+     */
+    private void applyPlayerGeometry() {
+        if (heroWrap == null || playerContainer == null || playerView == null) return;
+        posterH = getResources().getDisplayMetrics().heightPixels / 2;
+        ViewGroup.LayoutParams hlp = heroWrap.getLayoutParams();
+        if (hlp != null && hlp.height != posterH) {
+            hlp.height = posterH;
+            heroWrap.setLayoutParams(hlp);
+        }
+        int inset = statusBarInsetPx();
+        ViewGroup.MarginLayoutParams clp =
+                (ViewGroup.MarginLayoutParams) playerContainer.getLayoutParams();
+        if (clp != null && clp.topMargin != inset) {
+            clp.topMargin = inset;
+            playerContainer.setLayoutParams(clp);
+        }
+        ViewGroup.LayoutParams pvLp = playerView.getLayoutParams();
+        int pvH = Math.min(playerHeightPx(), Math.max(dp(1), posterH - inset));
+        if (pvLp instanceof androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) {
+            androidx.constraintlayout.widget.ConstraintLayout.LayoutParams cl =
+                    (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) pvLp;
+            if (cl.height != pvH || cl.verticalBias != 0f) {
+                cl.height = pvH;
+                cl.verticalBias = 0f;   // 固定高度后不再上下贴满，顶对齐到容器顶
+                playerView.setLayoutParams(cl);
+            }
+        }
+    }
+
+    /**
+     * 旋转（MainActivity 已声明 orientation configChanges，不再重建）：
+     * 重算画面区几何；播放中同步一次内容上弹位移（shift 由新尺寸决定）。
+     */
+    @Override public void onConfigurationChanged(@NonNull android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyPlayerGeometry();
+        if (inlineActive) {
+            movePlayingBand(playingBandShift(), false);
+            forceTraversal();
+        }
+    }
+
     private int statusBarInsetPx() {
         View root = getView();
         if (root != null) {
@@ -1928,8 +1969,9 @@ public class DetailFragment extends Fragment {
     }
 
     private int playerHeightPx() {
-        int w = motion != null && motion.getWidth() > 0
-                ? motion.getWidth() : getResources().getDisplayMetrics().widthPixels;
+        // 用 DisplayMetrics 而不是 motion.getWidth()：onConfigurationChanged 时视图宽度
+        // 还是旋转前的旧值，metrics 已经是新的 —— 画面高必须跟新尺寸走
+        int w = getResources().getDisplayMetrics().widthPixels;
         return Math.round(w * 9f / 16f);
     }
 

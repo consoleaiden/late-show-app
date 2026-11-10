@@ -117,9 +117,13 @@ public class PlayerActivity extends AppCompatActivity {
         // 控制栏/半透明遮罩 2 秒后自动隐藏（media3 默认 5 秒）
         pv.setControllerShowTimeoutMs(2000);
         // 倍速 + 播放设置（悬浮工具，右上角），并把上次倍速立即应用
+        final View playerTools = findViewById(R.id.playerTools);
         com.lateshow.app.util.PlayerPanel.attach(
                 findViewById(R.id.btnSpeed), findViewById(R.id.btnGear), player);
         com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
+        // 胶囊跟随控制栏显隐：轻点屏幕出现、约 2 秒后随控制栏自动隐藏（与内嵌一致）
+        pv.setControllerVisibilityListener(visibility ->
+                playerTools.setVisibility(visibility == View.VISIBLE ? View.VISIBLE : View.GONE));
 
         // 手势：横向滑动快进/快退（划满全屏 = 总时长 1/2，半屏 = 1/4）；
         // 纵向滑动：右半屏调亮度、左半屏调音量；轻点显隐控制栏
