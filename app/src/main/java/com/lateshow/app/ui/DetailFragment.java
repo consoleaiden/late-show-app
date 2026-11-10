@@ -1982,6 +1982,8 @@ public class DetailFragment extends Fragment {
                 + " rootAttached=" + (getView() != null && getView().isAttachedToWindow())
                 + " hero=" + (heroWrap != null ? heroWrap.getHeight() : -1)
                 + " scrollY=" + (scrollPlay != null ? scrollPlay.getScrollY() : -1));
+        // GONE → VISIBLE 之后必须真有一次遍历，否则子树量不出尺寸（见 forceTraversal 注释）
+        forceTraversal();
         // 从 GONE 切到 VISIBLE 的那一帧不一定会立刻重排（真机 2026-11-10 实测：容器保持
         // 0×0，播放器把画面纹理绑在 0 尺寸上 → 有声音没画面）。显式请求一次布局
         playerContainer.requestLayout();
@@ -2115,6 +2117,29 @@ public class DetailFragment extends Fragment {
         healSurfaceStep();
     }
 
+    /**
+     * 强制一次真正的布局遍历（真机 2026-11-10 定位到的根因所在）。
+     *
+     * <p>证据：第二次进详情页点「继续播放」时，{@code heroWrap.getLayoutParams().height}
+     * 已经从 1117 改成 713，但 {@code getHeight()} 一秒内一直是 1117，容器也一直 0×0 ——
+     * 参数改了却从来没发生遍历。对照成功的那次：是在页面刚创建、初始布局还没跑完时点的播放，
+     * 请求被合并进当次遍历才生效。结论：页面稳定后再发 requestLayout，中间某个父容器
+     * （根是 MotionLayout）把它吞掉了，ViewRootImpl 始终没拿到脏标记。
+     *
+     * <p>所以这里绕开所有中间层，直接对 DecorView 发起 requestLayout —— 它的 parent 就是
+     * ViewRootImpl，请求一定能落到遍历队列里。
+     */
+    private void forceTraversal() {
+        View root = getView();
+        if (root == null) return;
+        root.requestLayout();
+        View decor = root.getRootView();
+        if (decor != null && decor != root) {
+            decor.requestLayout();
+            decor.invalidate();
+        }
+    }
+
     private void healSurfaceStep() {
         if (playerView == null || player == null) return;
         int w = playerView.getWidth();
@@ -2135,11 +2160,12 @@ public class DetailFragment extends Fragment {
                     + " hero=" + (heroWrap != null ? heroWrap.getHeight() : -1)
                     + " heroLp=" + (heroWrap != null && heroWrap.getLayoutParams() != null
                         ? heroWrap.getLayoutParams().height : -1)
+                    + " req=" + (heroWrap != null && heroWrap.isLayoutRequested())
                     + " scrollY=" + (scrollPlay != null ? scrollPlay.getScrollY() : -1));
         }
         if (surfaceHealTries >= 10) {
-            // 1.2 秒仍量不出尺寸：内嵌画面救不回来（视图树没在布局，或容器被裁成 0），
-            // 直接切全屏播放器 —— 宁可换个界面，也不要「有声音没画面」的黑屏
+            // 1.2 秒仍量不出尺寸：内嵌画面救不回来，直接切全屏播放器 ——
+            // 宁可换个界面，也不要「有声音没画面」的黑屏
             com.lateshow.app.util.PlayHeaders.diag("inline surface dead -> open fullscreen player");
             fallbackToFullscreen();
             return;
@@ -2150,8 +2176,6 @@ public class DetailFragment extends Fragment {
         setPlayerTopInset(inset);
         if (surfaceHealTries <= 3) {
             setHeroHeight(target, false);
-            if (playerContainer != null) playerContainer.requestLayout();
-            playerView.requestLayout();
         } else if (surfaceHealTries <= 7) {
             // 高度 ±1px 抖动：同值 setLayoutParams 不产生 layout 请求，
             // 换个值才能真正把「父 → 子」整条测量的脏标记立起来
@@ -2171,6 +2195,9 @@ public class DetailFragment extends Fragment {
                 playerContainer.setVisibility(View.VISIBLE);
             }
         }
+        if (playerContainer != null) playerContainer.requestLayout();
+        playerView.requestLayout();
+        forceTraversal();   // 关键：绕开 MotionLayout，直接让 ViewRootImpl 重新遍历
         playerView.postDelayed(this::healSurfaceStep, 120);
     }
 
