@@ -44,9 +44,12 @@ public class HomeFragment extends Fragment {
 
     private View btnSource;
     private ImageView btnSourceIcon;
-    private TextView metaCount, metaSync, emptyView;
+    private TextView emptyView;
     private EditText inputSearch;
     private RecyclerView chips, grid;
+    // 顶栏搜索展开/收起（搜索输入默认隐藏，点搜索按钮从右向左滑出）
+    private View searchBox, btnSearch, btnSearchClose;
+    private boolean searchExpanded = false;
     private ChipAdapter chipAdapter;
     private VideoAdapter videoAdapter;
 
@@ -55,8 +58,6 @@ public class HomeFragment extends Fragment {
     private String curName = "全部源站";
     private String curCategory = null; // null = 全部
     private String keyword = "";
-    /** metaSync 的默认字色：检索质量提示借用该行，提示消失后要还原 */
-    private int metaSyncColor;
 
     /** 首页视图还没建好时收到「详情页标签快捷搜索」：先存下，onViewCreated 里补上 */
     private String pendingTagKeyword, pendingTagSlug, pendingTagName;
@@ -133,9 +134,6 @@ public class HomeFragment extends Fragment {
         setupSkeleton(v);
         chips = v.findViewById(R.id.chips);
         grid = v.findViewById(R.id.grid);
-        metaCount = v.findViewById(R.id.metaCount);
-        metaSync = v.findViewById(R.id.metaSync);
-        if (metaSync != null) metaSyncColor = metaSync.getCurrentTextColor();
         emptyView = v.findViewById(R.id.emptyView);
 
         curSlug = PrefStore.get().currentSourceSlug();
@@ -150,6 +148,7 @@ public class HomeFragment extends Fragment {
         chips.setLayoutManager(new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false));
         chips.setAdapter(chipAdapter);
         chips.setHasFixedSize(true);
+        setupTopBar(v);
 
         videoAdapter = new VideoAdapter(new VideoAdapter.OnClick() {
             @Override public void onCard(CardItem item, View source) { openDetail(item, source); }
@@ -357,6 +356,102 @@ public class HomeFragment extends Fragment {
         if (skelAnim != null) skelAnim.cancel();
     }
 
+    // ---------- 顶栏：液态玻璃 + 搜索展开/收起 + 分类长按弹层 ----------
+
+    /** 顶栏玻璃参数与底部导航一致；采样源 = 网格（内容从顶栏后面穿过） */
+    private void setupTopBar(View v) {
+        com.lateshow.app.ui.widget.LiquidGlassBar topbar = v.findViewById(R.id.topBar);
+        if (topbar != null) {
+            topbar.setBackdropSource(grid);
+            float d = getResources().getDisplayMetrics().density;
+            topbar.setGlassCornerRadius(24f * d);
+            topbar.setRefraction(18f * d, 42f * d);   // 折射带 / 折射量
+            topbar.setBlurSigma(5f * d);
+            topbar.setFrost(0.16f);
+            topbar.setHighlight(0.30f);
+            topbar.setDispersion(0.8f);
+        }
+        searchBox = v.findViewById(R.id.searchBox);
+        btnSearch = v.findViewById(R.id.btnSearch);
+        btnSearchClose = v.findViewById(R.id.btnSearchClose);
+        if (btnSearch != null) {
+            btnSearch.setOnClickListener(vv -> {
+                if (searchExpanded) submitSearch(inputSearch.getText().toString());
+                else expandSearch();
+            });
+        }
+        if (btnSearchClose != null) {
+            btnSearchClose.setOnClickListener(vv -> collapseSearch(true));
+        }
+        if (chips != null) {
+            // 长按分类区 = 弹出全部分类列表快速选择
+            chips.setOnLongClickListener(vv -> {
+                showAllCategoriesDialog();
+                return true;
+            });
+        }
+    }
+
+    /** 搜索输入从右向左滑出，盖住分类区；弹出键盘并展示搜索历史 */
+    private void expandSearch() {
+        if (searchExpanded || searchBox == null) return;
+        searchExpanded = true;
+        chips.setVisibility(View.GONE);
+        searchBox.setVisibility(View.VISIBLE);
+        float d = getResources().getDisplayMetrics().density;
+        searchBox.setTranslationX(260f * d);
+        searchBox.animate().translationX(0f).setDuration(260L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+        if (inputSearch != null) {
+            inputSearch.requestFocus();
+            inputSearch.post(() -> {
+                android.view.inputmethod.InputMethodManager imm =
+                        (android.view.inputmethod.InputMethodManager) requireContext()
+                                .getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(inputSearch, 0);
+            });
+        }
+        showHistory();
+    }
+
+    /**
+     * 收起搜索输入，恢复分类区。
+     * @param clearKeyword true = 清空关键词恢复全部列表（✕）；false = 保留当前关键词（提交/焦点移出）
+     */
+    private void collapseSearch(boolean clearKeyword) {
+        if (!searchExpanded || searchBox == null) return;
+        searchExpanded = false;
+        hideHistory();
+        hideKeyboard();
+        if (inputSearch != null) {
+            inputSearch.clearFocus();
+            if (clearKeyword) inputSearch.setText("");   // afterTextChanged → 防抖 reload 全部
+        }
+        float d = getResources().getDisplayMetrics().density;
+        searchBox.animate().translationX(260f * d).setDuration(220L)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .withEndAction(() -> {
+                    searchBox.setVisibility(View.GONE);
+                    chips.setVisibility(View.VISIBLE);
+                }).start();
+    }
+
+    /** 长按分类区：全部分类弹层，点选等价于点击对应芯片 */
+    private void showAllCategoriesDialog() {
+        if (!isAdded() || chipAdapter == null) return;
+        java.util.List<Models.Category> items = chipAdapter.getItems();
+        if (items.isEmpty()) return;
+        String[] names = new String[items.size()];
+        for (int i = 0; i < items.size(); i++) {
+            Models.Category c = items.get(i);
+            names[i] = c == null ? "全部" : c.typeName;
+        }
+        new android.app.AlertDialog.Builder(requireContext())
+                .setTitle("全部分类")
+                .setItems(names, (d, which) -> chipAdapter.selectAt(which))
+                .show();
+    }
+
     // ---------- 搜索历史 ----------
 
     /** 绑定搜索历史：点击/聚焦搜索框展开；回车或点搜索图标记录关键词；支持单条删除、翻页、一键清空 */
@@ -375,20 +470,19 @@ public class HomeFragment extends Fragment {
         inputSearch.setOnClickListener(vv -> showHistory());
         inputSearch.setOnFocusChangeListener((vv, has) -> {
             if (has) showHistory();
-            else hideHistory();
+            else { hideHistory(); collapseSearch(false); }   // 焦点移出 = 收起（关键词保留）
         });
-        // 键盘「搜索」键：记录关键词并检索
+        // 键盘「搜索」键：记录关键词并检索，随后收起输入框
         inputSearch.setOnEditorActionListener((vv, actionId, event) -> {
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
                     || (event != null && event.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER)) {
                 submitSearch(inputSearch.getText().toString());
+                collapseSearch(false);
                 return true;
             }
             return false;
         });
-        // 搜索图标：与回车等价
-        View icon = root.findViewById(R.id.imgSearch);
-        if (icon != null) icon.setOnClickListener(vv -> submitSearch(inputSearch.getText().toString()));
+        // 搜索图标点击由 btnSearch 统一处理（未展开=滑出输入框，已展开=提交），这里不再单独绑定
 
         histPrev.setOnClickListener(vv -> {
             if (histPageNo > 0) {
@@ -769,7 +863,7 @@ public class HomeFragment extends Fragment {
                     reportSourceProbe(cyc, RING_FAIL);
                     // 401：服务端开启了访问控制，引导填写 API Token
                     if (com.lateshow.app.util.AuthGate.handleApiError(getActivity(), m, HomeFragment.this::reload)) {
-                        metaCount.setText("需要 API Token · 请在设置页填写");
+                        toastShort("需要 API Token · 请在设置页填写");
                         return;
                     }
                     // 网络失败：退回本地缓存的源站列表，菜单仍可用
@@ -778,7 +872,7 @@ public class HomeFragment extends Fragment {
                         applySources(stale, true);
                         return;
                     }
-                    metaCount.setText(nasDownHint("源站加载失败：" + m));
+                    toastShort(nasDownHint("源站加载失败：" + m));
                     if (pendingMenu) {
                         pendingMenu = false;
                         android.widget.Toast.makeText(getContext(), "源站列表加载失败：" + m, android.widget.Toast.LENGTH_SHORT).show();
@@ -803,15 +897,6 @@ public class HomeFragment extends Fragment {
         }
         com.lateshow.app.util.SourceCache.putSync(sources);
         // 圆环状态由 pingHealth / 网络请求的 reportSourceProbe 决定，这里不再直接改
-        long total = 0;
-        for (Models.SyncSource s : sources) total += s.totalVideos;
-        metaCount.setText("已收录 " + TimeUtil.compact((int) total) + " 部 · " + sources.size() + " 源");
-        if (fromCache) {
-            long age = ApiCache.ageMs(ckSources());
-            metaSync.setText("● 缓存数据" + (age >= 0 ? " · " + ageText(age) : ""));
-        } else {
-            metaSync.setText("● " + TimeUtil.nowHm() + " 同步");
-        }
         if (pendingMenu) {
             pendingMenu = false;
             showSourceMenu();
@@ -1105,7 +1190,6 @@ public class HomeFragment extends Fragment {
         if (empty) emptyView.setText(emptyHint(r));
         if (reqPage == 1) showSearchQuality(r);
         if (fromCache && getContext() != null) {
-            metaSync.setText("● 离线缓存 · " + TimeUtil.nowHm());
             android.widget.Toast.makeText(getContext(), "网络不可用，显示本地缓存内容",
                     android.widget.Toast.LENGTH_SHORT).show();
         }
@@ -1134,31 +1218,26 @@ public class HomeFragment extends Fragment {
     }
 
     /**
-     * 检索质量提示（M5 + F4）。占用 metaSync 那一行，比再插一条横幅省空间：
+     * 检索质量提示（M5 + F4）。原先是 metaSync 行内提示，改为一行 Toast：
      * <ul>
      *   <li>标签索引没有该词、已自动改用全文检索 → 说明这次是全文结果；</li>
      *   <li>有源站超时 / 被单源上限截断 → 说明结果不完整，别让用户以为「就这么多」。</li>
      * </ul>
      */
     private void showSearchQuality(Models.VideoListResp r) {
-        if (metaSync == null || r == null || getContext() == null) return;
+        if (r == null || getContext() == null) return;
         String tag = com.lateshow.app.api.SearchIntent.currentTag();
         boolean searching = keyword != null && !keyword.isEmpty();
         if (r.fullTextFallback && r.total > 0) {
-            metaSync.setTextColor(getResources().getColor(R.color.warn, null));
-            metaSync.setText("● 标签「" + (tag.isEmpty() ? keyword : tag) + "」未收录 · 已改用全文检索");
-            toastShort("标签索引未收录该词，已自动改用全文检索");
+            toastShort("标签「" + (tag.isEmpty() ? keyword : tag) + "」未收录 · 已改用全文检索");
             return;
         }
         if (searching && r.partial()) {
             int failed = r.failedSourceCount();
-            metaSync.setTextColor(getResources().getColor(R.color.warn, null));
-            metaSync.setText(failed > 0
-                    ? "● 结果可能不完整 · " + failed + " 个源站未响应"
-                    : "● 结果可能不完整 · 部分源站被截断");
-            return;
+            toastShort(failed > 0
+                    ? "结果可能不完整 · " + failed + " 个源站未响应"
+                    : "结果可能不完整 · 部分源站被截断");
         }
-        metaSync.setTextColor(metaSyncColor);
     }
 
     private CardItem toCard(Models.VideoSummary v) {        CardItem c = new CardItem();

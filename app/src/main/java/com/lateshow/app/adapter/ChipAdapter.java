@@ -39,6 +39,21 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
         notifyDataSetChanged();
     }
 
+    /** 全部分类列表（含首位的 null=「全部」占位），供长按弹层使用 */
+    public List<Models.Category> getItems() {
+        return items;
+    }
+
+    /** 按序号选中（长按弹层点选），等价于点击对应芯片 */
+    public void selectAt(int pos) {
+        if (pos < 0 || pos >= items.size()) return;
+        int old = selected;
+        selected = pos;
+        notifyItemChanged(old);
+        notifyItemChanged(selected);
+        if (listener != null) listener.onPick(items.get(pos));
+    }
+
     /** 按分类名恢复选中态（找不到则保持「全部」） */
     public void selectByName(String name) {
         if (name == null) return;

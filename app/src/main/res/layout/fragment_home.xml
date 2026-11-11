@@ -1,77 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- 首页：根 FrameLayout，网格铺满全高（顶部留 64dp），内容从玻璃顶栏后面穿过。
+     顶栏 = 液态玻璃悬浮胶囊（与底部导航同一套实现 + 三级平滑降级）：
+     [源站按钮] [分类横滑（长按弹全部分类）] [搜索按钮]
+     搜索输入框默认隐藏，点搜索按钮从右向左滑出，提交或收起后自动隐藏。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <!-- 顶栏：源站菜单（圆形按钮 + 圆环=后端连通状态） + 搜索框；左右外边距与下方海报列表对齐（5dp） -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/grid"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:overScrollMode="never"
+        android:paddingTop="64dp"
+        android:paddingBottom="64dp"
+        android:clipToPadding="false" />
+
+    <!-- 首屏骨架屏：首次加载且列表为空时显示，避免白屏「假死」 -->
     <LinearLayout
+        android:id="@+id/skeletonBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingLeft="5dp"
-        android:paddingRight="5dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:layout_gravity="top"
+        android:layout_marginTop="64dp"
+        android:orientation="vertical"
+        android:visibility="gone" />
 
-        <FrameLayout
-            android:id="@+id/btnSource"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="@drawable/bg_ring_off"
-            android:contentDescription="切换源站">
-
-            <com.airbnb.lottie.LottieAnimationView
-                android:id="@+id/btnSourceIcon"
-                android:layout_width="17dp"
-                android:layout_height="17dp"
-                android:layout_gravity="center"
-                android:tag="ic_menu_list"
-                android:contentDescription="源站菜单" />
-        </FrameLayout>
-
-        <FrameLayout
-            android:layout_width="0dp"
-            android:layout_height="38dp"
-            android:layout_weight="1"
-            android:layout_marginLeft="8dp"
-            android:background="@drawable/bg_capsule">
-
-            <EditText
-                android:id="@+id/inputSearch"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:paddingLeft="12dp"
-                android:paddingRight="38dp"
-                android:background="@null"
-                android:hint="搜片名 / 演员"
-                android:textSize="13sp"
-                android:textColor="@color/t1"
-                android:textColorHint="@color/t3"
-                android:maxLines="1"
-                android:inputType="text"
-                android:imeOptions="actionSearch" />
-
-            <com.airbnb.lottie.LottieAnimationView
-                android:id="@+id/imgSearch"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:layout_gravity="end|center_vertical"
-                android:layout_marginEnd="10dp"
-                android:tag="ic_search" />
-        </FrameLayout>
-    </LinearLayout>
-
-    <!-- 搜索历史面板：点击搜索框在其下方展开（默认 10 条/页，可翻页、单条删除、一键清空） -->
+    <!-- 搜索历史面板：搜索框展开时浮在顶栏下方（不再挤压列表流） -->
     <LinearLayout
         android:id="@+id/histPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginLeft="5dp"
-        android:layout_marginRight="5dp"
-        android:layout_marginTop="2dp"
+        android:layout_gravity="top"
+        android:layout_marginLeft="10dp"
+        android:layout_marginRight="10dp"
+        android:layout_marginTop="58dp"
         android:orientation="vertical"
         android:paddingLeft="12dp"
         android:paddingRight="12dp"
@@ -159,92 +123,130 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- 分类横滑 -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/chips"
-        android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:overScrollMode="never"
-        android:paddingLeft="5dp"
-        android:paddingRight="5dp"
-        android:clipToPadding="false" />
-
-    <!-- 元信息条 -->
-    <LinearLayout
-        android:layout_width="match_parent"
+    <!-- 回到顶部浮动按钮：底部 margin 72dp 清开玻璃导航胶囊 -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabTop"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingLeft="5dp"
-        android:paddingRight="5dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
-
-        <TextView
-            android:id="@+id/metaCount"
-            style="@style/MetaLabel"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="已收录 -- 部" />
-
-        <TextView
-            android:id="@+id/metaSync"
-            style="@style/MetaLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="● -- 同步" />
-    </LinearLayout>
-
-    <!-- 卡片墙：两边不留白，卡片自带左右间距；FrameLayout 容纳回到顶部浮动按钮 -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/grid"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:overScrollMode="never"
-            android:paddingTop="2dp"
-            android:paddingBottom="64dp"
-            android:clipToPadding="false" />
-
-        <!-- 首屏骨架屏：首次加载且列表为空时显示，避免白屏「假死」 -->
-        <LinearLayout
-            android:id="@+id/skeletonBox"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top"
-            android:paddingTop="2dp"
-            android:orientation="vertical"
-            android:visibility="gone" />
-
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/fabTop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_marginLeft="12dp"
-            android:layout_marginRight="12dp"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="72dp"
-            app:fabCustomSize="40dp"
-            app:maxImageSize="20dp"
-            app:backgroundTint="@color/ink700"
-            app:elevation="6dp"
-            android:contentDescription="回到顶部"
-            android:visibility="gone" />
-    </FrameLayout>
+        android:layout_gravity="bottom|end"
+        android:layout_marginLeft="12dp"
+        android:layout_marginRight="12dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="72dp"
+        app:fabCustomSize="40dp"
+        app:maxImageSize="20dp"
+        app:backgroundTint="@color/ink700"
+        app:elevation="6dp"
+        android:contentDescription="回到顶部"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/emptyView"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
         android:gravity="center"
         android:text="换个关键词试试\n试试片名、演员，或切回「全部」"
         android:textSize="13sp"
         android:textColor="@color/t2"
         android:visibility="gone" />
-</LinearLayout>
+
+    <!-- 顶部液态玻璃栏：与底部导航同一实现（LiquidGlassBar 三级降级）
+         [源站按钮] [分类横滑 weight1] [搜索输入(默认隐藏 weight1)] [搜索按钮] -->
+    <com.lateshow.app.ui.widget.LiquidGlassBar
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_gravity="top"
+        android:layout_marginLeft="10dp"
+        android:layout_marginRight="10dp"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/btnSource"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginLeft="5dp"
+            android:background="@drawable/bg_ring_off"
+            android:contentDescription="切换源站">
+
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/btnSourceIcon"
+                android:layout_width="17dp"
+                android:layout_height="17dp"
+                android:layout_gravity="center"
+                android:tag="ic_menu_list"
+                android:contentDescription="源站菜单" />
+        </FrameLayout>
+
+        <!-- 分类横滑：长按弹出全部分类列表 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/chips"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_gravity="center_vertical"
+            android:layout_marginLeft="8dp"
+            android:overScrollMode="never"
+            android:clipToPadding="false" />
+
+        <!-- 搜索输入：默认隐藏，点搜索按钮从右向左滑出盖住分类区 -->
+        <FrameLayout
+            android:id="@+id/searchBox"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="1"
+            android:layout_gravity="center_vertical"
+            android:layout_marginLeft="8dp"
+            android:background="@drawable/bg_capsule"
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/inputSearch"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingLeft="12dp"
+                android:paddingRight="34dp"
+                android:background="@null"
+                android:hint="搜片名 / 演员"
+                android:textSize="13sp"
+                android:textColor="@color/t1"
+                android:textColorHint="@color/t3"
+                android:maxLines="1"
+                android:inputType="text"
+                android:imeOptions="actionSearch" />
+
+            <TextView
+                android:id="@+id/btnSearchClose"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="4dp"
+                android:gravity="center"
+                android:text="✕"
+                android:textSize="14sp"
+                android:textColor="@color/t3"
+                android:contentDescription="收起搜索" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/btnSearch"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="5dp"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="搜索">
+
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/imgSearch"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:tag="ic_search" />
+        </FrameLayout>
+    </com.lateshow.app.ui.widget.LiquidGlassBar>
+</FrameLayout>
