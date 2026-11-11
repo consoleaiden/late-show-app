@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PotLab 风格动态图标：下拉箭头上下轻滑 -->
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt">
-    <aapt:attr name="android:drawable">
-        <vector
+<!-- 静态图标（原 PotLab 动态矢量已去动画，统一静态渲染） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
             android:width="24dp"
             android:height="24dp"
             android:viewportWidth="24"
@@ -14,17 +11,3 @@
                     android:pathData="M6.832,10.516a0.857,0.857 0 1 1 1.097-1.317l4.594,3.828L17.117,9.2a0.857,0.857 0 0 1 1.098,1.317l-5.132,4.276a0.853,0.853 0 0 1-0.933,0.123a0.85,0.85 0 0 1-0.187-0.123z" />
             </group>
         </vector>
-    </aapt:attr>
-    <target android:name="gSlide">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:duration="1000"
-                android:interpolator="@android:interpolator/decelerate_quad"
-                android:propertyName="translationY"
-                android:repeatCount="infinite"
-                android:repeatMode="reverse"
-                android:valueFrom="0"
-                android:valueTo="2" />
-        </aapt:attr>
-    </target>
-</animated-vector>

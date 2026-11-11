@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PotLab 风格动态图标：房子整体轻跳（库内无 Home，按同风格补齐） -->
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt">
-    <aapt:attr name="android:drawable">
-        <vector
+<!-- 静态图标（原 PotLab 动态矢量已去动画，统一静态渲染） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
             android:width="24dp"
             android:height="24dp"
             android:viewportWidth="24"
@@ -23,17 +20,3 @@
                     android:pathData="M10.25,20v-3.9a1.75,1.75 0 0 1 3.5,0V20" />
             </group>
         </vector>
-    </aapt:attr>
-    <target android:name="gHome">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:duration="1200"
-                android:interpolator="@android:interpolator/decelerate_quad"
-                android:propertyName="translationY"
-                android:repeatCount="infinite"
-                android:repeatMode="reverse"
-                android:valueFrom="0"
-                android:valueTo="-1.2" />
-        </aapt:attr>
-    </target>
-</animated-vector>

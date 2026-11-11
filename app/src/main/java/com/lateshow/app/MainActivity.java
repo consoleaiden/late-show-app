@@ -33,8 +33,6 @@ public class MainActivity extends AppCompatActivity {
     private static final int TAB_COUNT = 3;
     private static final int[] TAB_IDS = {R.id.tab_home, R.id.tab_fav, R.id.tab_settings};
     private static final int[] ICON_IDS = {R.id.tab_home_icon, R.id.tab_fav_icon, R.id.tab_settings_icon};
-    /** 三个底部图标的 Lottie 资产名 */
-    private static final String[] NAV_ICONS = {"ic_home", "ic_heart", "ic_settings"};
     private static final int[] GLOW_IDS = {R.id.tab_home_glow, R.id.tab_fav_glow, R.id.tab_settings_glow};
     private static final int[] IND_IDS = {R.id.tab_home_ind, R.id.tab_fav_ind, R.id.tab_settings_ind};
 
@@ -55,7 +53,7 @@ public class MainActivity extends AppCompatActivity {
     private View detailHost;
     private OnBackPressedCallback detailBack;
 
-    private final com.airbnb.lottie.LottieAnimationView[] icons = new com.airbnb.lottie.LottieAnimationView[TAB_COUNT];
+    private final ImageView[] icons = new ImageView[TAB_COUNT];
     private final View[] glows = new View[TAB_COUNT];
     private final View[] inds = new View[TAB_COUNT];
     private final int[] curTint = new int[TAB_COUNT];
@@ -81,9 +79,8 @@ public class MainActivity extends AppCompatActivity {
             icons[i] = findViewById(ICON_IDS[i]);
             glows[i] = findViewById(GLOW_IDS[i]);
             inds[i] = findViewById(IND_IDS[i]);
-            // Lottie 图标：装载并停在起始帧，颜色由选中态统一着色
-            com.lateshow.app.util.LottieIcon.bind(icons[i], NAV_ICONS[i]);
-            com.lateshow.app.util.LottieIcon.tint(icons[i], off);
+            // 静态矢量图标：src 已在布局里指定，这里只按选中态着色
+            com.lateshow.app.util.Icons.tint(icons[i], off);
             curTint[i] = off;
             glows[i].setAlpha(0f);
             inds[i].setAlpha(0f);
@@ -155,8 +152,8 @@ public class MainActivity extends AppCompatActivity {
         float d = getResources().getDisplayMetrics().density;
         bar.setGlassCornerRadius(24f * d);
         bar.setRefraction(18f * d, 42f * d);   // 折射带宽 / 折射量（边缘透镜放大）
-        bar.setBlurSigma(5f * d);              // 磨砂（太强会把折射盖成奶白）
-        bar.setFrost(0.16f);                   // 中心白雾
+        bar.setBlurSigma(8f * d);              // 导航磨砂（tier1 据此加深降采样）
+        bar.setFrost(0.22f);                   // 中心白雾
         bar.setHighlight(0.30f);               // 边缘高光
         bar.setDispersion(0.8f);               // 色散（彩虹边）
     }
@@ -319,19 +316,19 @@ public class MainActivity extends AppCompatActivity {
         com.lateshow.app.util.UiAnim.fadeUp(v, 8);
     }
 
-    /** 渲染导航选中态：颜色渐变 + 图标播放一次 + 光斑/指示条展开（无文字标签） */
+    /** 渲染导航选中态：颜色渐变 + 图标弹跳 + 光斑/指示条展开（无文字标签） */
     private void renderTabs(int tab, boolean animate) {
         int acc = getColor(R.color.acc);
         int off = getColor(R.color.t3);
         for (int i = 0; i < TAB_COUNT; i++) {
             final boolean sel = i == tab;
-            final com.airbnb.lottie.LottieAnimationView icon = icons[i];
+            final ImageView icon = icons[i];
             View glow = glows[i];
             View ind = inds[i];
             int target = sel ? acc : off;
 
             if (animate) animateTint(icon, curTint[i], target);
-            else com.lateshow.app.util.LottieIcon.tint(icon, target);
+            else com.lateshow.app.util.Icons.tint(icon, target);
             curTint[i] = target;
 
             if (animate) {
@@ -345,17 +342,11 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (sel && animate) {
-                // 点选：图标从头播放一次（描边心形 → 实心），播完静止
-                icon.setSpeed(1f);
-                icon.setProgress(0f);
-                icon.playAnimation();
-                bounce(icon);
+                bounce(icon);   // 点选：弹跳一次（静态图标无逐帧动画）
             } else if (!sel) {
                 icon.animate().cancel();
                 icon.setScaleX(1f);
                 icon.setScaleY(1f);
-                icon.pauseAnimation();
-                icon.setProgress(0f);   // 取消选中回到起始帧（心形=描边态）
             }
         }
     }
@@ -377,11 +368,11 @@ public class MainActivity extends AppCompatActivity {
                 .start();
     }
 
-    /** 图标着色渐变（Lottie 值回调，填充/描边同一颜色，不经过 ColorFilter） */
-    private void animateTint(final com.airbnb.lottie.LottieAnimationView icon, int from, int to) {
+    /** 图标着色渐变（静态矢量：直接对 colorFilter 做 ARGB 插值，无需逐帧运行动画） */
+    private void animateTint(final ImageView icon, int from, int to) {
         ValueAnimator va = ValueAnimator.ofObject(new ArgbEvaluator(), from, to);
         va.setDuration(260);
-        va.addUpdateListener(a -> com.lateshow.app.util.LottieIcon.tint(icon, (Integer) a.getAnimatedValue()));
+        va.addUpdateListener(a -> com.lateshow.app.util.Icons.tint(icon, (Integer) a.getAnimatedValue()));
         va.start();
     }
 

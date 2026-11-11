@@ -120,12 +120,8 @@ public class HomeFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
-        com.lateshow.app.util.LottieIcon.bindTree(v);
         btnSource = v.findViewById(R.id.btnSource);
         btnSourceIcon = v.findViewById(R.id.btnSourceIcon);
-        // 顶栏两个图标常驻循环播放（源站菜单中线滑动 / 放大镜摇摆）
-        com.lateshow.app.util.LottieIcon.loop(btnSourceIcon, "ic_menu_list");
-        com.lateshow.app.util.LottieIcon.loop(v.findViewById(R.id.imgSearch), "ic_search");
         inputSearch = v.findViewById(R.id.inputSearch);
         // M2：后端 wd / tag 都是 max_length=64，超长会 422 并在界面上糊一段英文错误。
         // 输入层直接挡住，用户不会先打满再被打回。
@@ -165,11 +161,9 @@ public class HomeFragment extends Fragment {
         grid.setHasFixedSize(true); // 条目尺寸固定，插入新页不触发整表重测量
         grid.setItemAnimator(null); // 关闭条目动画：默认动画器的浮点平移会导致减速阶段文字亚像素抖动
 
-        // 无限加载 + 回到顶部按钮显隐（FAB 用 LottieDrawable 注入图标）
+        // 无限加载 + 回到顶部按钮显隐（FAB 图标由布局 android:src 指定）
         com.google.android.material.floatingactionbutton.FloatingActionButton fabTop =
                 v.findViewById(R.id.fabTop);
-        final com.airbnb.lottie.LottieDrawable fabIcon =
-                com.lateshow.app.util.LottieIcon.into(fabTop, "ic_top", false);
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 GridLayoutManager lm = (GridLayoutManager) rv.getLayoutManager();
@@ -186,28 +180,12 @@ public class HomeFragment extends Fragment {
                 if (last >= total - 6) loadPage(page + 1);
             }
 
-            /** 滚动期间暂停顶栏两个常驻循环动画，静止后恢复——消除每帧额外重绘 */
             @Override public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
-                boolean scrolling = newState != RecyclerView.SCROLL_STATE_IDLE;
-                if (scrolling) hideHistory(); // 开始滚动列表即收起历史面板
-                if (btnSourceIcon instanceof com.airbnb.lottie.LottieAnimationView) {
-                    com.airbnb.lottie.LottieAnimationView lv = (com.airbnb.lottie.LottieAnimationView) btnSourceIcon;
-                    if (scrolling) lv.pauseAnimation();
-                    else if (lv.getComposition() != null) lv.playAnimation();
-                }
-                View search = getView() != null ? getView().findViewById(R.id.imgSearch) : null;
-                if (search instanceof com.airbnb.lottie.LottieAnimationView) {
-                    com.airbnb.lottie.LottieAnimationView lv = (com.airbnb.lottie.LottieAnimationView) search;
-                    if (scrolling) lv.pauseAnimation();
-                    else if (lv.getComposition() != null) lv.playAnimation();
-                }
+                // 图标已全部静态化，滚动时不再需要暂停/恢复动画
+                if (newState != RecyclerView.SCROLL_STATE_IDLE) hideHistory();
             }
         });
         fabTop.setOnClickListener(vv -> {
-            if (fabIcon != null) {
-                fabIcon.setProgress(0f);
-                fabIcon.playAnimation();
-            }
             grid.smoothScrollToPosition(0);
             fabTop.setVisibility(View.GONE);
         });
@@ -371,8 +349,8 @@ public class HomeFragment extends Fragment {
             float d = getResources().getDisplayMetrics().density;
             topbar.setGlassCornerRadius(24f * d);
             topbar.setRefraction(18f * d, 42f * d);   // 折射带 / 折射量
-            topbar.setBlurSigma(5f * d);
-            topbar.setFrost(0.16f);
+            topbar.setBlurSigma(9f * d);              // 顶部功能区磨砂要更浓（tier1 会据此加深降采样）
+            topbar.setFrost(0.26f);
             topbar.setHighlight(0.30f);
             topbar.setDispersion(0.8f);
         }
@@ -458,7 +436,7 @@ public class HomeFragment extends Fragment {
         menuPanel.setGlassCornerRadius(14f * d);
         menuPanel.setRefraction(18f * d, 30f * d);
         menuPanel.setBlurSigma(8f * d);
-        menuPanel.setFrost(0.32f);
+        menuPanel.setFrost(0.34f);
         menuPanel.setHighlight(0.28f);
         menuPanel.setDispersion(0.6f);
         menuPanel.setBackdropSource(grid);
@@ -493,8 +471,11 @@ public class HomeFragment extends Fragment {
             menuPanel.setAlpha(1f);
             menuPanel.setTranslationY(0f);
         }
-        // 浮层刚可见时位置/背景才有意义，强制重采一次背后海报
-        menuPanel.post(menuPanel::refreshGlass);
+        // 浮层刚可见时位置/背景才有意义：先按导航栏真实位置收敛高度，再强制重采背后海报
+        menuPanel.post(() -> {
+            clampMenuHeight(content);
+            menuPanel.refreshGlass();
+        });
     }
 
     /** 收起源站 / 分类弹层 */
@@ -887,13 +868,13 @@ public class HomeFragment extends Fragment {
                 int c = (int) RING_EVAL.evaluate(f, orange, gray);
                 ringBg.setRingColor(c);
                 ringBg.setGlowAlpha(Math.round(GLOW_PEAK + (GLOW_MIN - GLOW_PEAK) * f));
-                com.lateshow.app.util.LottieIcon.tint(btnSourceIcon, c);
+                com.lateshow.app.util.Icons.tint(btnSourceIcon, c);
             });
             ringAnim.start();
         } else {
             boolean ok = state == RING_OK;
             btnSource.setBackgroundResource(ok ? R.drawable.bg_ring_on : R.drawable.bg_ring_off);
-            com.lateshow.app.util.LottieIcon.tint(btnSourceIcon,
+            com.lateshow.app.util.Icons.tint(btnSourceIcon,
                     getResources().getColor(ok ? R.color.acc : R.color.t3, null));
         }
     }
@@ -1105,15 +1086,49 @@ public class HomeFragment extends Fragment {
         sv.addView(box, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         int want = dp(12) + dp(38) * rows;
-        // 最大高度 = 屏幕高度 − 弹层顶部占用(状态栏+58dp) − 底部导航区占用。
-        // 底部导航区 = 导航栏 48dp + 底部边距 8dp + 视觉间隙 10dp：
-        // 不减掉这段的话长列表会一直伸到导航栏底下被盖住
-        int topUsed = menuTopUsed();
-        int maxH = Math.max(dp(120),
-                getResources().getDisplayMetrics().heightPixels - topUsed - dp(66));
         sv.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Math.min(want, maxH)));
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.min(want, menuAvailHeight())));
         return sv;
+    }
+
+    /**
+     * 弹层可用高度。
+     * <p>注意：<b>不能用 DisplayMetrics.heightPixels</b>——那是整屏物理高度，包含系统导航条，
+     * 而 fragment 根布局的高度已经扣掉了底部系统栏（MainActivity 给 container 补了
+     * bars.bottom padding），再加上悬浮导航胶囊 48dp + 底距 8dp + 10dp 间隙，
+     * 用屏幕高度算出来的弹层一定会伸到导航栏底下（v1.5.143 仍然遮挡的根因）。
+     */
+    private int menuAvailHeight() {
+        int topUsed = menuTopUsed();
+        View root = getView();
+        int rootH = root != null ? root.getHeight() : 0;
+        if (rootH <= 0) {
+            // 兜底：整屏高度减系统导航条（估算 48dp），再减顶部占用与底部导航区
+            rootH = getResources().getDisplayMetrics().heightPixels - dp(48);
+        }
+        int bottomReserve = dp(48 + 8 + 10);   // 导航胶囊 48 + 底距 8 + 间隙 10
+        return Math.max(dp(120), rootH - topUsed - bottomReserve);
+    }
+
+    /**
+     * 用导航栏真实坐标再收敛一次高度（最终保险）：不管 insets、刘海、手势条怎么变，
+     * 弹层底边永远停在导航胶囊上方 10dp。
+     */
+    private void clampMenuHeight(View content) {
+        if (content == null || menuPanel == null) return;
+        View tabbar = requireActivity().findViewById(R.id.tabbar);
+        if (tabbar == null || !tabbar.isShown()) return;
+        int[] tb = new int[2];
+        int[] pn = new int[2];
+        tabbar.getLocationOnScreen(tb);
+        menuPanel.getLocationOnScreen(pn);
+        int avail = tb[1] - pn[1] - dp(10);
+        if (avail <= dp(120)) return;
+        ViewGroup.LayoutParams lp = content.getLayoutParams();
+        if (lp != null && (lp.height == ViewGroup.LayoutParams.WRAP_CONTENT || lp.height > avail)) {
+            lp.height = avail;
+            content.setLayoutParams(lp);
+        }
     }
 
     /** 弹层顶边已占用的像素（状态栏 + 58dp；弹层还没被 insets 调整过时用布局默认值兜底） */

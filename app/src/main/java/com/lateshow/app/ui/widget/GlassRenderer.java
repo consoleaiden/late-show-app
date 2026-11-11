@@ -21,7 +21,6 @@ import android.view.ViewTreeObserver;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.RecyclerView;
 
 import com.lateshow.app.R;
 
@@ -39,7 +38,8 @@ import java.nio.charset.StandardCharsets;
  *
  * 三级降级（按设备能力选择，诊断日志 tag=LateShowGlass）：
  *  <li>tier 2 API 33+：RenderNode + RenderEffect(AGSL RuntimeShader + 高斯模糊)，折射/色散完整；</li>
- *  <li>tier 1 API 31+：<b>CPU 降采样模糊</b>（把背后内容画进 1/10 小图再放大 = 磨砂）
+ *  <li>tier 1 API 31+：<b>CPU 降采样模糊</b>（把背后内容画进 1/10~1/20 小图再放大 = 磨砂，
+ *      倍数由 blurSigma 推导，越大越糊）
  *      + 白雾 + 渐变高光。<b>刻意不用 RenderEffect</b>：华为等部分 GPU 驱动会静默丢弃
  *      RenderEffect/RenderNode 的绘制，导致玻璃整块变透明（Mate30 就是这个问题）。
  *      降采样走纯 Canvas 绘制，任何设备都能出磨砂；</li>
@@ -83,14 +83,6 @@ public class GlassRenderer {
     private final android.graphics.Rect drawRect = new android.graphics.Rect();
     private long lastCapture;
     private boolean capturePending = true;
-    /**
-     * 背景内容是否有变化（滚动过）。tier1 的 CPU 采样全量画一遍背景 View，
-     * 开销不小；顶栏 Lottie 常驻循环会让窗口不停重绘，若每次 preDraw 都采样，
-     * 页面静止时也在 15fps 空转 → 卡顿感来源。改成「只有背景滚动过才采样」。
-     */
-    private boolean contentDirty = true;
-    /** 上次看到的背景 RecyclerView 可见子项数：翻页/换分类不滚动也会换内容，靠它补一刀 */
-    private int lastChildCount = -1;
 
     private float cornerRadiusPx = -1f;
     private float refractionHeightPx = -1f;
@@ -105,6 +97,8 @@ public class GlassRenderer {
     private int barBgColor = 0xFFFFFFFF;
 
     private boolean dirty = true;
+    /** 上一帧的窗口尺寸：变化说明内容布局换了，需要立刻重采一次 */
+    private int lastW, lastH;
     private final int[] srcPos = new int[2];
     private final int[] selfPos = new int[2];
 
@@ -120,7 +114,7 @@ public class GlassRenderer {
         this.tier = computeTier();
         // 兜底底色浓度：完整玻璃靠 shader，底色调淡；降级档需要更实的底保证可读
         if (tier == TIER_FULL) baseAlpha = 0.10f;
-        else if (tier == TIER_BLUR) baseAlpha = 0.38f;
+        else if (tier == TIER_BLUR) baseAlpha = 0.32f;
         initPaints();
         Log.i(DIAG_TAG, "GlassRenderer init: tier=" + tier + " sdk=" + Build.VERSION.SDK_INT
                 + " device=" + Build.MANUFACTURER + ' ' + Build.MODEL
@@ -143,25 +137,9 @@ public class GlassRenderer {
     }
 
     public void setBackdrop(@NonNull View v) {
-        if (backdrop instanceof RecyclerView && scrollHook != null) {
-            ((RecyclerView) backdrop).removeOnScrollListener(scrollHook);
-        }
         backdrop = v;
-        if (v instanceof RecyclerView) {
-            if (scrollHook == null) {
-                scrollHook = new RecyclerView.OnScrollListener() {
-                    @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
-                        contentDirty = true;
-                    }
-                };
-            }
-            ((RecyclerView) v).addOnScrollListener(scrollHook);
-            contentDirty = true;
-        }
         forceCapture();
     }
-
-    private RecyclerView.OnScrollListener scrollHook;
 
     public void setCornerRadiusPx(float px) {
         cornerRadiusPx = px;
@@ -178,6 +156,7 @@ public class GlassRenderer {
     public void setBlurSigma(float sigma) {
         blurSigma = sigma;
         dirty = true;
+        forceCapture();     // tier1 的降采样倍数由 sigma 推导，尺寸会变，必须重采
     }
 
     public void setFrost(float f) {
@@ -219,9 +198,6 @@ public class GlassRenderer {
         try {
             host.getViewTreeObserver().removeOnPreDrawListener(preDraw);
         } catch (Exception ignored) { }
-        if (backdrop instanceof RecyclerView && scrollHook != null) {
-            ((RecyclerView) backdrop).removeOnScrollListener(scrollHook);
-        }
         if (backdropBmp != null && !backdropBmp.isRecycled()) {
             backdropBmp.recycle();
             backdropBmp = null;
@@ -273,30 +249,29 @@ public class GlassRenderer {
     private void step() {
         int w = host.getWidth(), h = host.getHeight();
         if (backdrop == null || w <= 0 || h <= 0) return;
-        boolean needRedraw = false;
         if (tier == TIER_FULL && shader != null) {
             recordNode(w, h);       // 内容每帧都在动，必须每帧重录
-            needRedraw = true;
-        } else if (tier >= TIER_BLUR) {
-            // 只有背景滚动过 / 被显式要求重采时才做 CPU 采样：
-            // 顶栏 Lottie 循环触发的重绘不再带动每帧全量采样（静止零开销）
-            if (backdrop instanceof RecyclerView) {
-                int cc = ((RecyclerView) backdrop).getChildCount();
-                if (cc != lastChildCount) {
-                    lastChildCount = cc;
-                    contentDirty = true;
-                }
+            host.invalidate();      // shader 每帧重绘
+            return;
+        }
+        if (tier >= TIER_BLUR) {
+            // tier1：按时间节流采样，但**不主动 invalidate**。
+            // 采样发生在 preDraw（本次绘制真正开始前），所以滚动的每一帧都会用上新图；
+            // 反过来若不滚动就没有新帧，也就不采样 —— 静止零开销、也不会自己喂自己
+            // 形成「invalidate → preDraw → 采样 → invalidate」的永动循环（旧实现就是这样
+            // 在静止时也持续 15fps 空转，既卡又费电，还让导航栏磨砂看起来是死的）。
+            if (w != lastW || h != lastH) {
+                lastW = w;
+                lastH = h;
+                capturePending = true;
             }
             long now = SystemClock.uptimeMillis();
-            if ((capturePending || contentDirty) && now - lastCapture >= CAPTURE_INTERVAL_MS) {
+            if (capturePending || now - lastCapture >= CAPTURE_INTERVAL_MS) {
                 captureDownsampled(w, h);
                 lastCapture = now;
                 capturePending = false;
-                contentDirty = false;
-                needRedraw = true;
             }
         }
-        if (needRedraw) host.invalidate();
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -349,12 +324,28 @@ public class GlassRenderer {
     }
 
     /**
-     * tier 1：把背后内容按 1/DOWNSCALE 画进小图，绘制时双线性放大 → 磨砂。
+     * tier 1 实际降采样倍数：基准 1/10，并按宿主设定的 blurSigma 继续加深
+     * （sigma 越大 → 缩略图越小 → 放大后越糊）。
+     * 这样顶部功能区把 sigma 调到 9dp 就能得到明显更浓的磨砂，而导航/弹层仍各自独立。
+     */
+    private int downscale() {
+        int base = DOWNSCALE;
+        if (blurSigma > 0f) {
+            float d = host.getResources().getDisplayMetrics().density;
+            int want = Math.round(blurSigma / Math.max(1f, d) * 2f);  // 5dp→10 / 8dp→16 / 9dp→18
+            base = Math.max(base, Math.min(20, want));
+        }
+        return base;
+    }
+
+    /**
+     * tier 1：把背后内容按 1/downscale 画进小图，绘制时双线性放大 → 磨砂。
      * 纯 Canvas 绘制，不依赖 RenderEffect，华为/低端 GPU 也能出效果。
      */
     private void captureDownsampled(int w, int h) {
-        int sw = Math.max(1, w / DOWNSCALE);
-        int sh = Math.max(1, h / DOWNSCALE);
+        final int ds = downscale();
+        int sw = Math.max(1, w / ds);
+        int sh = Math.max(1, h / ds);
         if (backdropBmp == null || backdropBmp.isRecycled()
                 || backdropBmp.getWidth() != sw || backdropBmp.getHeight() != sh) {
             if (backdropBmp != null && !backdropBmp.isRecycled()) backdropBmp.recycle();
@@ -396,9 +387,9 @@ public class GlassRenderer {
                 canvas.drawBitmap(backdropBmp, null, drawRect, drawPaint);
             }
             // 白雾：磨砂的关键（内容 → 半透明白 → 柔和高光）。
-            // tier1（Mate30 等 CPU 磨砂档）白雾基准从 0.30 提到 0.42：
-            // 降采样模糊在浅色海报上不够「雾」，加浓白雾才有明确的磨砂观感
-            float frostA = (tier == TIER_BLUR ? 0.42f : 0.30f) + frost;
+            // tier1（Mate30 等 CPU 磨砂档）白雾基准 0.38：降采样本就很糊，
+            // 这里再补一层白雾才有明确的「毛玻璃」观感（浓度主要靠各处的 frost 参数调）
+            float frostA = (tier == TIER_BLUR ? 0.38f : 0.30f) + frost;
             frostPaint.setColor(applyAlpha(barBgColor, Math.min(0.85f, frostA)));
             canvas.drawRoundRect(0f, 0f, (float) w, (float) h, radius, radius, frostPaint);
             if (highlight > 0f) {

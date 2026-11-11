@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PotLab 风格动态图标：播放键脉冲呼吸（库内无 Play，按同风格补齐） -->
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt">
-    <aapt:attr name="android:drawable">
-        <vector
+<!-- 静态图标（原 PotLab 动态矢量已去动画，统一静态渲染） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
             android:width="24dp"
             android:height="24dp"
             android:viewportWidth="24"
@@ -17,27 +14,3 @@
                     android:pathData="M8.5,5.9v12.2a1.1,1.1 0 0 0 1.67,0.94l9.9,-6.1a1.1,1.1 0 0 0 0,-1.88l-9.9,-6.1A1.1,1.1 0 0 0 8.5,5.9z" />
             </group>
         </vector>
-    </aapt:attr>
-    <target android:name="gPulse">
-        <aapt:attr name="android:animation">
-            <set xmlns:android="http://schemas.android.com/apk/res/android">
-                <objectAnimator
-                    android:duration="900"
-                    android:interpolator="@android:interpolator/accelerate_decelerate"
-                    android:propertyName="scaleX"
-                    android:repeatCount="infinite"
-                    android:repeatMode="reverse"
-                    android:valueFrom="1"
-                    android:valueTo="0.88" />
-                <objectAnimator
-                    android:duration="900"
-                    android:interpolator="@android:interpolator/accelerate_decelerate"
-                    android:propertyName="scaleY"
-                    android:repeatCount="infinite"
-                    android:repeatMode="reverse"
-                    android:valueFrom="1"
-                    android:valueTo="0.88" />
-            </set>
-        </aapt:attr>
-    </target>
-</animated-vector>

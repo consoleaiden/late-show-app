@@ -196,12 +196,12 @@
                                 android:layout_gravity="center"
                                 android:background="@drawable/bg_play_cover">
 
-                                <com.airbnb.lottie.LottieAnimationView
+                                <androidx.appcompat.widget.AppCompatImageView
                                     android:id="@+id/imgPlayCover"
                                     android:layout_width="22dp"
                                     android:layout_height="22dp"
                                     android:layout_gravity="center"
-                                    android:tag="ic_play" />
+                                    android:src="@drawable/ic_play" />
                             </FrameLayout>
                         </FrameLayout>
 
@@ -393,14 +393,14 @@
                                 android:textColor="@color/btnPlayInk"
                                 android:letterSpacing="0.06" />
 
-                            <com.airbnb.lottie.LottieAnimationView
+                            <androidx.appcompat.widget.AppCompatImageView
                                 android:id="@+id/btnFav"
                                 android:layout_width="46dp"
                                 android:layout_height="46dp"
                                 android:layout_marginLeft="10dp"
                                 android:padding="12dp"
                                 android:background="@drawable/bg_episode"
-                                android:tag="ic_heart"
+                                android:src="@drawable/ic_heart"
                                 android:contentDescription="收藏" />
                         </LinearLayout>
 

@@ -128,7 +128,6 @@ public class SyncConsoleActivity extends AppCompatActivity {
         com.lateshow.app.util.ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sync_console);
-        com.lateshow.app.util.LottieIcon.bindTree(findViewById(android.R.id.content));
 
         setupAccordion();
         setupFab();
@@ -174,24 +173,15 @@ public class SyncConsoleActivity extends AppCompatActivity {
             boolean open = i == target;
             body.setVisibility(open ? View.VISIBLE : View.GONE);
             arrow.animate().rotation(open ? 180f : 0f).setDuration(180).start();
-            if (arrow instanceof com.airbnb.lottie.LottieAnimationView) {
-                com.airbnb.lottie.LottieAnimationView lav = (com.airbnb.lottie.LottieAnimationView) arrow;
-                lav.setSpeed(1f);
-                lav.setProgress(0f);
-                lav.playAnimation();
-            }
         }
     }
 
     private void setupFab() {
         android.widget.ScrollView scroll = findViewById(R.id.scrollConsole);
         com.google.android.material.floatingactionbutton.FloatingActionButton fab = findViewById(R.id.fabTop);
-        final com.airbnb.lottie.LottieDrawable icon =
-                com.lateshow.app.util.LottieIcon.into(fab, "ic_top", false);
         scroll.setOnScrollChangeListener((View.OnScrollChangeListener) (v, sx, sy, ox, oy) ->
                 fab.setVisibility(sy > scroll.getHeight() / 2 ? View.VISIBLE : View.GONE));
         fab.setOnClickListener(v -> {
-            if (icon != null) { icon.setProgress(0f); icon.playAnimation(); }
             scroll.smoothScrollTo(0, 0);
             fab.setVisibility(View.GONE);
         });

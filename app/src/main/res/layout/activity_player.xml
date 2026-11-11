@@ -28,7 +28,7 @@
         android:visibility="gone" />
 
     <!-- 退出全屏返回按钮（左上角悬浮）：按钮 80→53dp（缩小 1/3），图标 52→41.6dp（缩小 1/5，padding 6dp） -->
-    <com.airbnb.lottie.LottieAnimationView
+    <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/btnBackFull"
         android:layout_width="53dp"
         android:layout_height="53dp"
@@ -37,7 +37,7 @@
         android:layout_marginStart="8dp"
         android:padding="6dp"
         android:background="@drawable/bg_player_back"
-        android:tag="ic_back"
+        android:src="@drawable/ic_back"
         android:contentDescription="退出全屏" />
 
     <!-- 播放器工具：倍速 + 设置（右上角悬浮） -->

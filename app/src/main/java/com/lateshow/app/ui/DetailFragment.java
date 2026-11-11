@@ -59,7 +59,6 @@ import com.lateshow.app.model.Models;
 import com.lateshow.app.store.PrefStore;
 import com.lateshow.app.util.GestureSeek;
 import com.lateshow.app.util.HeroMotionLayout;
-import com.lateshow.app.util.LottieIcon;
 import com.lateshow.app.util.OfflineMedia;
 import com.lateshow.app.util.TimeUtil;
 
@@ -199,7 +198,7 @@ public class DetailFragment extends Fragment {
     private View rowActor, rowTags;
     /** 标签胶囊的程序化底：随播放态一起改色，避免浅底上压一块深色（见 applyTagChipTint） */
     private final List<GradientDrawable> tagChipBg = new ArrayList<>();
-    private com.airbnb.lottie.LottieAnimationView btnFav;
+    private ImageView btnFav;
     private RecyclerView lines;
     /** 选集网格：普通 LinearLayout 按行手动铺（一页 32~40 格，见 renderEpisodes 注释） */
     private LinearLayout epGrid;
@@ -382,9 +381,9 @@ public class DetailFragment extends Fragment {
             }
         });
 
-        LottieIcon.bindTree(v);
+        // 静态图标：src 由布局指定，这里只做必要着色
         // 封面播放键在深色圆钮上，固定白色
-        LottieIcon.tint(v.findViewById(R.id.imgPlayCover), 0xF2FFFFFF);
+        com.lateshow.app.util.Icons.tint(v.findViewById(R.id.imgPlayCover), 0xF2FFFFFF);
 
         // 页面分两段：信息带（固定偏深底）+ 信息带以下（跟随主题的页底）
         bandBg = new ColorDrawable(getColor(R.color.heroBand));
@@ -753,23 +752,20 @@ public class DetailFragment extends Fragment {
         toast(fav ? "已加入收藏 · 已缓存可离线播放" : "已取消收藏");
     }
 
-    /** 收藏态：心形描边(未收藏) / 实心(已收藏)，animate=true 时播放描边→实心过渡 */
+    /** 收藏态：描边心形(未收藏) / 实心心形(已收藏)，animate=true 时给一次弹跳反馈 */
     private void syncFavState(boolean animate) {
         boolean fav = PrefStore.get().isFav(slug, vodId);
-        LottieIcon.tint(btnFav, getColor(fav ? R.color.acc : R.color.t2));
+        if (btnFav == null) return;
+        btnFav.setImageResource(fav ? R.drawable.ic_heart : R.drawable.ic_heart_line);
+        com.lateshow.app.util.Icons.tint(btnFav, getColor(fav ? R.color.acc : R.color.t2));
         if (animate) {
-            if (fav) {
-                btnFav.setSpeed(1f);
-                btnFav.setProgress(0f);
-                btnFav.playAnimation();
-            } else {
-                btnFav.setSpeed(-1f);
-                btnFav.setProgress(1f);
-                btnFav.playAnimation();
-            }
-        } else {
-            btnFav.pauseAnimation();
-            btnFav.setProgress(fav ? 1f : 0f);
+            btnFav.animate().cancel();
+            btnFav.setScaleX(0.82f);
+            btnFav.setScaleY(0.82f);
+            btnFav.animate().scaleX(1.12f).scaleY(1.12f).setDuration(150)
+                    .withEndAction(() -> btnFav.animate().scaleX(1f).scaleY(1f)
+                            .setDuration(180).start())
+                    .start();
         }
     }
 

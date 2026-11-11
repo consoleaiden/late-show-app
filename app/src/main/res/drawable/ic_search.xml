@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PotLab Icons Search：放大镜左右摇摆 -->
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt">
-    <aapt:attr name="android:drawable">
-        <vector
+<!-- 静态图标（原 PotLab 动态矢量已去动画，统一静态渲染） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
             android:width="20dp"
             android:height="20dp"
             android:viewportWidth="24"
@@ -22,17 +19,3 @@
                     android:pathData="M16.79,16.73L19.39,19.33" />
             </group>
         </vector>
-    </aapt:attr>
-    <target android:name="gFlip">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:duration="1500"
-                android:interpolator="@android:interpolator/anticipate_overshoot"
-                android:propertyName="rotation"
-                android:repeatCount="infinite"
-                android:repeatMode="reverse"
-                android:valueFrom="-16"
-                android:valueTo="16" />
-        </aapt:attr>
-    </target>
-</animated-vector>

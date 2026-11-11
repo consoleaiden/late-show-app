@@ -107,12 +107,12 @@
             android:background="@drawable/bg_chip_dark"
             android:visibility="gone">
 
-            <com.airbnb.lottie.LottieAnimationView
+            <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/imgDel"
                 android:layout_width="13dp"
                 android:layout_height="13dp"
                 android:layout_gravity="center"
-                android:tag="ic_delete"
+                android:src="@drawable/ic_delete"
                 android:contentDescription="删除" />
         </FrameLayout>
 
@@ -146,12 +146,12 @@
             android:background="@drawable/bg_chip_dark"
             android:visibility="gone">
 
-            <com.airbnb.lottie.LottieAnimationView
+            <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/imgBadgeFav"
                 android:layout_width="11dp"
                 android:layout_height="11dp"
                 android:layout_gravity="center"
-                android:tag="ic_heart"
+                android:src="@drawable/ic_heart"
                 android:contentDescription="已收藏" />
         </FrameLayout>
     </FrameLayout>

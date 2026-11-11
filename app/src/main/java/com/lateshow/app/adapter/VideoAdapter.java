@@ -88,11 +88,9 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         VH h = new VH(v);
         // 圆角统一由 coverBox 的背景轮廓裁剪（bg_cover_round 8dp）：图片/遮罩/角标全部裁进圆角内
         h.coverBox.setClipToOutline(true);
-        // Lottie 图标一次装载随 ViewHolder 复用：删除角标白色静止、收藏角标心形实心（橙色）
-        com.lateshow.app.util.LottieIcon.bind(h.imgDel, "ic_delete");
-        com.lateshow.app.util.LottieIcon.tint(h.imgDel, 0xCCFFFFFF);
-        com.lateshow.app.util.LottieIcon.bind(h.imgBadgeFav, "ic_heart");
-        com.lateshow.app.util.LottieIcon.tint(h.imgBadgeFav, h.itemView.getResources().getColor(R.color.acc));
+        // 静态图标：src 由布局指定（ic_delete / ic_heart），这里只统一着色
+        com.lateshow.app.util.Icons.tint(h.imgDel, 0xCCFFFFFF);
+        com.lateshow.app.util.Icons.tint(h.imgBadgeFav, h.itemView.getResources().getColor(R.color.acc));
         return h;
     }
 
@@ -156,9 +154,11 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             if (listener != null) listener.onCard(it, h.coverBox);
         });
         h.btnDel.setOnClickListener(v -> {
-            // 点删除时播放一次垃圾桶盖摇摆
-            h.imgDel.setProgress(0f);
-            h.imgDel.playAnimation();
+            // 点删除给一次轻微缩放反馈（图标静态，不再播放逐帧动画）
+            h.btnDel.animate().cancel();
+            h.btnDel.setScaleX(0.86f);
+            h.btnDel.setScaleY(0.86f);
+            h.btnDel.animate().scaleX(1f).scaleY(1f).setDuration(160).start();
             if (listener != null) listener.onDelete(it);
         });
     }
@@ -181,7 +181,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         TextView title, tvSrc, tvMaskLeft, tvMaskRight, tvRemark;
         LinearLayout topMask, maskBottom;
         FrameLayout badgeFav, btnDel;
-        com.airbnb.lottie.LottieAnimationView imgDel, imgBadgeFav;
+        AppCompatImageView imgDel, imgBadgeFav;
 
         VH(@NonNull View v) {
             super(v);

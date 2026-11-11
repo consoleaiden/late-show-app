@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PotLab 风格动态图标：全屏四角外扩（库内无 Fullscreen，按同风格补齐） -->
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt">
-    <aapt:attr name="android:drawable">
-        <vector
+<!-- 静态图标（原 PotLab 动态矢量已去动画，统一静态渲染） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
             android:width="24dp"
             android:height="24dp"
             android:viewportWidth="24"
@@ -26,27 +23,3 @@
                     android:pathData="M15,4.75h3A1.25,1.25 0 0 1 19.25,6v3M9,19.25H6A1.25,1.25 0 0 1 4.75,18v-3" />
             </group>
         </vector>
-    </aapt:attr>
-    <target android:name="gScale">
-        <aapt:attr name="android:animation">
-            <set xmlns:android="http://schemas.android.com/apk/res/android">
-                <objectAnimator
-                    android:duration="900"
-                    android:interpolator="@android:interpolator/accelerate_decelerate"
-                    android:propertyName="scaleX"
-                    android:repeatCount="infinite"
-                    android:repeatMode="reverse"
-                    android:valueFrom="1"
-                    android:valueTo="1.08" />
-                <objectAnimator
-                    android:duration="900"
-                    android:interpolator="@android:interpolator/accelerate_decelerate"
-                    android:propertyName="scaleY"
-                    android:repeatCount="infinite"
-                    android:repeatMode="reverse"
-                    android:valueFrom="1"
-                    android:valueTo="1.08" />
-            </set>
-        </aapt:attr>
-    </target>
-</animated-vector>

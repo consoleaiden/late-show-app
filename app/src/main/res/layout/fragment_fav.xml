@@ -132,6 +132,8 @@
             android:layout_marginTop="12dp"
             android:layout_marginBottom="72dp"
             app:fabCustomSize="40dp"
+        android:src="@drawable/ic_top"
+        app:tint="@color/t1"
             app:maxImageSize="20dp"
             app:backgroundTint="@color/ink700"
             app:elevation="6dp"

@@ -54,7 +54,7 @@
                 android:layout_height="36dp"
                 android:padding="7dp"
                 android:background="@drawable/bg_circle"
-                android:tag="ic_theme"
+                android:src="@drawable/ic_theme"
                 android:contentDescription="主题" />
         </LinearLayout>
 
@@ -96,11 +96,11 @@
                     android:layout_marginRight="8dp"
                     android:text="" />
 
-                <com.airbnb.lottie.LottieAnimationView
+                <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/arMode"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
-                    android:tag="ic_chevron_down"
+                    android:src="@drawable/ic_chevron_down"
                     app:tint="@color/t3"
                     android:contentDescription="展开" />
             </LinearLayout>
@@ -233,11 +233,11 @@
 
                 <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
-                <com.airbnb.lottie.LottieAnimationView
+                <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/arSource"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
-                    android:tag="ic_chevron_down"
+                    android:src="@drawable/ic_chevron_down"
                     app:tint="@color/t3"
                     android:contentDescription="展开" />
             </LinearLayout>
@@ -487,11 +487,11 @@
 
                 <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
-                <com.airbnb.lottie.LottieAnimationView
+                <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/arPlay"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
-                    android:tag="ic_chevron_down"
+                    android:src="@drawable/ic_chevron_down"
                     app:tint="@color/t3"
                     android:contentDescription="展开" />
             </LinearLayout>
@@ -620,11 +620,11 @@
 
                 <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
-                <com.airbnb.lottie.LottieAnimationView
+                <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/arCache"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
-                    android:tag="ic_chevron_down"
+                    android:src="@drawable/ic_chevron_down"
                     app:tint="@color/t3"
                     android:contentDescription="展开" />
             </LinearLayout>
@@ -692,11 +692,11 @@
                     android:layout_marginRight="8dp"
                     android:text="v--" />
 
-                <com.airbnb.lottie.LottieAnimationView
+                <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/arApp"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
-                    android:tag="ic_chevron_down"
+                    android:src="@drawable/ic_chevron_down"
                     app:tint="@color/t3"
                     android:contentDescription="展开" />
             </LinearLayout>
@@ -763,6 +763,8 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="12dp"
         app:fabCustomSize="40dp"
+        android:src="@drawable/ic_top"
+        app:tint="@color/t1"
         app:maxImageSize="20dp"
         app:backgroundTint="@color/ink700"
         app:elevation="6dp"

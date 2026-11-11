@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PotLab 风格动态图标：源站菜单，中线左右轻移（库内无 Menu，按同风格补齐） -->
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt">
-    <aapt:attr name="android:drawable">
-        <vector
+<!-- 静态图标（原 PotLab 动态矢量已去动画，统一静态渲染） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
             android:width="24dp"
             android:height="24dp"
             android:viewportWidth="24"
@@ -26,17 +23,3 @@
                 android:strokeLineCap="round"
                 android:pathData="M4.75,16.9H19.25" />
         </vector>
-    </aapt:attr>
-    <target android:name="gMid">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:duration="1000"
-                android:interpolator="@android:interpolator/decelerate_quad"
-                android:propertyName="translationX"
-                android:repeatCount="infinite"
-                android:repeatMode="reverse"
-                android:valueFrom="0"
-                android:valueTo="2.6" />
-        </aapt:attr>
-    </target>
-</animated-vector>

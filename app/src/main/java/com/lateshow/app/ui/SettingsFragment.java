@@ -84,12 +84,6 @@ public class SettingsFragment extends Fragment {
             boolean open = i == target;
             body.setVisibility(open ? View.VISIBLE : View.GONE);
             arrow.animate().rotation(open ? 180f : 0f).setDuration(180).start();
-            if (arrow instanceof com.airbnb.lottie.LottieAnimationView) {
-                com.airbnb.lottie.LottieAnimationView lav = (com.airbnb.lottie.LottieAnimationView) arrow;
-                lav.setSpeed(1f);
-                lav.setProgress(0f);
-                lav.playAnimation();
-            }
         }
     }
 
@@ -101,7 +95,6 @@ public class SettingsFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
-        com.lateshow.app.util.LottieIcon.bindTree(v);
         // MainActivity 不再统一补顶部 padding（首页海报要顶到状态栏），
         // 本页页头仍从状态栏下沿开始，自己补 bars.top。
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(v, (vv, insets) -> {
@@ -118,15 +111,9 @@ public class SettingsFragment extends Fragment {
         android.widget.ScrollView scroll = v.findViewById(R.id.scrollSettings);
         com.google.android.material.floatingactionbutton.FloatingActionButton fabTop =
                 v.findViewById(R.id.fabTop);
-        final com.airbnb.lottie.LottieDrawable fabIcon =
-                com.lateshow.app.util.LottieIcon.into(fabTop, "ic_top", false);
         scroll.setOnScrollChangeListener((View.OnScrollChangeListener) (vv, sx, sy, osx, osy) ->
                 fabTop.setVisibility(sy > scroll.getHeight() / 2 ? View.VISIBLE : View.GONE));
         fabTop.setOnClickListener(vv -> {
-            if (fabIcon != null) {
-                fabIcon.setProgress(0f);
-                fabIcon.playAnimation();
-            }
             scroll.smoothScrollTo(0, 0);
             fabTop.setVisibility(View.GONE);
         });

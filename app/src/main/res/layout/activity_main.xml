@@ -39,9 +39,9 @@
             <FrameLayout android:id="@+id/tab_home" style="@style/TabItem">
                 <FrameLayout style="@style/TabIconBox">
                     <View android:id="@+id/tab_home_glow" style="@style/TabGlow" />
-                    <com.airbnb.lottie.LottieAnimationView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/tab_home_icon"
-                        android:tag="ic_home"
+                        android:src="@drawable/ic_home"
                         style="@style/TabIcon" />
                 </FrameLayout>
                 <View android:id="@+id/tab_home_ind" style="@style/TabIndicator" />
@@ -50,9 +50,9 @@
             <FrameLayout android:id="@+id/tab_fav" style="@style/TabItem">
                 <FrameLayout style="@style/TabIconBox">
                     <View android:id="@+id/tab_fav_glow" style="@style/TabGlow" />
-                    <com.airbnb.lottie.LottieAnimationView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/tab_fav_icon"
-                        android:tag="ic_heart"
+                        android:src="@drawable/ic_heart"
                         style="@style/TabIcon" />
                 </FrameLayout>
                 <View android:id="@+id/tab_fav_ind" style="@style/TabIndicator" />
@@ -61,9 +61,9 @@
             <FrameLayout android:id="@+id/tab_settings" style="@style/TabItem">
                 <FrameLayout style="@style/TabIconBox">
                     <View android:id="@+id/tab_settings_glow" style="@style/TabGlow" />
-                    <com.airbnb.lottie.LottieAnimationView
+                    <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/tab_settings_icon"
-                        android:tag="ic_settings"
+                        android:src="@drawable/ic_settings"
                         style="@style/TabIcon" />
                 </FrameLayout>
                 <View android:id="@+id/tab_settings_ind" style="@style/TabIndicator" />

@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PotLab Icons Trash：垃圾桶盖左右摇摆 -->
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt">
-    <aapt:attr name="android:drawable">
-        <vector
+<!-- 静态图标（原 PotLab 动态矢量已去动画，统一静态渲染） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
             android:width="24dp"
             android:height="24dp"
             android:viewportWidth="24"
@@ -21,17 +18,3 @@
                     android:pathData="M11,6a1,1 0 0 0-1,1v0.25H7a0.75,0.75 0 0 0 0,1.5h10a0.75,0.75 0 0 0 0,-1.5h-3V7a1,1 0 0 0-1,-1h-2z" />
             </group>
         </vector>
-    </aapt:attr>
-    <target android:name="gLid">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:duration="1000"
-                android:interpolator="@android:interpolator/anticipate_overshoot"
-                android:propertyName="rotation"
-                android:repeatCount="infinite"
-                android:repeatMode="reverse"
-                android:valueFrom="0"
-                android:valueTo="20" />
-        </aapt:attr>
-    </target>
-</animated-vector>

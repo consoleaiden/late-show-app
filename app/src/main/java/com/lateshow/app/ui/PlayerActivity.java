@@ -64,14 +64,13 @@ public class PlayerActivity extends AppCompatActivity {
         com.lateshow.app.util.ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_player);
-        com.lateshow.app.util.LottieIcon.bindTree(findViewById(android.R.id.content));
 
         // 沉浸式全屏：隐藏状态栏/导航栏，下滑临时呼出，刘海屏允许延伸进缺口
         hideSystemBars();
 
         // 左上角退出全屏返回按钮（进度已在 onPause 保存并回传详情页）；箭头白色，黑色画面下可见
         View btnBackFull = findViewById(R.id.btnBackFull);
-        com.lateshow.app.util.LottieIcon.tint(btnBackFull, 0xFFFFFFFF); // 与倍速文字同色
+        com.lateshow.app.util.Icons.tint(btnBackFull, 0xFFFFFFFF); // 与倍速文字同色
         btnBackFull.setOnClickListener(v -> finish());
 
         Intent it = getIntent();

@@ -30,13 +30,13 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <com.airbnb.lottie.LottieAnimationView
+                <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/btnConsoleBack"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:padding="7dp"
                     android:background="@drawable/bg_circle"
-                    android:tag="ic_back"
+                    android:src="@drawable/ic_back"
                     android:contentDescription="返回" />
 
                 <TextView
@@ -108,8 +108,8 @@
                     <TextView android:id="@+id/autoCount" style="@style/MetaLabel" android:layout_width="wrap_content" android:layout_height="wrap_content"
                         android:layout_marginLeft="8dp" android:textAllCaps="false" android:text="" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arOverview" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arOverview" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelOverview" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -132,8 +132,8 @@
                         android:src="@drawable/ic_set_play" app:tint="@color/t3" android:contentDescription="同步操作" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步操作" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arActions" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arActions" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelActions" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -166,8 +166,8 @@
                         android:src="@drawable/ic_set_cache" app:tint="@color/t3" android:contentDescription="同步暂停控制" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步暂停控制" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arPause" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arPause" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelPause" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -191,8 +191,8 @@
                         android:src="@drawable/ic_set_app" app:tint="@color/t3" android:contentDescription="聚合搜索" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="聚合搜索" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arSearch" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arSearch" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelSearch" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -223,8 +223,8 @@
                         android:src="@drawable/ic_set_mode" app:tint="@color/t3" android:contentDescription="数据表浏览" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="数据表浏览" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arTables" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arTables" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelTables" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -266,8 +266,8 @@
                         android:src="@drawable/ic_set_source" app:tint="@color/t3" android:contentDescription="源站同步状态" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="源站同步状态" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arSources" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arSources" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelSources" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -305,8 +305,8 @@
                         android:src="@drawable/ic_set_sync" app:tint="@color/t3" android:contentDescription="最近同步日志" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="最近同步日志" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arLogs" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arLogs" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelLogs" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -329,8 +329,8 @@
                         android:src="@drawable/ic_set_app" app:tint="@color/t3" android:contentDescription="访问控制" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="访问控制与 Token" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arAuth" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arAuth" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelAuth" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -397,8 +397,8 @@
                         android:src="@drawable/ic_set_play" app:tint="@color/t3" android:contentDescription="明星词库" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="明星词库" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arStars" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arStars" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelStars" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -429,8 +429,8 @@
                         android:src="@drawable/ic_set_cache" app:tint="@color/t3" android:contentDescription="诊断与维护" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="诊断与维护" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arMaint" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arMaint" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelMaint" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -461,8 +461,8 @@
                         android:src="@drawable/ic_set_source" app:tint="@color/t3" android:contentDescription="播放线路策略" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="播放线路策略" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arLine" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arLine" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelLine" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -492,8 +492,8 @@
                         android:src="@drawable/ic_set_cache" app:tint="@color/t3" android:contentDescription="标签索引" />
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="标签索引" />
                     <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <com.airbnb.lottie.LottieAnimationView android:id="@+id/arTagIdx" android:layout_width="18dp" android:layout_height="18dp"
-                        android:tag="ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
+                    <androidx.appcompat.widget.AppCompatImageView android:id="@+id/arTagIdx" android:layout_width="18dp" android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_down" app:tint="@color/t3" android:contentDescription="展开" />
                 </LinearLayout>
 
                 <LinearLayout android:id="@+id/panelTagIdx" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -531,6 +531,8 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="12dp"
         app:fabCustomSize="40dp"
+        android:src="@drawable/ic_top"
+        app:tint="@color/t1"
         app:maxImageSize="20dp"
         app:backgroundTint="@color/ink700"
         app:elevation="6dp"
