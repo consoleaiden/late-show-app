@@ -23,6 +23,9 @@
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F7F8FA</color>
+    <!-- 顶栏分类两缘渐变遮罩：与 barBg 同源（起始端 95% 不透明 → 末端全透明），夜间自动切换 -->
+    <color name="chipFadeEdge">#F2F7F8FA</color>
+    <color name="chipFadeEdgeEnd">#00F7F8FA</color>
     <!-- ============ 详情页配色（唯一配置项） ============
          详情页分两段：
          ① 信息带 heroBand —— 海报 +（源站 / 片名 / 分类日期 / 更新信息 / 演员 / 标签）。

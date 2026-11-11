@@ -208,7 +208,7 @@
             <!-- 两侧渐变遮罩：盖住分类在自身边缘被裁切的部分，随分类边距同节奏移动 -->
             <View
                 android:id="@+id/fadeL"
-                android:layout_width="26dp"
+                android:layout_width="13dp"
                 android:layout_height="36dp"
                 android:layout_gravity="left|center_vertical"
                 android:layout_marginLeft="51dp"
@@ -216,7 +216,7 @@
 
             <View
                 android:id="@+id/fadeR"
-                android:layout_width="26dp"
+                android:layout_width="13dp"
                 android:layout_height="36dp"
                 android:layout_gravity="right|center_vertical"
                 android:layout_marginRight="51dp"
