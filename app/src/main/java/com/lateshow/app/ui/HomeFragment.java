@@ -762,16 +762,17 @@ public class HomeFragment extends Fragment {
         android.view.animation.Interpolator itp = hide
                 ? new android.view.animation.AccelerateInterpolator(1.6f)
                 : new android.view.animation.DecelerateInterpolator(1.8f);
+        final int overshoot = dp(28);   // 滑出缓冲：多移一段距离，确保完全离开可视区
         if (btnSource.getWidth() > 0) {
-            // 源站按钮整体移出父栏左边界（LiquidGlassBar 按圆角轮廓裁剪）
+            // 源站按钮整体移出父栏左边界再多退一段（LiquidGlassBar 按圆角轮廓裁剪）
             btnSource.animate()
-                    .translationX(hide ? -(btnSource.getLeft() + btnSource.getWidth()) : 0f)
+                    .translationX(hide ? -(btnSource.getLeft() + btnSource.getWidth() + overshoot) : 0f)
                     .setDuration(hide ? 190 : 240).setInterpolator(itp).start();
         }
         if (btnSearch.getWidth() > 0) {
-            // 搜索按钮整体移出父栏右边界
+            // 搜索按钮整体移出父栏右边界再多退一段
             btnSearch.animate()
-                    .translationX(hide ? topbar.getWidth() - btnSearch.getLeft() : 0f)
+                    .translationX(hide ? topbar.getWidth() - btnSearch.getLeft() + overshoot : 0f)
                     .setDuration(hide ? 190 : 240).setInterpolator(itp).start();
         }
         animateChipsMargins(hide, itp);
