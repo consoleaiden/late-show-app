@@ -40,56 +40,44 @@
         android:tag="ic_back"
         android:contentDescription="退出全屏" />
 
-    <!-- 播放器工具：倍速 + 设置（右上角悬浮）。
-         外层 FrameLayout 承载液态玻璃层（bind playerView，折射视频画面），
-         内层 LinearLayout 是原来的胶囊按钮。 -->
-    <FrameLayout
+    <!-- 播放器工具：倍速 + 设置（右上角悬浮） -->
+    <LinearLayout
         android:id="@+id/playerTools"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_marginTop="28dp"
-        android:layout_marginEnd="10dp">
+        android:layout_marginEnd="10dp"
+        android:orientation="horizontal">
 
-        <com.qmdeve.liquidglass.widget.LiquidGlassView
-            android:id="@+id/glassPlayerTools"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-        <LinearLayout
+        <TextView
+            android:id="@+id/btnSpeed"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:layout_height="28dp"
+            android:gravity="center"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:background="@drawable/bg_chip_dark"
+            android:alpha="0.85"
+            android:text="1.0x"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:fontFamily="monospace"
+            android:contentDescription="倍速" />
 
-            <TextView
-                android:id="@+id/btnSpeed"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:gravity="center"
-                android:paddingLeft="12dp"
-                android:paddingRight="12dp"
-                android:background="@drawable/bg_chip_dark"
-                android:alpha="0.85"
-                android:text="1.0x"
-                android:textSize="12sp"
-                android:textColor="#FFFFFF"
-                android:fontFamily="monospace"
-                android:contentDescription="倍速" />
-
-            <TextView
-                android:id="@+id/btnGear"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_marginLeft="6dp"
-                android:gravity="center"
-                android:background="@drawable/bg_chip_dark"
-                android:alpha="0.85"
-                android:text="⚙"
-                android:textSize="14sp"
-                android:textColor="#FFFFFF"
-                android:contentDescription="播放设置" />
-        </LinearLayout>
-    </FrameLayout>
+        <TextView
+            android:id="@+id/btnGear"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginLeft="6dp"
+            android:gravity="center"
+            android:background="@drawable/bg_chip_dark"
+            android:alpha="0.85"
+            android:text="⚙"
+            android:textSize="14sp"
+            android:textColor="#FFFFFF"
+            android:contentDescription="播放设置" />
+    </LinearLayout>
 
     <!-- 播放地址 / 下载工具条：默认隐藏，由设置页「播放偏好」开关控制 -->
     <include

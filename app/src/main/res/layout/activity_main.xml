@@ -2,35 +2,39 @@
 <!-- 主界面：底层是三个 Tab 的内容，detailHost 是详情页（Fragment）的全屏浮层。
      详情页和列表在同一窗口里，才能做出「手指拖着页面缩小、松手露出列表卡片」的跟手感。
      页面是 edge-to-edge 的（状态栏透明），所以内容区由代码补系统栏内边距，
-     详情页则故意不补顶部内边距 —— 海报要盖住状态栏。 -->
+     详情页则故意不补顶部内边距 —— 海报要盖住状态栏。
+     底部导航是液态玻璃悬浮胶囊（LiquidGlassBar）：container 铺满全高，
+     内容从导航栏后面穿过，玻璃实时折射背后画面（Android 13+；低退化为半透明圆角）。 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/ink900">
 
-    <LinearLayout
+    <FrameLayout
         android:id="@+id/mainContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
         android:background="@color/ink900">
 
+        <!-- 内容容器：match_parent 铺满（含导航栏背后区域），
+             各 Fragment 的滚动列表自带底部 padding，最后一项滚上来时不被玻璃栏压住 -->
         <FrameLayout
             android:id="@+id/container"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_height="match_parent" />
 
-        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/line" />
-
-        <!-- 底部导航：48dp 纯图标（无文字），选中项带光斑 / 指示条 / 图标播放一次 -->
-        <LinearLayout
+        <!-- 底部导航：液态玻璃悬浮胶囊，48dp 纯图标（无文字），
+             选中项带光斑 / 指示条 / 图标播放一次 -->
+        <com.lateshow.app.ui.widget.LiquidGlassBar
             android:id="@+id/tabbar"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:orientation="horizontal"
-            android:background="@color/barBg">
+            android:layout_height="60dp"
+            android:layout_gravity="bottom"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:layout_marginBottom="8dp"
+            android:orientation="horizontal">
 
             <FrameLayout android:id="@+id/tab_home" style="@style/TabItem">
                 <FrameLayout style="@style/TabIconBox">
@@ -64,8 +68,8 @@
                 </FrameLayout>
                 <View android:id="@+id/tab_settings_ind" style="@style/TabIndicator" />
             </FrameLayout>
-        </LinearLayout>
-    </LinearLayout>
+        </com.lateshow.app.ui.widget.LiquidGlassBar>
+    </FrameLayout>
 
     <!-- 详情页浮层：为空时不占位、不吃触摸 -->
     <FrameLayout

@@ -207,6 +207,7 @@
             android:layout_height="match_parent"
             android:overScrollMode="never"
             android:paddingTop="2dp"
+            android:paddingBottom="78dp"
             android:clipToPadding="false" />
 
         <!-- 首屏骨架屏：首次加载且列表为空时显示，避免白屏「假死」 -->
@@ -225,6 +226,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|end"
             android:layout_margin="12dp"
+            android:layout_marginBottom="78dp"
             app:fabCustomSize="40dp"
             app:maxImageSize="20dp"
             app:backgroundTint="@color/ink700"

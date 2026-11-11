@@ -80,8 +80,6 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
     implementation 'androidx.media3:media3-ui:1.4.1'
-    // LiquidGlass 源码集成的弹簧动画依赖（androidx.dynamicanimation）
-    implementation 'androidx.dynamicanimation:dynamicanimation:1.0.0'
 
     testImplementation 'junit:junit:4.13.2'
 }

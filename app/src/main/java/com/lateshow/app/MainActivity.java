@@ -74,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         setContentView(R.layout.activity_main);
         applySystemBarInsets();
+        setupGlassTabbar();
 
         int off = getColor(R.color.t3);
         for (int i = 0; i < TAB_COUNT; i++) {
@@ -141,6 +142,23 @@ public class MainActivity extends AppCompatActivity {
 
         // 服务端开启访问控制且本地没有 API Token 时，引导填写（不阻塞进入 App）
         com.lateshow.app.util.AuthGate.checkStartup(this);
+    }
+
+    /**
+     * 液态玻璃底部导航（效果移植自 Kyant0/AndroidLiquidGlass，Apache-2.0）：
+     * 折射 container 里的列表内容，Android 13+ 生效，低版本自动退化为半透明圆角条。
+     * 参数对着 Kyant0 目录 App 的 bottom-tabs 预设调的，观感可在真机上微调。
+     */
+    private void setupGlassTabbar() {
+        com.lateshow.app.ui.widget.LiquidGlassBar bar = findViewById(R.id.tabbar);
+        bar.setBackdropSource(findViewById(R.id.container));
+        float d = getResources().getDisplayMetrics().density;
+        bar.setGlassCornerRadius(30f * d);
+        bar.setRefraction(24f * d, 34f * d);   // 折射带宽 / 折射量（边缘透镜放大）
+        bar.setBlurSigma(9f * d);              // 磨砂
+        bar.setFrost(0.40f);                   // 中心白雾
+        bar.setHighlight(0.22f);               // 边缘高光
+        bar.setDispersion(0.6f);               // 色散（彩虹边）
     }
 
     /**

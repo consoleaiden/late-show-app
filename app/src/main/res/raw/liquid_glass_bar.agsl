@@ -1,0 +1,101 @@
+// 液态玻璃导航栏着色器（AGSL，Android 13+ 生效）。
+// 核心算法移植自 Kyant0/AndroidLiquidGlass（Apache License 2.0）
+//   https://github.com/Kyant0/AndroidLiquidGlass
+// （internal/Shaders.kt 中 RoundedRectRefractionWithDispersionShaderString /
+//   DefaultHighlightShaderString 的合并版）：
+//   圆角矩形 SDF 求折射梯度 → 边缘带内按 circleMap 位移采样（边缘透镜放大）
+//   → 7 通道采样做色散（彩虹边）→ 中心磨砂白雾 → 双向边缘高光（左上冷光 + 底部反光）。
+// content 输入由 RenderEffect.createRuntimeShaderEffect 注入（背后内容的模糊结果）。
+
+uniform shader content;
+uniform float2 size;             // 玻璃区域尺寸(px)
+uniform float4 cornerRadii;      // 四角圆角(px)
+uniform float refractionHeight;  // 边缘折射带高度(px)
+uniform float refractionAmount;  // 折射采样位移(px，负值=向内采样=边缘放大)
+uniform float dispersion;        // 色散强度
+uniform float frost;             // 中心磨砂白雾强度(0~1)
+uniform float highlight;         // 边缘高光强度
+uniform float falloff;           // 高光衰减指数（越大亮圈越窄）
+
+// ---------- 圆角矩形 SDF（Kyant0, Apache-2.0） ----------
+float radiusAt(float2 coord, float4 radii) {
+    if (coord.x >= 0.0) {
+        if (coord.y <= 0.0) return radii.y; else return radii.z;
+    } else {
+        if (coord.y <= 0.0) return radii.x; else return radii.w;
+    }
+}
+
+float sdRoundedRect(float2 coord, float2 halfSize, float radius) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
+    float outside = length(max(cornerCoord, 0.0)) - radius;
+    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
+    return outside + inside;
+}
+
+float2 gradSdRoundedRect(float2 coord, float2 halfSize, float radius) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
+    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
+        return sign(coord) * normalize(max(cornerCoord, 0.0));
+    } else {
+        float gradX = step(cornerCoord.y, cornerCoord.x);
+        return sign(coord) * float2(gradX, 1.0 - gradX);
+    }
+}
+
+float circleMap(float x) { return 1.0 - sqrt(max(0.0, 1.0 - x * x)); }
+
+half4 main(float2 coord) {
+    float2 halfSize = size * 0.5;
+    float2 centeredCoord = coord - halfSize;
+    float radius = radiusAt(coord, cornerRadii);
+    float sd = sdRoundedRect(centeredCoord, halfSize, radius);
+    float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
+    float2 grad = gradSdRoundedRect(centeredCoord, halfSize, gradRadius);
+
+    half4 color = half4(0.0);
+    if (-sd >= refractionHeight) {
+        // 内部区域：不折射，直接取背后内容
+        color = content.eval(coord);
+    } else {
+        // 边缘折射带：位移量沿「边缘→内部」呈圆弧曲线，形成透镜边缘
+        sd = min(sd, 0.0);
+        float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
+        float2 refractedCoord = coord + d * grad;
+        if (dispersion > 0.001) {
+            // 7 通道色散：R/G/B 按各自偏移采样，边缘出现彩虹色分离
+            float di = dispersion
+                    * ((centeredCoord.x * centeredCoord.y) / (halfSize.x * halfSize.y));
+            float2 dc = d * grad * di;
+            half4 red    = content.eval(refractedCoord + dc);
+            color.r += red.r / 3.5;   color.a += red.a / 7.0;
+            half4 orange = content.eval(refractedCoord + dc * (2.0 / 3.0));
+            color.r += orange.r / 3.5;  color.g += orange.g / 7.0;  color.a += orange.a / 7.0;
+            half4 yellow = content.eval(refractedCoord + dc * (1.0 / 3.0));
+            color.r += yellow.r / 3.5;  color.g += yellow.g / 3.5;  color.a += yellow.a / 7.0;
+            half4 green  = content.eval(refractedCoord);
+            color.g += green.g / 3.5;   color.a += green.a / 7.0;
+            half4 cyan   = content.eval(refractedCoord - dc * (1.0 / 3.0));
+            color.g += cyan.g / 3.5;    color.b += cyan.b / 3.0;    color.a += cyan.a / 7.0;
+            half4 blue   = content.eval(refractedCoord - dc * (2.0 / 3.0));
+            color.b += blue.b / 3.0;    color.a += blue.a / 7.0;
+            half4 purple = content.eval(refractedCoord - dc);
+            color.r += purple.r / 7.0;  color.b += purple.b / 3.0;  color.a += purple.a / 7.0;
+        } else {
+            color = content.eval(refractedCoord);
+        }
+    }
+
+    // 磨砂白雾：让玻璃在纯色底上也有「玻璃体」的质感
+    color.rgb = mix(color.rgb, half3(1.0), half(frost));
+
+    // 边缘高光：光从左上角来，边缘处 SDF 梯度与光线对齐 → 亮圈；内部自然衰减
+    float2 lightDir = normalize(float2(-0.62, -0.78));
+    float hl = pow(abs(dot(grad, lightDir)), falloff);
+    color.rgb += half3(hl * highlight);
+    // 底部反光：一圈更弱的冷灰，增强玻璃「厚度」
+    float hl2 = pow(abs(dot(grad, float2(0.0, 1.0))), falloff * 1.2);
+    color.rgb += half3(hl2 * highlight * 0.5);
+
+    return color;
+}

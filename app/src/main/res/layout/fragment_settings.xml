@@ -16,7 +16,7 @@
         android:orientation="vertical"
         android:paddingLeft="16dp"
         android:paddingRight="16dp"
-        android:paddingBottom="24dp">
+        android:paddingBottom="88dp">
 
         <!-- 页头 -->
         <LinearLayout

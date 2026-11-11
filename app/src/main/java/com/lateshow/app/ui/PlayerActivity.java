@@ -127,20 +127,6 @@ public class PlayerActivity extends AppCompatActivity {
                 playerTools.setVisibility(visibility == View.VISIBLE ? View.VISIBLE : View.GONE);
             }
         });
-        // 液态玻璃工具条：折射 + 色散采样全屏视频画面（Android 13+ 生效，低版本透明退化）
-        View glassTools = findViewById(R.id.glassPlayerTools);
-        if (glassTools instanceof com.qmdeve.liquidglass.widget.LiquidGlassView) {
-            com.qmdeve.liquidglass.widget.LiquidGlassView glass =
-                    (com.qmdeve.liquidglass.widget.LiquidGlassView) glassTools;
-            float d = com.qmdeve.liquidglass.util.Utils.dp2px(getResources(), 1f);
-            glass.setCornerRadius(14f * d);          // 胶囊高 28dp 的一半 = 药丸圆角
-            glass.setRefractionHeight(16f * d);
-            glass.setDispersion(0.35f);
-            glass.setBlurRadius(4f);
-            glass.setTintAlpha(0.06f);
-            glass.bind(pv);
-        }
-
         // 手势：横向滑动快进/快退（划满全屏 = 总时长 1/2，半屏 = 1/4）；
         // 纵向滑动：右半屏调亮度、左半屏调音量；轻点显隐控制栏
         final TextView seekOverlay = findViewById(R.id.seekOverlay);

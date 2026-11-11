@@ -109,6 +109,7 @@
             android:layout_height="match_parent"
             android:overScrollMode="never"
             android:paddingTop="2dp"
+            android:paddingBottom="78dp"
             android:clipToPadding="false" />
 
         <!-- 首屏骨架屏：收藏/历史都是本地读取，磁盘 stat 较慢时先占位，避免空列表一闪 -->
