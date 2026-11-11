@@ -102,6 +102,16 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
         com.lateshow.app.util.LottieIcon.bindTree(v);
+        // MainActivity 不再统一补顶部 padding（首页海报要顶到状态栏），
+        // 本页页头仍从状态栏下沿开始，自己补 bars.top。
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(v, (vv, insets) -> {
+            androidx.core.graphics.Insets bars =
+                    insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+            vv.setPadding(vv.getPaddingLeft(), bars.top,
+                    vv.getPaddingRight(), vv.getPaddingBottom());
+            return insets;
+        });
+        androidx.core.view.ViewCompat.requestApplyInsets(v);
         setupAccordion(v);
 
         // 回到顶部浮动按钮：滚动超过半屏出现，图标/交互与首页、收藏页同款

@@ -162,7 +162,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 内容区补系统栏内边距：详情页浮层是它的兄弟节点，不受影响（海报要顶到状态栏）。
+     * 内容区补系统栏内边距：只补底部（导航条/键盘）。顶部不补——状态栏透明，
+     * 首页海报列表要延伸到屏幕最顶端，避免状态栏区域出现纯色带和海报割裂；
+     * 各 Fragment 顶部需要的让位由它们自己对根视图补 insets。
      * 用监听而不是 fitsSystemWindows，是因为键盘弹起时还要让出 IME 高度。
      */
     private void applySystemBarInsets() {
@@ -170,7 +172,7 @@ public class MainActivity extends AppCompatActivity {
         ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-            v.setPadding(0, bars.top, 0, Math.max(bars.bottom, ime.bottom));
+            v.setPadding(0, 0, 0, Math.max(bars.bottom, ime.bottom));
             return insets;
         });
         ViewCompat.requestApplyInsets(content);

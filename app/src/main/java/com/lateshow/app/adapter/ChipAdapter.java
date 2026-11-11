@@ -22,9 +22,15 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
         void onPick(Models.Category c);
     }
 
+    /** 长按任意芯片 = 弹出全部分类列表（挂载在芯片上，RecyclerView 层收不到长按） */
+    public interface OnLongPress {
+        void onLongPress();
+    }
+
     private final List<Models.Category> items = new ArrayList<>();
     private int selected = 0; // 0 = 「全部」
     private final OnPick listener;
+    private OnLongPress longPress;
 
     public ChipAdapter(OnPick listener) {
         this.listener = listener;
@@ -52,6 +58,11 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
         notifyItemChanged(old);
         notifyItemChanged(selected);
         if (listener != null) listener.onPick(items.get(pos));
+    }
+
+    /** 注册长按回调（在 HomeFragment 里指向「全部分类」弹层） */
+    public void setOnLongPress(OnLongPress lp) {
+        this.longPress = lp;
     }
 
     /** 按分类名恢复选中态（找不到则保持「全部」） */
@@ -104,6 +115,16 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
             notifyItemChanged(selected);
             if (listener != null) listener.onPick(items.get(selected));
         });
+        // 芯片是可点击 View，会消费触摸序列——长按弹层必须挂在它身上才收得到
+        if (longPress != null) {
+            h.chip.setOnLongClickListener(v -> {
+                longPress.onLongPress();
+                return true;
+            });
+        } else {
+            h.chip.setOnLongClickListener(null);
+            h.chip.setLongClickable(false);
+        }
     }
 
     private static float dp(View v, int n) {

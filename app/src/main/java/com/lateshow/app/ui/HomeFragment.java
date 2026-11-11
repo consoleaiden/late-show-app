@@ -145,6 +145,7 @@ public class HomeFragment extends Fragment {
             com.lateshow.app.util.UiAnim.fadeUp(grid, 8);   // 换分类＝整批内容换掉，给一次淡入
             reload();
         });
+        chipAdapter.setOnLongPress(this::showAllCategoriesDialog);
         chips.setLayoutManager(new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false));
         chips.setAdapter(chipAdapter);
         chips.setHasFixedSize(true);
@@ -371,6 +372,7 @@ public class HomeFragment extends Fragment {
             topbar.setHighlight(0.30f);
             topbar.setDispersion(0.8f);
         }
+        applyTopInsets(v, topbar);
         searchBox = v.findViewById(R.id.searchBox);
         btnSearch = v.findViewById(R.id.btnSearch);
         btnSearchClose = v.findViewById(R.id.btnSearchClose);
@@ -390,6 +392,39 @@ public class HomeFragment extends Fragment {
                 return true;
             });
         }
+    }
+
+    /**
+     * 状态栏让位：MainActivity 不再给内容区补顶部 padding（海报要顶到屏幕最上沿），
+     * 首页自己把顶栏/网格/骨架屏/历史面板整体下移状态栏高度。
+     * 布局里的 4/64/58dp 是相对状态栏下沿的原设计值，这里叠加 bars.top。
+     */
+    private void applyTopInsets(View root, com.lateshow.app.ui.widget.LiquidGlassBar topbar) {
+        View gridV = root.findViewById(R.id.grid);
+        View skelV = root.findViewById(R.id.skeletonBox);
+        View histV = root.findViewById(R.id.histPanel);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            androidx.core.graphics.Insets bars =
+                    insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+            float d = getResources().getDisplayMetrics().density;
+            if (topbar != null) {
+                android.widget.FrameLayout.LayoutParams lp =
+                        (android.widget.FrameLayout.LayoutParams) topbar.getLayoutParams();
+                lp.topMargin = (int) (bars.top + 4f * d);
+                topbar.setLayoutParams(lp);
+            }
+            if (gridV != null) gridV.setPadding(0, (int) (bars.top + 64f * d), 0, gridV.getPaddingBottom());
+            if (skelV != null) {
+                ((android.widget.FrameLayout.LayoutParams) skelV.getLayoutParams()).topMargin =
+                        (int) (bars.top + 64f * d);
+            }
+            if (histV != null) {
+                ((android.widget.FrameLayout.LayoutParams) histV.getLayoutParams()).topMargin =
+                        (int) (bars.top + 58f * d);
+            }
+            return insets;
+        });
+        androidx.core.view.ViewCompat.requestApplyInsets(root);
     }
 
     /** 搜索输入从右向左滑出，盖住分类区；弹出键盘并展示搜索历史 */

@@ -238,7 +238,6 @@
             android:layout_gravity="center_vertical"
             android:layout_marginLeft="8dp"
             android:layout_marginRight="5dp"
-            android:foreground="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="搜索">
 
             <com.airbnb.lottie.LottieAnimationView
