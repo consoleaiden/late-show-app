@@ -29,7 +29,7 @@
         <com.lateshow.app.ui.widget.LiquidGlassBar
             android:id="@+id/tabbar"
             android:layout_width="match_parent"
-            android:layout_height="60dp"
+            android:layout_height="48dp"
             android:layout_gravity="bottom"
             android:layout_marginLeft="10dp"
             android:layout_marginRight="10dp"

@@ -153,12 +153,12 @@ public class MainActivity extends AppCompatActivity {
         com.lateshow.app.ui.widget.LiquidGlassBar bar = findViewById(R.id.tabbar);
         bar.setBackdropSource(findViewById(R.id.container));
         float d = getResources().getDisplayMetrics().density;
-        bar.setGlassCornerRadius(30f * d);
-        bar.setRefraction(24f * d, 34f * d);   // 折射带宽 / 折射量（边缘透镜放大）
-        bar.setBlurSigma(9f * d);              // 磨砂
-        bar.setFrost(0.40f);                   // 中心白雾
-        bar.setHighlight(0.22f);               // 边缘高光
-        bar.setDispersion(0.6f);               // 色散（彩虹边）
+        bar.setGlassCornerRadius(24f * d);
+        bar.setRefraction(18f * d, 42f * d);   // 折射带宽 / 折射量（边缘透镜放大）
+        bar.setBlurSigma(5f * d);              // 磨砂（太强会把折射盖成奶白）
+        bar.setFrost(0.16f);                   // 中心白雾
+        bar.setHighlight(0.30f);               // 边缘高光
+        bar.setDispersion(0.8f);               // 色散（彩虹边）
     }
 
     /**
