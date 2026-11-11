@@ -1105,10 +1105,23 @@ public class HomeFragment extends Fragment {
         sv.addView(box, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         int want = dp(12) + dp(38) * rows;
-        int maxH = (int) (getResources().getDisplayMetrics().heightPixels * 0.5f);
+        // 最大高度 = 屏幕高度 − 弹层顶部占用(状态栏+58dp) − 底部导航区占用。
+        // 底部导航区 = 导航栏 48dp + 底部边距 8dp + 视觉间隙 10dp：
+        // 不减掉这段的话长列表会一直伸到导航栏底下被盖住
+        int topUsed = menuTopUsed();
+        int maxH = Math.max(dp(120),
+                getResources().getDisplayMetrics().heightPixels - topUsed - dp(66));
         sv.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Math.min(want, maxH)));
         return sv;
+    }
+
+    /** 弹层顶边已占用的像素（状态栏 + 58dp；弹层还没被 insets 调整过时用布局默认值兜底） */
+    private int menuTopUsed() {
+        if (menuPanel != null) {
+            return ((android.widget.FrameLayout.LayoutParams) menuPanel.getLayoutParams()).topMargin;
+        }
+        return dp(58);
     }
 
     /** 全部分类列表的一行：点选 = 选中该分类并收起弹层 */
