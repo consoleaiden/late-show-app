@@ -349,8 +349,8 @@ public class HomeFragment extends Fragment {
             float d = getResources().getDisplayMetrics().density;
             topbar.setGlassCornerRadius(24f * d);
             topbar.setRefraction(18f * d, 42f * d);   // 折射带 / 折射量
-            topbar.setBlurSigma(9f * d);              // 顶部功能区磨砂要更浓（tier1 会据此加深降采样）
-            topbar.setFrost(0.26f);
+            topbar.setBlurSigma(36f * d);             // 磨砂 4 倍强度（tier1 据此把降采样加深到 1/40）
+            topbar.setFrost(1.04f);                   // 白雾（原 0.26 × 4，渲染端钳到 1）
             topbar.setHighlight(0.30f);
             topbar.setDispersion(0.8f);
         }
@@ -435,8 +435,8 @@ public class HomeFragment extends Fragment {
 
         menuPanel.setGlassCornerRadius(14f * d);
         menuPanel.setRefraction(18f * d, 30f * d);
-        menuPanel.setBlurSigma(8f * d);
-        menuPanel.setFrost(0.34f);
+        menuPanel.setBlurSigma(32f * d);   // 磨砂 4 倍强度
+        menuPanel.setFrost(1.36f);         // 白雾（原 0.34 × 4，渲染端钳到 1）
         menuPanel.setHighlight(0.28f);
         menuPanel.setDispersion(0.6f);
         menuPanel.setBackdropSource(grid);

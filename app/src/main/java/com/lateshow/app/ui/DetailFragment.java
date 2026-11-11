@@ -188,6 +188,8 @@ public class DetailFragment extends Fragment {
     private int[] cardBounds;
     private boolean closing = false;      // 收起过程（决定末端是否整页淡出）
     private boolean dismissed = false;
+    /** 被更深层详情页盖住时是否正在播放：返回到本页时恢复播放 */
+    private boolean resumeOnUncover = false;
     private ValueAnimator motionAnim;
     private float radiusPx = 0f;
     /** 顶部遮罩的两段基础 alpha（由滚动位置决定，0~1）；收起时再乘整体透明度 */
@@ -530,6 +532,8 @@ public class DetailFragment extends Fragment {
                 cancelMotionAnim();
                 fireEnterEnd();   // 进场被手势打断：旧页的清理不能丢，否则会一直压在下面
                 closing = true;
+                // 下拉跟手收起开始：让宿主露出下一级页面（跟手过程中看到的是上一级，不是列表）
+                notifyCloseStarted();
             }
             @Override public void onDragProgress(float progress) {
                 setP(progress);
@@ -543,6 +547,7 @@ public class DetailFragment extends Fragment {
                             DetailFragment.this::dismiss);
                 } else {
                     closing = false;
+                    notifyCloseAborted();   // 回弹收场：把露出来的下一级重新盖住
                     animateTo(progress, 0f, SPRING_BACK_MS, new DecelerateInterpolator(1.8f), null);
                 }
             }
@@ -689,6 +694,7 @@ public class DetailFragment extends Fragment {
         closing = true;
         cancelMotionAnim();
         fireEnterEnd();
+        notifyCloseStarted();   // 收起形变开始前露出下一级（返回时落到上一级的卡片上）
         leaveInline();   // 播放中返回：视频先变回海报，再走形变
         // 海报已经被滚出屏幕（或没有卡片起点＝详情页内跳详情）：形变终点看不到，改「缩小 + 淡出」收场
         if (cardBounds == null || cardBounds.length != 4
@@ -713,6 +719,33 @@ public class DetailFragment extends Fragment {
         getParentFragmentManager().beginTransaction()
                 .remove(this)
                 .commitAllowingStateLoss();
+    }
+
+    /**
+     * 被更深层详情页盖住（宿主 {@link MainActivity} 调用）：
+     * 暂停播放器避免两路同时出声；视图由宿主 hide，Fragment 保留在栈里。
+     */
+    public void onCovered() {
+        resumeOnUncover = player != null && player.isPlaying();
+        if (player != null) player.pause();
+    }
+
+    /** 返回手势出栈一级、本页重新成为栈顶（宿主调用）：恢复被盖住前的播放状态 */
+    public void onUncovered() {
+        if (resumeOnUncover && player != null && !player.isPlaying()) player.play();
+        resumeOnUncover = false;
+    }
+
+    private void notifyCloseStarted() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).onDetailCloseStarted(this);
+        }
+    }
+
+    private void notifyCloseAborted() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).onDetailCloseAborted(this);
+        }
     }
 
     private static float smooth(float start, float end, float x) {
@@ -2619,7 +2652,8 @@ public class DetailFragment extends Fragment {
      * 详情页内跳到另一部片（相关推荐 / 相同演员）。
      *
      * <p>转场：把被点的那张卡片的封面当作「卡片坐标」传给新详情页，新页从这张封面形变展开；
-     * 旧详情页先留着当背景，新页展开完成后由 {@link MainActivity} 摘掉（见 setOnEnterEnd）。
+     * 旧详情页不销毁、进栈变成下一级，新页展开完成后由 {@link MainActivity} 盖住它（见 setOnEnterEnd）。
+     * 返回手势每次出栈一级：详情 → 播放页 → 列表页。
      *
      * @param source 被点卡片的封面 ImageView；为 null 时（例如数据里没有封面视图）退化为直接展开
      */

@@ -48,8 +48,12 @@ public class MainActivity extends AppCompatActivity {
     private SettingsFragment settingsFragment;
     private Fragment active;
 
-    /** 详情页（Fragment）：全屏浮层，与列表在同一窗口，才能做出跟手一镜到底 */
-    private DetailFragment detailFragment;
+    /**
+     * 详情页栈：列表页（一级）→ 播放/详情（二级）→ 推荐跳详情（三级）→ ……
+     * 栈顶（peek）是当前显示的那张，返回手势每次只出栈一级。
+     * 详情页内跳详情不再「摘掉旧页」，而是把旧页盖住（暂停播放器 + 隐藏视图）留在栈里。
+     */
+    private final java.util.ArrayDeque<DetailFragment> detailStack = new java.util.ArrayDeque<>();
     private View detailHost;
     private OnBackPressedCallback detailBack;
 
@@ -95,10 +99,15 @@ public class MainActivity extends AppCompatActivity {
         if (favFragment == null) favFragment = new FavFragment();
         if (settingsFragment == null) settingsFragment = new SettingsFragment();
 
-        // 详情页必须先于 switchTab 恢复：switchTab 的 hide 循环是「隐藏除 detailFragment
-        // 外的所有 Fragment」，此时 detailFragment 还是 null 就会把详情页一起藏掉 ——
+        // 详情页栈必须先于 switchTab 恢复：switchTab 的 hide 循环是「隐藏除栈顶详情页
+        // 外的所有 Fragment」，此时栈还是空的就会把详情页一起藏掉 ——
         // 表现为「全屏播放返回 / 旋屏重建后直接回到首页」（真机 2026-11-10）
-        detailFragment = (DetailFragment) fm.findFragmentByTag(DetailFragment.TAG);
+        java.util.ArrayList<DetailFragment> details = new java.util.ArrayList<>();
+        for (Fragment f : fm.getFragments()) {
+            if (f instanceof DetailFragment) details.add((DetailFragment) f);
+        }
+        // 按 FragmentManager 的加入顺序（栈底 → 栈顶）重建栈
+        for (DetailFragment d : details) detailStack.push(d);
 
         findViewById(TAB_IDS[0]).setOnClickListener(v -> switchTab(homeFragment, 0));
         findViewById(TAB_IDS[1]).setOnClickListener(v -> switchTab(favFragment, 1));
@@ -109,25 +118,22 @@ public class MainActivity extends AppCompatActivity {
         if (startTab < 0 || startTab >= TAB_COUNT) startTab = 0;
         switchTab(fragmentAt(startTab), startTab);
 
-        // 详情页浮层（配置变更/切主题后由 FragmentManager 自动恢复；上面已提前恢复引用）
+        // 栈重建后只保留栈顶可见，被盖住的低层级页面隐藏
+        // （低层级的播放器在旋屏前 onDestroyView 已释放，这里无需再处理）
+        if (details.size() > 1) {
+            androidx.fragment.app.FragmentTransaction rtx = fm.beginTransaction();
+            for (int i = 0; i < details.size() - 1; i++) rtx.hide(details.get(i));
+            rtx.commitAllowingStateLoss();
+        }
         detailHost = findViewById(R.id.detailHost);
-        // 「详情页内跳详情」会短暂同时存在两张详情页（新的叠在旧的上面，展开后再摘旧的）。
-        // 如果正好在这个窗口里重建（切主题/旋屏），把底下那张清理掉，只保留最上面一张
-        java.util.ArrayList<DetailFragment> details = new java.util.ArrayList<>();
-        for (Fragment f : fm.getFragments()) {
-            if (f instanceof DetailFragment) details.add((DetailFragment) f);
-        }
-        for (int i = 0; i < details.size() - 1; i++) {
-            fm.beginTransaction().remove(details.get(i)).commitNowAllowingStateLoss();
-        }
-        if (!details.isEmpty()) detailFragment = details.get(details.size() - 1);
         detailBack = new OnBackPressedCallback(false) {
             @Override public void handleOnBackPressed() {
-                if (detailFragment != null) detailFragment.requestClose();
+                DetailFragment top = detailStack.peek();
+                if (top != null) top.requestClose();
             }
         };
         getOnBackPressedDispatcher().addCallback(this, detailBack);
-        if (detailFragment != null) {
+        if (!details.isEmpty()) {
             detailHost.setVisibility(View.VISIBLE);
             detailBack.setEnabled(true);
         }
@@ -152,8 +158,8 @@ public class MainActivity extends AppCompatActivity {
         float d = getResources().getDisplayMetrics().density;
         bar.setGlassCornerRadius(24f * d);
         bar.setRefraction(18f * d, 42f * d);   // 折射带宽 / 折射量（边缘透镜放大）
-        bar.setBlurSigma(8f * d);              // 导航磨砂（tier1 据此加深降采样）
-        bar.setFrost(0.22f);                   // 中心白雾
+        bar.setBlurSigma(32f * d);             // 磨砂（4 倍强度；tier1 据此把降采样加深到 1/40）
+        bar.setFrost(0.88f);                   // 中心白雾（原 0.22 × 4）
         bar.setHighlight(0.30f);               // 边缘高光
         bar.setDispersion(0.8f);               // 色散（彩虹边）
     }
@@ -183,9 +189,10 @@ public class MainActivity extends AppCompatActivity {
      */
     public void openDetail(CardItem item, View source) {
         if (isFinishing() || item == null) return;
-        final DetailFragment prev = detailFragment;
+        final DetailFragment prev = detailStack.peek();
         // 已在详情页（点相关推荐/相同演员）：旧页先留着当背景——新页要从被点的那张卡片形变展开，
-        // 如果先把旧页摘掉，形变起点背后会直接露出首页列表，看起来像闪了一下
+        // 如果先把旧页摘掉，形变起点背后会直接露出首页列表，看起来像闪了一下。
+        // 旧页不会被销毁：新页展开结束后盖住它（暂停播放器 + 隐藏视图），返回时逐级恢复
         int[] card = null;
         if (source != null && source.getWidth() > 0 && source.getHeight() > 0) {
             int[] loc = new int[2];
@@ -198,39 +205,93 @@ public class MainActivity extends AppCompatActivity {
                 .setReorderingAllowed(true)
                 .add(R.id.detailHost, f, DetailFragment.TAG)
                 .commitNow();
-        detailFragment = f;
+        detailStack.push(f);
         detailBack.setEnabled(true);
         // 详情页信息带是深色 → 状态栏图标固定白色
         setLightStatusBarIcons(false);
 
         if (prev != null) {
-            // 新页展开到位后再摘旧页：这一刻两张页面的形变已经接上，摘掉不会被看见
-            f.setOnEnterEnd(() -> {
-                if (!prev.isAdded()) return;
-                getSupportFragmentManager().beginTransaction()
-                        .remove(prev).commitAllowingStateLoss();
-            });
+            // 新页展开到位后盖住旧页：这一刻两张页面的形变已经接上，盖住不会被看见
+            f.setOnEnterEnd(() -> coverDetail(prev));
         }
     }
 
     /**
-     * 详情页收起动画结束后回调：隐藏浮层、恢复系统栏图标配色。
+     * 把一张详情页盖住（被新页压到下面时调用）：
+     * 暂停播放器（避免两层同时出声）+ 隐藏视图（不参与绘制，省 GPU），
+     * Fragment 与视图都保留在栈里，返回手势出栈一级时原样恢复。
+     */
+    private void coverDetail(DetailFragment d) {
+        if (d == null || !d.isAdded()) return;
+        d.onCovered();
+        getSupportFragmentManager().beginTransaction()
+                .hide(d).commitAllowingStateLoss();
+    }
+
+    /** 详情页开始收起（下拉跟手 / 系统返回）：露出下一级，让收起形变落到上一级的卡片上 */
+    public void onDetailCloseStarted(DetailFragment self) {
+        DetailFragment under = underOf(self);
+        if (under != null && !under.isVisible()) {
+            getSupportFragmentManager().beginTransaction()
+                    .show(under).commitNowAllowingStateLoss();
+        }
+    }
+
+    /** 收起被取消（下拉未过阈值回弹）：重新盖住下一级 */
+    public void onDetailCloseAborted(DetailFragment self) {
+        DetailFragment under = underOf(self);
+        if (under != null && !under.isHidden()) coverDetail(under);
+    }
+
+    /** self 的下一级页面（栈里紧挨 self 下面的那张）；self 不在栈顶或已是栈底时返回 null */
+    private DetailFragment underOf(DetailFragment self) {
+        if (detailStack.isEmpty() || detailStack.peek() != self || detailStack.size() < 2) return null;
+        java.util.Iterator<DetailFragment> it = detailStack.iterator();   // 栈顶 → 栈底
+        it.next();
+        return it.hasNext() ? it.next() : null;
+    }
+
+    /**
+     * 详情页收起动画结束后回调：出栈一级，恢复下一级页面的显示与播放器。
      *
-     * @param self 正在收起的详情页（由它自己负责摘除，这里只清理「详情页内跳详情」留下的旧页）
+     * @param self 正在收起的详情页（由它自己负责摘除，这里只清理栈里可能残留的更深层页面）
      */
     public void onDetailClosed(DetailFragment self) {
-        detailFragment = null;
+        detailStack.remove(self);
+        DetailFragment under = detailStack.peek();
         FragmentManager fm = getSupportFragmentManager();
-        java.util.ArrayList<DetailFragment> left = new java.util.ArrayList<>();
+        androidx.fragment.app.FragmentTransaction tx = fm.beginTransaction();
+        boolean changed = false;
+        // 双保险：清掉栈里残留的更深层页面（正常路径下不存在）
         for (Fragment f : fm.getFragments()) {
-            if (f instanceof DetailFragment && f != self) left.add((DetailFragment) f);
+            if (f instanceof DetailFragment && f != self && f != under) {
+                tx.remove(f);
+                changed = true;
+            }
         }
-        for (DetailFragment f : left) {
-            fm.beginTransaction().remove(f).commitAllowingStateLoss();
+        if (under != null && under.isHidden()) { tx.show(under); changed = true; }
+        if (changed) tx.commitAllowingStateLoss();
+        if (under != null) {
+            under.onUncovered();
+            setLightStatusBarIcons(false);
+        } else {
+            if (detailHost != null) detailHost.setVisibility(View.GONE);
+            detailBack.setEnabled(false);
+            setLightStatusBarIcons(!com.lateshow.app.util.ThemeManager.actualNight(this));
         }
-        if (detailHost != null) detailHost.setVisibility(View.GONE);
-        if (detailBack != null) detailBack.setEnabled(false);
-        setLightStatusBarIcons(!com.lateshow.app.util.ThemeManager.actualNight(this));
+    }
+
+    /** 彻底收起整个详情栈（如详情页点标签跳搜索）：先把低层级全部摘掉，栈顶走收起动画 */
+    public void closeAllDetails() {
+        if (detailStack.isEmpty()) return;
+        DetailFragment top = detailStack.peek();
+        for (DetailFragment d : detailStack) {
+            if (d != top) getSupportFragmentManager().beginTransaction()
+                    .remove(d).commitNowAllowingStateLoss();
+        }
+        detailStack.clear();
+        detailStack.push(top);
+        top.requestClose();
     }
 
     private void setLightStatusBarIcons(boolean light) {
@@ -300,7 +361,7 @@ public class MainActivity extends AppCompatActivity {
         FragmentManager fm = getSupportFragmentManager();
         boolean animate = curTab != -1 && active != target;
         FragmentTransaction tx = fm.beginTransaction();
-        for (Fragment f : fm.getFragments()) if (f != detailFragment) tx.hide(f);
+        for (Fragment f : fm.getFragments()) if (f != detailStack.peek()) tx.hide(f);
         if (target.isAdded()) tx.show(target);
         else tx.add(R.id.container, target, TAGS[tab]);
         tx.commit();
@@ -390,7 +451,7 @@ public class MainActivity extends AppCompatActivity {
      */
     public void searchFromTag(String keyword, String slug, String sourceName) {
         if (keyword == null || keyword.trim().isEmpty()) return;
-        if (detailFragment != null) detailFragment.requestClose();
+        if (!detailStack.isEmpty()) closeAllDetails();
         switchTab(homeFragment, 0);
         if (homeFragment != null) homeFragment.searchFromTag(keyword, slug, sourceName);
     }

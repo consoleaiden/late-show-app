@@ -56,8 +56,8 @@ public class LiquidGlassPanel extends FrameLayout {
         setElevation(10f * getResources().getDisplayMetrics().density);
         // 弹层需要更实一点，保证小字可读
         glass.setBaseAlpha(0.42f);
-        glass.setFrost(0.34f);
-        glass.setBlurSigma(8f * getResources().getDisplayMetrics().density);
+        glass.setFrost(1.36f);   // 磨砂 4 倍强度（原 0.34 × 4，渲染端钳到 1）
+        glass.setBlurSigma(32f * getResources().getDisplayMetrics().density);
         glass.refreshBackground();
     }
 

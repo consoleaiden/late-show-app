@@ -38,7 +38,7 @@ import java.nio.charset.StandardCharsets;
  *
  * 三级降级（按设备能力选择，诊断日志 tag=LateShowGlass）：
  *  <li>tier 2 API 33+：RenderNode + RenderEffect(AGSL RuntimeShader + 高斯模糊)，折射/色散完整；</li>
- *  <li>tier 1 API 31+：<b>CPU 降采样模糊</b>（把背后内容画进 1/10~1/20 小图再放大 = 磨砂，
+ *  <li>tier 1 API 31+：<b>CPU 降采样模糊</b>（把背后内容画进 1/10~1/40 小图再放大 = 磨砂，
  *      倍数由 blurSigma 推导，越大越糊）
  *      + 白雾 + 渐变高光。<b>刻意不用 RenderEffect</b>：华为等部分 GPU 驱动会静默丢弃
  *      RenderEffect/RenderNode 的绘制，导致玻璃整块变透明（Mate30 就是这个问题）。
@@ -58,8 +58,8 @@ public class GlassRenderer {
     public static final int TIER_STATIC = 0;  // API < 31
 
     /**
-     * tier 1 降采样比例：1/10 缩略再放大。比 1/8 更糊（磨砂感更强），
-     * 采样位图也更小（CPU 采样开销再降 ~20%），一石二鸟。
+     * tier 1 降采样比例基准：1/10 缩略再放大。
+     * 实际倍数由 {@link #downscale()} 按 blurSigma 推导并加深（上限 1/40）。
      */
     private static final int DOWNSCALE = 10;
     /**
@@ -160,7 +160,8 @@ public class GlassRenderer {
     }
 
     public void setFrost(float f) {
-        frost = f;
+        // 钳到 1：宿主可能传「倍增强度」（如 4 倍 → >1），白雾层本身另有 0.85 上限
+        frost = Math.max(0f, Math.min(1f, f));
         forceCapture();
     }
 
@@ -325,15 +326,16 @@ public class GlassRenderer {
 
     /**
      * tier 1 实际降采样倍数：基准 1/10，并按宿主设定的 blurSigma 继续加深
-     * （sigma 越大 → 缩略图越小 → 放大后越糊）。
-     * 这样顶部功能区把 sigma 调到 9dp 就能得到明显更浓的磨砂，而导航/弹层仍各自独立。
+     * （sigma 越大 → 缩略图越小 → 放大后越糊），上限 1/40。
+     * 磨砂强度 4 倍化后 sigma 到 32~36dp，对应 want=64~72 → 全部顶到上限，
+     * 采样位图只有几十像素宽，放大后接近纯色雾面（最强磨砂）。
      */
     private int downscale() {
         int base = DOWNSCALE;
         if (blurSigma > 0f) {
             float d = host.getResources().getDisplayMetrics().density;
-            int want = Math.round(blurSigma / Math.max(1f, d) * 2f);  // 5dp→10 / 8dp→16 / 9dp→18
-            base = Math.max(base, Math.min(20, want));
+            int want = Math.round(blurSigma / Math.max(1f, d) * 2f);
+            base = Math.max(base, Math.min(40, want));
         }
         return base;
     }
