@@ -102,6 +102,8 @@ public class HomeFragment extends Fragment {
 
     /** 滚动隐显状态：true = 顶栏上滑隐藏中（底导航由 MainActivity 同步处理） */
     private boolean chromeHidden;
+    /** 分类横滑侧按钮状态：true = 源站/搜索按钮已滑出、chips 边距已扩展 */
+    private boolean chipsBtnHidden;
     /** 顶部功能玻璃胶囊（setupTopBar 装配，滚动隐显用） */
     private com.lateshow.app.ui.widget.LiquidGlassBar topbar;
 
@@ -158,6 +160,17 @@ public class HomeFragment extends Fragment {
         chips.setLayoutManager(new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false));
         chips.setAdapter(chipAdapter);
         chips.setHasFixedSize(true);
+        // 横滑分类时：源站按钮向左滑出、搜索按钮向右滑出（chips 边距同步扩展让出空间），
+        // 滚动结束一起平滑回位 —— 让分类文字有更多展示空间
+        chips.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                if (dx != 0) setChipSideButtonsHidden(true);
+            }
+
+            @Override public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) setChipSideButtonsHidden(false);
+            }
+        });
         setupMenuOverlay(v);
         setupTopBar(v);
 
@@ -561,6 +574,7 @@ public class HomeFragment extends Fragment {
                 .withEndAction(() -> {
                     searchBox.setVisibility(View.GONE);
                     chips.setVisibility(View.VISIBLE);
+                    setChipSideButtonsHidden(false);   // 恢复分类区：两侧按钮确保回位
                 }).start();
     }
 
@@ -733,6 +747,68 @@ public class HomeFragment extends Fragment {
         }
     }
 
+    /**
+     * 分类横滑隐显两侧按钮：滑动时源站按钮向左滑出、搜索按钮向右滑出至完全隐藏，
+     * 分类区边距同步向两侧扩展（真正让出展示空间）；滚动结束一起平滑回位。
+     * 搜索框展开（chips 被盖住）时不介入。
+     */
+    private void setChipSideButtonsHidden(boolean hide) {
+        if (chips == null || btnSource == null || btnSearch == null || topbar == null) return;
+        if (searchBox != null && searchBox.getVisibility() == View.VISIBLE) return;
+        if (chipsBtnHidden == hide) return;
+        chipsBtnHidden = hide;
+        if (chips.getWidth() <= 0 || topbar.getWidth() <= 0) return;
+
+        android.view.animation.Interpolator itp = hide
+                ? new android.view.animation.AccelerateInterpolator(1.6f)
+                : new android.view.animation.DecelerateInterpolator(1.8f);
+        if (btnSource.getWidth() > 0) {
+            // 源站按钮整体移出父栏左边界（LiquidGlassBar 按圆角轮廓裁剪）
+            btnSource.animate()
+                    .translationX(hide ? -(btnSource.getLeft() + btnSource.getWidth()) : 0f)
+                    .setDuration(hide ? 190 : 240).setInterpolator(itp).start();
+        }
+        if (btnSearch.getWidth() > 0) {
+            // 搜索按钮整体移出父栏右边界
+            btnSearch.animate()
+                    .translationX(hide ? topbar.getWidth() - btnSearch.getLeft() : 0f)
+                    .setDuration(hide ? 190 : 240).setInterpolator(itp).start();
+        }
+        animateChipsMargins(hide, itp);
+    }
+
+    /**
+     * 分类区边距随按钮滑出同步扩展：chips 两缘延伸到栏内 4dp 处，
+     * 与按钮滑出同节奏；回位时恢复 8dp/0dp。动画走 margin + requestLayout
+     * （顶栏只有一行，重排代价很小；chips 锚点保持，滚动位置不跳）。
+     */
+    private void animateChipsMargins(boolean extend, android.view.animation.Interpolator itp) {
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) chips.getLayoutParams();
+        final int fromL = lp.leftMargin, fromR = lp.rightMargin;
+        final int toL, toR;
+        if (extend) {
+            // chips.left = btnSource.right + leftMargin → 目标左缘 = 栏内 4dp
+            toL = dp(4) - btnSource.getLeft() - btnSource.getWidth();
+            // chips.right = 父宽 - rightMargin - (btnSearch 宽 + 左8 + 右5) → 目标右缘 = 栏内 4dp
+            toR = dp(4) - btnSearch.getWidth() - dp(13);
+        } else {
+            toL = dp(8);
+            toR = 0;
+        }
+        if (fromL == toL && fromR == toR) return;
+        android.animation.ValueAnimator va = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        va.setDuration(extend ? 190 : 240);
+        va.setInterpolator(itp);
+        va.addUpdateListener(a -> {
+            float t = (float) a.getAnimatedValue();
+            ViewGroup.MarginLayoutParams p = (ViewGroup.MarginLayoutParams) chips.getLayoutParams();
+            p.leftMargin = Math.round(fromL + (toL - fromL) * t);
+            p.rightMargin = Math.round(fromR + (toR - fromR) * t);
+            chips.setLayoutParams(p);
+        });
+        va.start();
+    }
+
     /** 总页数：按每页 10 条向上取整，至少 1 页 */
     private int histPageCount() {
         int total = PrefStore.get().searchHistory().size();
@@ -843,6 +919,7 @@ public class HomeFragment extends Fragment {
     public void resetChrome() {
         chromeHidden = false;
         if (topbar != null) topbar.setTranslationY(0f);
+        if (chipsBtnHidden) setChipSideButtonsHidden(false);   // 滑出中的侧按钮一并回位
     }
 
     @Override

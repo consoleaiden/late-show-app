@@ -207,7 +207,7 @@
                 android:contentDescription="源站菜单" />
         </FrameLayout>
 
-        <!-- 分类横滑：长按弹出全部分类列表 -->
+        <!-- 分类横滑：长按弹出全部分类列表；两侧 14dp 渐隐边，避免文字在源站/搜索按钮处生硬截断 -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/chips"
             android:layout_width="0dp"
@@ -216,6 +216,8 @@
             android:layout_gravity="center_vertical"
             android:layout_marginLeft="8dp"
             android:overScrollMode="never"
+            android:requiresFadingEdge="horizontal"
+            android:fadingEdgeLength="14dp"
             android:clipToPadding="false" />
 
         <!-- 搜索输入：默认隐藏，点搜索按钮从右向左滑出盖住分类区 -->

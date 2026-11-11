@@ -313,6 +313,9 @@ public class DetailFragment extends Fragment {
         heroWrap = v.findViewById(R.id.heroWrap);
         cover = v.findViewById(R.id.cover);
         btnPlayCover = v.findViewById(R.id.btnPlayCover);
+        // 播放按钮默认隐藏：详情/分集数据加载成功（hideLoading）后才出现，
+        // 加载失败或加载中不给可点的播放入口
+        btnPlayCover.setVisibility(View.GONE);
         infoModule = v.findViewById(R.id.infoModule);
         contentCol = v.findViewById(R.id.contentCol);
         loadingLayer = v.findViewById(R.id.loadingLayer);
@@ -448,6 +451,25 @@ public class DetailFragment extends Fragment {
             boolean expanded = tvDesc.getMaxLines() == Integer.MAX_VALUE;
             tvDesc.setMaxLines(expanded ? 3 : Integer.MAX_VALUE);
             btnToggleDesc.setText(expanded ? "展开简介" : "收起简介");
+            // 文本可选与省略号互斥：收起态=截断+…且长按整段复制；展开态=全文可选择复制
+            if (expanded) {
+                tvDesc.setTextIsSelectable(false);
+                tvDesc.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            } else {
+                tvDesc.setEllipsize(null);
+                tvDesc.setTextIsSelectable(true);
+            }
+        });
+        // 标题长按复制（简介收起时长按复制全文）
+        tvTitle.setOnLongClickListener(vv -> {
+            copyText("标题", tvTitle.getText().toString());
+            return true;
+        });
+        tvDesc.setOnLongClickListener(vv -> {
+            // 展开态（可选中文本）：返回 false 放行系统长按 → 进入选择模式
+            if (tvDesc.isTextSelectable()) return false;
+            copyText("简介", tvDesc.getText().toString());
+            return true;
         });
         btnFav.setOnClickListener(x -> toggleFav());
         syncFavState(false);
@@ -845,6 +867,8 @@ public class DetailFragment extends Fragment {
         cancelLoadingTask();
         stopSkeletonAnim();
         detailShown = true;
+        // 详情与分集数据到手：海报上的播放按钮此刻才有意义
+        if (btnPlayCover != null) btnPlayCover.setVisibility(View.VISIBLE);
         if (loadingLayer == null) return;
         boolean wasShown = loadingLayer.getVisibility() == View.VISIBLE;
         contentCol.setVisibility(View.VISIBLE);
@@ -871,6 +895,7 @@ public class DetailFragment extends Fragment {
     private void showLoadError(String msg) {
         cancelLoadingTask();
         stopSkeletonAnim();
+        if (btnPlayCover != null) btnPlayCover.setVisibility(View.GONE);
         if (loadingLayer == null) return;
         contentCol.setVisibility(View.GONE);
         loadingLayer.animate().cancel();
@@ -2085,7 +2110,10 @@ public class DetailFragment extends Fragment {
         }
         View playerTools = getView() != null ? getView().findViewById(R.id.playerTools) : null;
         if (playerTools != null) playerTools.setVisibility(View.GONE);
-        if (btnPlayCover != null) btnPlayCover.setVisibility(View.VISIBLE);
+        if (btnPlayCover != null) {
+            // 收起播放态回海报：仅当详情数据已加载成功才亮出播放按钮
+            btnPlayCover.setVisibility(detailShown ? View.VISIBLE : View.GONE);
+        }
         // 海报立刻回来（播放器下面一直是它，不淡入就不会闪白）
         if (cover != null) {
             cover.animate().cancel();
@@ -2684,5 +2712,15 @@ public class DetailFragment extends Fragment {
 
     private void toast(String s) {
         if (getContext() != null) Toast.makeText(getContext(), s, Toast.LENGTH_SHORT).show();
+    }
+
+    /** 复制文本到剪贴板并提示（标题长按 / 简介收起时长按用） */
+    private void copyText(String label, String text) {
+        if (getContext() == null || text == null || text.isEmpty()) return;
+        android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        if (cm == null) return;
+        cm.setPrimaryClip(android.content.ClipData.newPlainText(label, text));
+        toast(label + "已复制");
     }
 }
