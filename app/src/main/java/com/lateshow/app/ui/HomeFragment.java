@@ -140,6 +140,11 @@ public class HomeFragment extends Fragment {
         beginSourceProbe(); // 初始呼吸态，探测出结果后定格橙/灰
 
         chipAdapter = new ChipAdapter(c -> {
+            // 分类芯片属于弹层外部区域：点选分类即视为「操作了弹层以外」，
+            // 先收起当前弹层（源站/分类都适用），再切分类
+            if (menuOverlay != null && menuOverlay.getVisibility() == View.VISIBLE) {
+                dismissMenuOverlay();
+            }
             curCategory = c == null ? null : c.typeName;
             com.lateshow.app.util.UiAnim.fadeUp(grid, 8);   // 换分类＝整批内容换掉，给一次淡入
             reload();
@@ -355,6 +360,17 @@ public class HomeFragment extends Fragment {
             topbar.setDispersion(0.8f);
         }
         applyTopInsets(v, topbar);
+        // 统一交互规则：顶栏虽在弹层之上（保持芯片可点），但点它的空白/边距仍算「弹层外部」，
+        // 命中即收起。子控件（芯片、源站按钮、搜索按钮）会先消费触摸，各自由自己的回调收尾
+        if (topbar != null) {
+            topbar.setOnTouchListener((vv, e) -> {
+                if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN
+                        && menuOverlay != null && menuOverlay.getVisibility() == View.VISIBLE) {
+                    dismissMenuOverlay();
+                }
+                return false;   // 不消费：让子控件继续正常响应
+            });
+        }
         searchBox = v.findViewById(R.id.searchBox);
         btnSearch = v.findViewById(R.id.btnSearch);
         btnSearchClose = v.findViewById(R.id.btnSearchClose);
@@ -545,10 +561,9 @@ public class HomeFragment extends Fragment {
         if (!isAdded() || chipAdapter == null) return;
         java.util.List<Models.Category> items = chipAdapter.getItems();
         if (items.isEmpty()) return;
-        if (menuOverlay != null && menuOverlay.getVisibility() == View.VISIBLE) {
-            dismissMenuOverlay();   // 已打开则先收起（再点一次 = 关闭）
-            return;
-        }
+        // 源站弹层已打开时，长按分类 = 把弹层内容切换成分类列表（保持打开），
+        // 而不是先关掉源站弹层再 return —— 那样长按看起来只是「关闭」了什么也没弹出
+        boolean switching = menuOverlay != null && menuOverlay.getVisibility() == View.VISIBLE;
         int sel = chipAdapter.getSelected();
         LinearLayout box = new LinearLayout(getContext());
         box.setOrientation(LinearLayout.VERTICAL);
@@ -559,7 +574,8 @@ public class HomeFragment extends Fragment {
                     ? "全部" : c.typeName;
             addCategoryRow(box, name, i == sel, i);
         }
-        showMenuOverlay(wrapMenuScroll(box, items.size()), true);
+        // 切换内容不做入场动画（弹层本身已可见），避免「闪一下重新弹」
+        showMenuOverlay(wrapMenuScroll(box, items.size()), !switching);
     }
 
     // ---------- 搜索历史 ----------
@@ -780,6 +796,16 @@ public class HomeFragment extends Fragment {
         com.lateshow.app.api.NetMonitor.removeListener(onNetChanged);
         stopRingAnim();
         super.onPause();
+    }
+
+    /**
+     * 切 Tab（底部导航在 Fragment 容器之外，属于「弹层以外的区域」）：
+     * 页面被隐藏时立即收起弹层，避免切回来还挂着上一次的弹层
+     */
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (hidden) dismissSourceMenu();
     }
 
     @Override
