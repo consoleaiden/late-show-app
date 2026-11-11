@@ -50,6 +50,11 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
         return items;
     }
 
+    /** 当前选中项序号（0=「全部」），弹层里画选中点用 */
+    public int getSelected() {
+        return selected;
+    }
+
     /** 按序号选中（长按弹层点选），等价于点击对应芯片 */
     public void selectAt(int pos) {
         if (pos < 0 || pos >= items.size()) return;

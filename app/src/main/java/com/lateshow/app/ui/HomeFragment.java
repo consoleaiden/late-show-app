@@ -10,7 +10,6 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupWindow;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -86,8 +85,12 @@ public class HomeFragment extends Fragment {
     private int searchSeq = 0;
     /** 列表代次：只有最新一次筛选的响应才能改 UI 与 loading（审计 A-09） */
     private int listGeneration = 0;
-    /** 源站菜单弹窗：视图销毁时必须 dismiss，避免 WindowLeaked */
-    private PopupWindow sourcePopup;
+    /** 源站 / 全部分类 共用的玻璃弹层（页面内浮层，真实采样背后海报） */
+    private View menuOverlay, menuScrim;
+    private com.lateshow.app.ui.widget.LiquidGlassPanel menuPanel;
+    private androidx.activity.OnBackPressedCallback menuBack;
+    /** 弹层开关代次：防止关闭动画的收尾把刚重开的面板又藏掉 */
+    private int menuSeq = 0;
     /** 代码触发 setText 时抑制防抖重载，避免「切数据源」被重载两次（A-27） */
     private boolean suppressSearchReload = false;
 
@@ -149,6 +152,7 @@ public class HomeFragment extends Fragment {
         chips.setLayoutManager(new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false));
         chips.setAdapter(chipAdapter);
         chips.setHasFixedSize(true);
+        setupMenuOverlay(v);
         setupTopBar(v);
 
         videoAdapter = new VideoAdapter(new VideoAdapter.OnClick() {
@@ -422,14 +426,98 @@ public class HomeFragment extends Fragment {
                 ((android.widget.FrameLayout.LayoutParams) histV.getLayoutParams()).topMargin =
                         (int) (bars.top + 58f * d);
             }
+            // 玻璃弹层：与源站按钮左缘对齐（栏边距 10 + 按钮边距 5 - 4dp 微调），
+            // 顶边在顶栏下方 6dp 处（顶栏底 = 状态栏 + 4 + 48）
+            if (menuPanel != null) {
+                android.widget.FrameLayout.LayoutParams mlp =
+                        (android.widget.FrameLayout.LayoutParams) menuPanel.getLayoutParams();
+                mlp.topMargin = (int) (bars.top + 58f * d);
+                mlp.leftMargin = (int) (11f * d);
+                menuPanel.setLayoutParams(mlp);
+            }
             return insets;
         });
         androidx.core.view.ViewCompat.requestApplyInsets(root);
     }
 
+    /** 玻璃弹层：绑定视图 / 尺寸 / 玻璃参数 / 返回键 */
+    private void setupMenuOverlay(View root) {
+        menuOverlay = root.findViewById(R.id.menuOverlay);
+        menuScrim = root.findViewById(R.id.menuScrim);
+        menuPanel = root.findViewById(R.id.menuPanel);
+        if (menuOverlay == null || menuPanel == null) return;
+        if (menuScrim != null) menuScrim.setOnClickListener(vv -> dismissMenuOverlay());
+
+        // 宽度 = 原源站列表 250dp 的 3/4（源站、分类两个列表完全一致）
+        float d = getResources().getDisplayMetrics().density;
+        int w = Math.round(MENU_BASE_W_DP * MENU_W_RATIO * d);
+        ViewGroup.LayoutParams lp = menuPanel.getLayoutParams();
+        lp.width = w;
+        menuPanel.setLayoutParams(lp);
+
+        menuPanel.setGlassCornerRadius(14f * d);
+        menuPanel.setRefraction(18f * d, 30f * d);
+        menuPanel.setBlurSigma(8f * d);
+        menuPanel.setFrost(0.32f);
+        menuPanel.setHighlight(0.28f);
+        menuPanel.setDispersion(0.6f);
+        menuPanel.setBackdropSource(grid);
+
+        // 返回键：弹层打开时先关弹层（与 PopupWindow 的返回行为一致）
+        menuBack = new androidx.activity.OnBackPressedCallback(false) {
+            @Override public void handleOnBackPressed() {
+                dismissMenuOverlay();
+            }
+        };
+        requireActivity().getOnBackPressedDispatcher()
+                .addCallback(getViewLifecycleOwner(), menuBack);
+    }
+
+    /** 内容挂进玻璃弹层并显示（顶部/左侧位置见 applyTopInsets） */
+    private void showMenuOverlay(View content, boolean animate) {
+        if (menuOverlay == null || menuPanel == null) return;
+        menuSeq++;
+        menuPanel.animate().cancel();
+        menuPanel.removeAllViews();
+        menuPanel.addView(content, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        menuOverlay.setVisibility(View.VISIBLE);
+        menuOverlay.setAlpha(1f);
+        if (menuBack != null) menuBack.setEnabled(true);
+        if (animate) {
+            menuPanel.setAlpha(0f);
+            menuPanel.setTranslationY(-dp(8));
+            menuPanel.animate().alpha(1f).translationY(0f).setDuration(150L)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+        } else {
+            menuPanel.setAlpha(1f);
+            menuPanel.setTranslationY(0f);
+        }
+        // 浮层刚可见时位置/背景才有意义，强制重采一次背后海报
+        menuPanel.post(menuPanel::refreshGlass);
+    }
+
+    /** 收起源站 / 分类弹层 */
+    private void dismissMenuOverlay() {
+        if (menuOverlay == null || menuOverlay.getVisibility() != View.VISIBLE) return;
+        final int seq = ++menuSeq;
+        if (menuBack != null) menuBack.setEnabled(false);
+        menuPanel.animate().cancel();
+        menuPanel.animate().alpha(0f).translationY(-dp(6)).setDuration(100L)
+                .withEndAction(() -> {
+                    if (seq != menuSeq || menuOverlay == null) return;  // 期间又被打开/关闭过
+                    menuOverlay.setVisibility(View.GONE);
+                    menuOverlay.setAlpha(1f);
+                    menuPanel.setAlpha(1f);
+                    menuPanel.setTranslationY(0f);
+                    menuPanel.removeAllViews();
+                }).start();
+    }
+
     /** 搜索输入从右向左滑出，盖住分类区；弹出键盘并展示搜索历史 */
     private void expandSearch() {
         if (searchExpanded || searchBox == null) return;
+        if (menuOverlay != null && menuOverlay.getVisibility() == View.VISIBLE) dismissSourceMenu();
         searchExpanded = true;
         chips.setVisibility(View.GONE);
         searchBox.setVisibility(View.VISIBLE);
@@ -471,20 +559,26 @@ public class HomeFragment extends Fragment {
                 }).start();
     }
 
-    /** 长按分类区：全部分类弹层，点选等价于点击对应芯片 */
+    /** 长按分类区：全部分类列表（与源站列表同一套玻璃弹层 / 位置 / 宽度 / 交互） */
     private void showAllCategoriesDialog() {
         if (!isAdded() || chipAdapter == null) return;
         java.util.List<Models.Category> items = chipAdapter.getItems();
         if (items.isEmpty()) return;
-        String[] names = new String[items.size()];
+        if (menuOverlay != null && menuOverlay.getVisibility() == View.VISIBLE) {
+            dismissMenuOverlay();   // 已打开则先收起（再点一次 = 关闭）
+            return;
+        }
+        int sel = chipAdapter.getSelected();
+        LinearLayout box = new LinearLayout(getContext());
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(0, dp(6), 0, dp(6));
         for (int i = 0; i < items.size(); i++) {
             Models.Category c = items.get(i);
-            names[i] = c == null ? "全部" : c.typeName;
+            String name = (c == null || c.typeName == null || c.typeName.isEmpty())
+                    ? "全部" : c.typeName;
+            addCategoryRow(box, name, i == sel, i);
         }
-        new android.app.AlertDialog.Builder(requireContext())
-                .setTitle("全部分类")
-                .setItems(names, (d, which) -> chipAdapter.selectAt(which))
-                .show();
+        showMenuOverlay(wrapMenuScroll(box, items.size()), true);
     }
 
     // ---------- 搜索历史 ----------
@@ -701,6 +795,7 @@ public class HomeFragment extends Fragment {
     public void onPause() {
         hideHistory();
         hideSkeleton();
+        dismissSourceMenu();   // 与原 PopupWindow 一致：失焦即收
         com.lateshow.app.api.NetMonitor.removeListener(onNetChanged);
         stopRingAnim();
         super.onPause();
@@ -946,8 +1041,16 @@ public class HomeFragment extends Fragment {
         return (min / 60) + " 小时前";
     }
 
+    /** 弹层基准宽度：原源站列表宽 250dp；现按 3/4 收窄（源站/分类共用同一数值） */
+    private static final float MENU_BASE_W_DP = 250f;
+    private static final float MENU_W_RATIO = 0.75f;
+
     private void showSourceMenu() {
-        if (!isAdded() || getView() == null) return;
+        if (!isAdded() || getView() == null || menuPanel == null) return;
+        if (menuOverlay.getVisibility() == View.VISIBLE) {
+            dismissMenuOverlay();   // 再点一次源站按钮 = 关闭
+            return;
+        }
 
         LinearLayout box = new LinearLayout(getContext());
         box.setOrientation(LinearLayout.VERTICAL);
@@ -957,66 +1060,78 @@ public class HomeFragment extends Fragment {
         int rows = 1;
         if (sources.isEmpty()) {
             // 源站列表为空：显示「全部源站」+「重新加载」兜底行，保证点击始终有反馈
-            addMenuRow(box, "全部源站", "", curSlug.isEmpty(), "");
-            addMenuRow(box, "重新加载源站列表", "↻", false, null);
+            addSourceRow(box, "全部源站", "", curSlug.isEmpty(), "");
+            addSourceRow(box, "重新加载源站列表", "↻", false, null);
+            rows++;
         } else {
             // 「全部源站」固定项
-            addMenuRow(box, "全部源站", "", curSlug.isEmpty(), "");
+            addSourceRow(box, "全部源站", "", curSlug.isEmpty(), "");
 
             // 按影片数降序（数据多的源站排前面）
             List<Models.SyncSource> sorted = new ArrayList<>(sources);
             java.util.Collections.sort(sorted, (a, b) -> Integer.compare(b.totalVideos, a.totalVideos));
             for (Models.SyncSource s : sorted) {
-                addMenuRow(box, s.name, TimeUtil.compact(s.totalVideos), s.slug != null && s.slug.equals(curSlug), s.slug);
+                addSourceRow(box, s.name, TimeUtil.compact(s.totalVideos),
+                        s.slug != null && s.slug.equals(curSlug), s.slug);
                 rows++;
             }
         }
-
-        androidx.core.widget.NestedScrollView sv = new androidx.core.widget.NestedScrollView(getContext());
-        sv.setVerticalScrollBarEnabled(true);
-        sv.addView(box, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        int want = dp(12) + dp(38) * rows;
-        int maxH = (int) (getResources().getDisplayMetrics().heightPixels * 0.55f);
-        sv.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(want, maxH)));
-
-        dismissSourceMenu();   // 同一时间只允许一个源站弹窗
-        PopupWindow pw = new PopupWindow(sv, dp(250),
-                ViewGroup.LayoutParams.WRAP_CONTENT, true);
-        // 浮层统一 12dp 圆角（原 bg_card_lg 18dp，弹出层比页面卡片更收一档）、1dp 描边
-        pw.setBackgroundDrawable(getResources().getDrawable(R.drawable.bg_menu));
-        pw.setOutsideTouchable(true);
-        pw.setElevation(dp(8));
-        sourcePopup = pw;
-        pw.setOnDismissListener(() -> { if (sourcePopup == pw) sourcePopup = null; });
-        // 左移 4dp：浮层左缘盖住海报列左缘，消除背后海报切出的 1px 细线
-        try {
-            pw.showAsDropDown(btnSource, -dp(4), dp(6));
-        } catch (Exception e) {
-            sourcePopup = null;   // Activity 已销毁 / token 失效时不留悬挂窗口
-            return;
-        }
-        box.setTag(pw);
+        showMenuOverlay(wrapMenuScroll(box, rows), true);
     }
 
+    /** 立即收起弹层（不做动画）：onPause / onDestroyView 用，避免视图销毁后动画还在跑 */
     private void dismissSourceMenu() {
-        if (sourcePopup != null) {
-            try { sourcePopup.dismiss(); } catch (Exception ignored) { }
-            sourcePopup = null;
+        menuSeq++;
+        if (menuBack != null) menuBack.setEnabled(false);
+        if (menuPanel != null) {
+            menuPanel.animate().cancel();
+            menuPanel.removeAllViews();
+            menuPanel.setAlpha(1f);
+            menuPanel.setTranslationY(0f);
+        }
+        if (menuOverlay != null) {
+            menuOverlay.setVisibility(View.GONE);
+            menuOverlay.setAlpha(1f);
         }
     }
 
     private boolean pendingMenu = false;
 
-    private void addMenuRow(LinearLayout box, String name, String count, boolean sel, String slug) {
+    /** 弹层内容包一层限高的滚动容器（源站/分类共用） */
+    private View wrapMenuScroll(LinearLayout box, int rows) {
+        androidx.core.widget.NestedScrollView sv =
+                new androidx.core.widget.NestedScrollView(getContext());
+        sv.setVerticalScrollBarEnabled(false);
+        sv.addView(box, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        int want = dp(12) + dp(38) * rows;
+        int maxH = (int) (getResources().getDisplayMetrics().heightPixels * 0.5f);
+        sv.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.min(want, maxH)));
+        return sv;
+    }
+
+    /** 全部分类列表的一行：点选 = 选中该分类并收起弹层 */
+    private void addCategoryRow(LinearLayout box, String name, boolean sel, int index) {
+        View row = LayoutInflater.from(getContext()).inflate(R.layout.item_source_menu, box, false);
+        ((TextView) row.findViewById(R.id.name)).setText(name);
+        ((TextView) row.findViewById(R.id.count)).setText("");
+        row.findViewById(R.id.dot).setVisibility(sel ? View.VISIBLE : View.INVISIBLE);
+        row.setOnClickListener(v -> {
+            dismissMenuOverlay();
+            if (chipAdapter != null) chipAdapter.selectAt(index);
+        });
+        box.addView(row);
+    }
+
+    private void addSourceRow(LinearLayout box, String name, String count, boolean sel, String slug) {
         View row = LayoutInflater.from(getContext()).inflate(R.layout.item_source_menu, box, false);
         ((TextView) row.findViewById(R.id.name)).setText(name);
         TextView cnt = row.findViewById(R.id.count);
         cnt.setText(count);
         row.findViewById(R.id.dot).setVisibility(sel ? View.VISIBLE : View.INVISIBLE);
         row.setOnClickListener(v -> {
-            PopupWindow pw = (PopupWindow) box.getTag();
-            if (pw != null) pw.dismiss();
+            dismissMenuOverlay();
             if (slug == null) {
                 // 「重新加载源站列表」兜底行
                 android.widget.Toast.makeText(getContext(), "正在重新加载源站…", android.widget.Toast.LENGTH_SHORT).show();

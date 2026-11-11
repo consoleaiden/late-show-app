@@ -151,6 +151,30 @@
         android:textColor="@color/t2"
         android:visibility="gone" />
 
+    <!-- 源站 / 全部分类 的玻璃弹层：页面内浮层（不是独立 Window），
+         这样才能真实采样背后滚动的海报做液态玻璃；宽度 = 源站列表原宽 250dp 的 3/4。
+         层级在列表之上、玻璃顶栏之下，所以打开时顶栏仍可点。 -->
+    <FrameLayout
+        android:id="@+id/menuOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <!-- 全屏透明遮罩：点任意空白处关闭 -->
+        <View
+            android:id="@+id/menuScrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.lateshow.app.ui.widget.LiquidGlassPanel
+            android:id="@+id/menuPanel"
+            android:layout_width="188dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_marginLeft="11dp"
+            android:layout_marginTop="58dp" />
+    </FrameLayout>
+
     <!-- 顶部液态玻璃栏：与底部导航同一实现（LiquidGlassBar 三级降级）
          [源站按钮] [分类横滑 weight1] [搜索输入(默认隐藏 weight1)] [搜索按钮] -->
     <com.lateshow.app.ui.widget.LiquidGlassBar
