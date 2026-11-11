@@ -21,16 +21,6 @@
             android:textSize="25sp"
             android:textStyle="bold"
             android:textColor="@color/t1" />
-
-        <TextView
-            android:id="@+id/subTitle"
-            style="@style/MetaLabel"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:layout_marginLeft="10dp"
-            android:layout_marginBottom="4dp"
-            android:text="-- 部待看 · 按收藏时间排序" />
     </LinearLayout>
 
     <!-- 分段胶囊 Tab -->

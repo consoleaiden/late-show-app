@@ -5,6 +5,8 @@ import android.animation.ValueAnimator;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
@@ -56,6 +58,10 @@ public class MainActivity extends AppCompatActivity {
     private final java.util.ArrayDeque<DetailFragment> detailStack = new java.util.ArrayDeque<>();
     private View detailHost;
     private OnBackPressedCallback detailBack;
+
+    /** 底部导航玻璃胶囊（滚动时下滑隐藏 / 滚动结束上滑回位） */
+    private com.lateshow.app.ui.widget.LiquidGlassBar tabbar;
+    private boolean tabbarHidden;
 
     private final ImageView[] icons = new ImageView[TAB_COUNT];
     private final View[] glows = new View[TAB_COUNT];
@@ -154,6 +160,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private void setupGlassTabbar() {
         com.lateshow.app.ui.widget.LiquidGlassBar bar = findViewById(R.id.tabbar);
+        tabbar = bar;
         bar.setBackdropSource(findViewById(R.id.container));
         float d = getResources().getDisplayMetrics().density;
         bar.setGlassCornerRadius(24f * d);
@@ -162,6 +169,33 @@ public class MainActivity extends AppCompatActivity {
         bar.setFrost(0.88f);                   // 中心白雾（原 0.22 × 4）
         bar.setHighlight(0.30f);               // 边缘高光
         bar.setDispersion(0.8f);               // 色散（彩虹边）
+    }
+
+    /**
+     * 底部导航胶囊滚动隐显（首页/收藏页共用）：
+     * 列表滚动时下滑隐藏，滚动结束上滑回位。重复调用同方向是幂等的（不做无谓动画）。
+     * 隐藏位移 = 胶囊顶到「父容器裁剪边界」（mainContent 底部扣除系统栏 padding）的距离，
+     * 移出后由父容器裁剪，确保手势导航条区域也不会露出胶囊的任何一角。
+     */
+    public void animateTabbar(boolean hide) {
+        if (tabbar == null) return;
+        if (tabbarHidden == hide) return;
+        if (tabbar.getWidth() <= 0) {           // 尚未布局：直接落到目标状态，不做动画
+            tabbarHidden = hide;
+            return;
+        }
+        ViewGroup p = (ViewGroup) tabbar.getParent();
+        float d = getResources().getDisplayMetrics().density;
+        float target = hide
+                ? p.getHeight() - p.getPaddingBottom() - tabbar.getTop() + 6f * d
+                : 0f;
+        tabbarHidden = hide;
+        tabbar.animate().translationY(target)
+                .setDuration(hide ? 190 : 240)
+                .setInterpolator(hide
+                        ? new AccelerateInterpolator(1.6f)
+                        : new DecelerateInterpolator(1.8f))
+                .start();
     }
 
     /**
@@ -268,6 +302,7 @@ public class MainActivity extends AppCompatActivity {
             getSupportFragmentManager().beginTransaction()
                     .show(under).commitAllowingStateLoss();
         }
+        animateTabbar(false);   // 详情页盖住了导航胶囊，返回列表时无论之前滚动状态如何都回位
         if (under != null) {
             under.onUncovered();
             setLightStatusBarIcons(false);
@@ -275,6 +310,10 @@ public class MainActivity extends AppCompatActivity {
             if (detailHost != null) detailHost.setVisibility(View.GONE);
             detailBack.setEnabled(false);
             setLightStatusBarIcons(!com.lateshow.app.util.ThemeManager.actualNight(this));
+            // 回到列表页：收藏/历史页立即重读本地数据（在详情页里新增的收藏马上出现）；
+            // 首页顶栏若此前被滚动隐藏，回位显示
+            if (active instanceof FavFragment) ((FavFragment) active).refresh();
+            else if (active instanceof HomeFragment) homeFragment.resetChrome();
         }
     }
 
@@ -367,6 +406,7 @@ public class MainActivity extends AppCompatActivity {
         curTab = tab;
         if (animate) crossFadeIn(target.getView());
         renderTabs(tab, animate);
+        animateTabbar(false);   // 从滚动隐藏状态切走时，导航胶囊回位显示
     }
 
     /** 页面切换：新页从下方 8dp 处淡入（旧页在同一次 commit 里隐藏），避免硬切 */

@@ -30,7 +30,7 @@ import java.util.List;
 /** 收藏页：胶囊 Tab「收藏 / 播放历史」 */
 public class FavFragment extends Fragment {
 
-    private TextView subTitle, metaInfo, btnClear, emptyView, segFav, segHist;
+    private TextView metaInfo, btnClear, emptyView, segFav, segHist;
     private RecyclerView grid;
     private VideoAdapter adapter;
     private boolean showHist = false;
@@ -65,7 +65,7 @@ public class FavFragment extends Fragment {
             return insets;
         });
         androidx.core.view.ViewCompat.requestApplyInsets(v);
-        subTitle = v.findViewById(R.id.subTitle);
+        // 副标题行（“N 部待看 · 按收藏时间排序”）已从布局移除：数据与下方元信息条重复
         metaInfo = v.findViewById(R.id.metaInfo);
         btnClear = v.findViewById(R.id.btnClear);
         emptyView = v.findViewById(R.id.emptyView);
@@ -87,9 +87,21 @@ public class FavFragment extends Fragment {
                 v.findViewById(R.id.fabTop);
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                // 滚动即隐藏底部导航胶囊，滚动结束回位（与首页一致）
+                if (dy != 0 && getActivity() instanceof com.lateshow.app.MainActivity) {
+                    ((com.lateshow.app.MainActivity) getActivity()).animateTabbar(true);
+                }
                 LinearLayoutManager lm = (LinearLayoutManager) rv.getLayoutManager();
                 boolean show = lm != null && lm.findFirstVisibleItemPosition() > 8;
                 fabTop.setVisibility(show ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_IDLE
+                        && getActivity() instanceof com.lateshow.app.MainActivity) {
+                    ((com.lateshow.app.MainActivity) getActivity()).animateTabbar(false);
+                }
             }
         });
         fabTop.setOnClickListener(vv -> {
@@ -194,6 +206,21 @@ public class FavFragment extends Fragment {
         if (getView() != null) render();
     }
 
+    /**
+     * Tab 切换走 show()/hide()，不走 onResume —— 这里补一刀：
+     * 每次从其它 Tab 切回（隐藏 → 显示）都重读本地收藏/历史，保证即时刷新。
+     */
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden && getView() != null) render();
+    }
+
+    /** 供宿主在「详情页收起、露出本页」时调用：立即重读收藏/历史（在详情页里刚收藏/播放过的内容马上出现） */
+    public void refresh() {
+        if (getView() != null) render();
+    }
+
     /** 卡片构建用后台线程：OfflineMedia.has 是磁盘 stat，历史记录上百条时不能放主线程 */
     private static final java.util.concurrent.ExecutorService CARD_EXEC =
             java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -255,13 +282,11 @@ public class FavFragment extends Fragment {
                 hideSkeleton();
                 adapter.setItems(cards);
                 if (hist) {
-                    subTitle.setText(cards.size() + " 条记录 · 支持断点续播");
-                    metaInfo.setText("按最近播放排序");
+                    metaInfo.setText("播放记录 · 支持断点续播");
                     btnClear.setVisibility(cards.isEmpty() ? View.GONE : View.VISIBLE);
                     emptyView.setText("还没有播放记录\n去首页挑一部，进度会自动记在这里");
                 } else {
-                    subTitle.setText(cards.size() + " 部待看 · 按收藏时间排序");
-                    metaInfo.setText("本地收藏");
+                    metaInfo.setText("本地收藏 · 按收藏时间排序");
                     btnClear.setVisibility(View.GONE);
                     emptyView.setText("还没有收藏\n播放页右上角书签即可收藏");
                 }

@@ -100,6 +100,9 @@ public class HomeFragment extends Fragment {
     private TextView histCount, histEmpty, histPage, histPrev, histNext, btnClearHist;
     private int histPageNo = 0;
 
+    /** 滚动隐显状态：true = 顶栏上滑隐藏中（底导航由 MainActivity 同步处理） */
+    private boolean chromeHidden;
+
     /** 首屏骨架屏：9 张占位卡 + 呼吸动画，避免首次加载白屏 */
     private LinearLayout skeletonBox;
     private android.animation.ObjectAnimator skelAnim;
@@ -171,6 +174,8 @@ public class HomeFragment extends Fragment {
                 v.findViewById(R.id.fabTop);
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                // 滚动即隐藏顶部功能胶囊与底部导航胶囊，滚动结束回位（见 onScrollStateChanged）
+                if (dy != 0) setChromeHidden(true);
                 GridLayoutManager lm = (GridLayoutManager) rv.getLayoutManager();
                 if (lm != null) {
                     boolean show = lm.findFirstVisibleItemPosition() > 8;
@@ -188,6 +193,7 @@ public class HomeFragment extends Fragment {
             @Override public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
                 // 图标已全部静态化，滚动时不再需要暂停/恢复动画
                 if (newState != RecyclerView.SCROLL_STATE_IDLE) hideHistory();
+                else setChromeHidden(false);   // 滚动结束：顶栏下滑回来 / 导航胶囊上滑回来
             }
         });
         fabTop.setOnClickListener(vv -> {
@@ -703,6 +709,28 @@ public class HomeFragment extends Fragment {
         }
     }
 
+    /**
+     * 滚动隐显：列表滚动时顶部功能胶囊向上滑出屏幕、底部导航胶囊向下滑出屏幕；
+     * 滚动结束（SCROLL_STATE_IDLE）后各自滑回原位。重复调用同方向幂等。
+     * 顶部隐藏位移 = 顶栏顶边 + 高度（移出父容器上边界后被裁剪，状态栏区域也不残留）。
+     */
+    private void setChromeHidden(boolean hide) {
+        if (chromeHidden == hide) return;
+        chromeHidden = hide;
+        if (topbar != null && topbar.getWidth() > 0) {
+            float target = hide ? -(topbar.getTop() + topbar.getHeight()) : 0f;
+            topbar.animate().translationY(target)
+                    .setDuration(hide ? 190 : 240)
+                    .setInterpolator(hide
+                            ? new android.view.animation.AccelerateInterpolator(1.6f)
+                            : new android.view.animation.DecelerateInterpolator(1.8f))
+                    .start();
+        }
+        if (getActivity() instanceof com.lateshow.app.MainActivity) {
+            ((com.lateshow.app.MainActivity) getActivity()).animateTabbar(hide);
+        }
+    }
+
     /** 总页数：按每页 10 条向上取整，至少 1 页 */
     private int histPageCount() {
         int total = PrefStore.get().searchHistory().size();
@@ -806,6 +834,13 @@ public class HomeFragment extends Fragment {
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
         if (hidden) dismissSourceMenu();
+        else resetChrome();   // 切回首页：无论离开时滚动到什么状态，顶栏/底导航都回位
+    }
+
+    /** 顶栏/底导航强制回位（切回首页或详情页收起露出首页时由宿主触发） */
+    public void resetChrome() {
+        chromeHidden = false;
+        if (topbar != null) topbar.setTranslationY(0f);
     }
 
     @Override
@@ -945,6 +980,7 @@ public class HomeFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
+        resetChrome();   // 从全屏播放等页面回来：顶栏/底导航确保回位显示
         com.lateshow.app.api.NetMonitor.addListener(onNetChanged);
         pingHealth(); // 回前台必重测：列表可能全部命中缓存，没有网络请求可依赖
         // 设置页切换过数据源：重新拉源站与列表
