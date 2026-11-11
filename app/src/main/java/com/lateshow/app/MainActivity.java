@@ -258,19 +258,16 @@ public class MainActivity extends AppCompatActivity {
      */
     public void onDetailClosed(DetailFragment self) {
         detailStack.remove(self);
+        // 防御性对账：只把「已脱离 FragmentManager」的栈残留丢弃（正常路径不存在）。
+        // 注意：绝不能在这里摘除还在 FragmentManager 里的低层级页面——
+        // 栈的底层（1~under-1 层）本来就以 hidden 状态留在管理器里等逐级返回，
+        // 旧实现的「双保险清理」会每次出栈都把整个底层栈销毁，第 3 次返回就直接见列表了
+        detailStack.removeIf(d -> !d.isAdded());
         DetailFragment under = detailStack.peek();
-        FragmentManager fm = getSupportFragmentManager();
-        androidx.fragment.app.FragmentTransaction tx = fm.beginTransaction();
-        boolean changed = false;
-        // 双保险：清掉栈里残留的更深层页面（正常路径下不存在）
-        for (Fragment f : fm.getFragments()) {
-            if (f instanceof DetailFragment && f != self && f != under) {
-                tx.remove(f);
-                changed = true;
-            }
+        if (under != null && under.isHidden()) {
+            getSupportFragmentManager().beginTransaction()
+                    .show(under).commitAllowingStateLoss();
         }
-        if (under != null && under.isHidden()) { tx.show(under); changed = true; }
-        if (changed) tx.commitAllowingStateLoss();
         if (under != null) {
             under.onUncovered();
             setLightStatusBarIcons(false);
