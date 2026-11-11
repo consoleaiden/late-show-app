@@ -295,16 +295,18 @@ public class LiquidGlassBar extends LinearLayout {
         }
         if (frostPaint != null) {
             // tier 1 磨砂白雾：盖在模糊画面上（shader 里没有这层，因为 AGSL 版自带）
-            canvas.drawRoundRect(0, 0, getWidth(), getHeight(), radius, radius, frostPaint);
+            canvas.drawRoundRect(0f, 0f, getWidth(), (float) getHeight(),
+                    radius, radius, frostPaint);
             // 顶部亮边（模拟玻璃上沿反光）
             if (hiPaint != null && getWidth() > 0) {
-                if (hiPaint.getShader() == null) {
-                    int c = ContextCompat.getColor(getContext(), R.color.barBg);
-                    hiPaint.setShader(new LinearGradient(0, 0, 0, getHeight(),
-                            Color.argb((int) (255 * highlight), 255, 255, 255),
-                            Color.argb(0, Color.red(c), Color.green(c), Color.blue(c))));
-                }
-                canvas.drawRoundRect(0, 0, getWidth(), getHeight(), radius, radius, hiPaint);
+                int c = ContextCompat.getColor(getContext(), R.color.barBg);
+                hiPaint.setShader(new LinearGradient(
+                        0f, 0f, 0f, (float) getHeight(),
+                        new int[]{Color.argb((int) (255 * highlight), 255, 255, 255),
+                                 Color.argb(0, Color.red(c), Color.green(c), Color.blue(c))},
+                        null, Shader.TileMode.CLAMP));
+                canvas.drawRoundRect(0f, 0f, getWidth(), (float) getHeight(),
+                        radius, radius, hiPaint);
             }
         }
         super.dispatchDraw(canvas);
