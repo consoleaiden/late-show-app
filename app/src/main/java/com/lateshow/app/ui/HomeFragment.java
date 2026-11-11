@@ -104,6 +104,8 @@ public class HomeFragment extends Fragment {
     private boolean chromeHidden;
     /** 分类横滑侧按钮状态：true = 源站/搜索按钮已滑出、chips 边距已扩展 */
     private boolean chipsBtnHidden;
+    /** 分类两缘的渐变遮罩（盖住 chips 在自身边缘被裁切的部分，随边距同节奏移动） */
+    private View fadeL, fadeR;
     /** 顶部功能玻璃胶囊（setupTopBar 装配，滚动隐显用） */
     private com.lateshow.app.ui.widget.LiquidGlassBar topbar;
 
@@ -129,6 +131,8 @@ public class HomeFragment extends Fragment {
     public void onViewCreated(@NonNull View v, @Nullable Bundle b) {
         btnSource = v.findViewById(R.id.btnSource);
         btnSourceIcon = v.findViewById(R.id.btnSourceIcon);
+        fadeL = v.findViewById(R.id.fadeL);
+        fadeR = v.findViewById(R.id.fadeR);
         inputSearch = v.findViewById(R.id.inputSearch);
         // M2：后端 wd / tag 都是 max_length=64，超长会 422 并在界面上糊一段英文错误。
         // 输入层直接挡住，用户不会先打满再被打回。
@@ -538,6 +542,7 @@ public class HomeFragment extends Fragment {
         if (menuOverlay != null && menuOverlay.getVisibility() == View.VISIBLE) dismissSourceMenu();
         searchExpanded = true;
         chips.setVisibility(View.GONE);
+        setFadesVisible(false);
         searchBox.setVisibility(View.VISIBLE);
         float d = getResources().getDisplayMetrics().density;
         searchBox.setTranslationX(260f * d);
@@ -574,6 +579,7 @@ public class HomeFragment extends Fragment {
                 .withEndAction(() -> {
                     searchBox.setVisibility(View.GONE);
                     chips.setVisibility(View.VISIBLE);
+                    setFadesVisible(true);
                     setChipSideButtonsHidden(false);   // 恢复分类区：两侧按钮确保回位
                 }).start();
     }
@@ -748,8 +754,10 @@ public class HomeFragment extends Fragment {
     }
 
     /**
-     * 分类横滑隐显两侧按钮：滑动时源站按钮向左滑出、搜索按钮向右滑出至完全隐藏，
-     * 分类区边距同步向两侧扩展（真正让出展示空间）；滚动结束一起平滑回位。
+     * 分类横滑隐显两侧按钮：滑动时源站按钮向左滑出、搜索按钮向右滑出，
+     * 目标位置额外加 28dp 缓冲 —— 加上胶囊自身 10dp 外边距后按钮已完全离开屏幕，
+     * 不依赖胶囊裁剪也绝无残留；分类区边距同步收窄（正边距方案，见
+     * {@link #animateChipsMargins}）。滚动结束一起平滑回位。
      * 搜索框展开（chips 被盖住）时不介入。
      */
     private void setChipSideButtonsHidden(boolean hide) {
@@ -779,35 +787,49 @@ public class HomeFragment extends Fragment {
     }
 
     /**
-     * 分类区边距随按钮滑出同步扩展：chips 两缘延伸到栏内 4dp 处，
-     * 与按钮滑出同节奏；回位时恢复 8dp/0dp。动画走 margin + requestLayout
-     * （顶栏只有一行，重排代价很小；chips 锚点保持，滚动位置不跳）。
+     * 分类区边距随按钮滑出同步扩展：静止时 51dp（按钮 + 间隙），横滑时收窄到 4dp，
+     * 与按钮滑出同节奏；全程正边距，RecyclerView 本体始终在胶囊内部，
+     * 不会像旧的负 margin 方案那样把内容推出胶囊圆角。两侧渐变遮罩同节奏跟随。
+     * 动画走 margin + requestLayout（顶栏只有一行，重排代价很小；滚动位置不跳）。
      */
     private void animateChipsMargins(boolean extend, android.view.animation.Interpolator itp) {
+        if (chips == null) return;
         ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) chips.getLayoutParams();
         final int fromL = lp.leftMargin, fromR = lp.rightMargin;
-        final int toL, toR;
-        if (extend) {
-            // chips.left = btnSource.right + leftMargin → 目标左缘 = 栏内 4dp
-            toL = dp(4) - btnSource.getLeft() - btnSource.getWidth();
-            // chips.right = 父宽 - rightMargin - (btnSearch 宽 + 左8 + 右5) → 目标右缘 = 栏内 4dp
-            toR = dp(4) - btnSearch.getWidth() - dp(13);
-        } else {
-            toL = dp(8);
-            toR = 0;
-        }
-        if (fromL == toL && fromR == toR) return;
+        final int to = extend ? dp(4) : dp(51);
+        if (fromL == to && fromR == to) return;
         android.animation.ValueAnimator va = android.animation.ValueAnimator.ofFloat(0f, 1f);
         va.setDuration(extend ? 190 : 240);
         va.setInterpolator(itp);
         va.addUpdateListener(a -> {
             float t = (float) a.getAnimatedValue();
+            int mL = Math.round(fromL + (to - fromL) * t);
+            int mR = Math.round(fromR + (to - fromR) * t);
             ViewGroup.MarginLayoutParams p = (ViewGroup.MarginLayoutParams) chips.getLayoutParams();
-            p.leftMargin = Math.round(fromL + (toL - fromL) * t);
-            p.rightMargin = Math.round(fromR + (toR - fromR) * t);
+            p.leftMargin = mL;
+            p.rightMargin = mR;
             chips.setLayoutParams(p);
+            // 遮罩条贴着 chips 的被裁切缘：左条对齐左缘、右条对齐右缘
+            if (fadeL != null) {
+                ViewGroup.MarginLayoutParams fl =
+                        (ViewGroup.MarginLayoutParams) fadeL.getLayoutParams();
+                fl.leftMargin = mL;
+                fadeL.setLayoutParams(fl);
+            }
+            if (fadeR != null) {
+                ViewGroup.MarginLayoutParams fr =
+                        (ViewGroup.MarginLayoutParams) fadeR.getLayoutParams();
+                fr.rightMargin = mR;
+                fadeR.setLayoutParams(fr);
+            }
         });
         va.start();
+    }
+
+    /** 分类区显隐时同步两侧渐变遮罩（搜索展开盖住分类时遮罩一并隐藏） */
+    private void setFadesVisible(boolean visible) {
+        if (fadeL != null) fadeL.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (fadeR != null) fadeR.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     /** 总页数：按每页 10 条向上取整，至少 1 页 */

@@ -20,6 +20,7 @@ import androidx.annotation.Nullable;
 public class LiquidGlassBar extends LinearLayout {
 
     private final GlassRenderer glass;
+    private final android.graphics.Path clipPath = new android.graphics.Path();
     private float cornerPx = -1f;
 
     public LiquidGlassBar(Context context) {
@@ -119,7 +120,22 @@ public class LiquidGlassBar extends LinearLayout {
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        // 画布级圆角兜底裁剪：部分 ROM（HarmonyOS 等）的 outline 裁剪对子 View 不生效，
+        // 内容会画出胶囊圆角（顶栏分类滑到边缘时尤为明显）。把画布裁到「圆角矩形外扩 1px」：
+        // outline 裁剪生效的设备上它是超集（不改变任何像素、不破坏抗锯齿边），
+        // 不生效的设备上由它兜底，保证胶囊内内容绝不越界。
+        int w = getWidth(), h = getHeight();
+        boolean clipped = false;
+        if (w > 0 && h > 0) {
+            float r = cornerPx() + 1f;
+            clipPath.reset();
+            clipPath.addRoundRect(-1f, -1f, w + 1f, h + 1f, r, r, android.graphics.Path.Direction.CW);
+            canvas.save();
+            canvas.clipPath(clipPath);
+            clipped = true;
+        }
         glass.draw(canvas);
         super.dispatchDraw(canvas);
+        if (clipped) canvas.restore();
     }
 }
