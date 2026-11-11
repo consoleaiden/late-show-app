@@ -102,6 +102,8 @@ public class HomeFragment extends Fragment {
 
     /** 滚动隐显状态：true = 顶栏上滑隐藏中（底导航由 MainActivity 同步处理） */
     private boolean chromeHidden;
+    /** 顶部功能玻璃胶囊（setupTopBar 装配，滚动隐显用） */
+    private com.lateshow.app.ui.widget.LiquidGlassBar topbar;
 
     /** 首屏骨架屏：9 张占位卡 + 呼吸动画，避免首次加载白屏 */
     private LinearLayout skeletonBox;
@@ -354,7 +356,7 @@ public class HomeFragment extends Fragment {
 
     /** 顶栏玻璃参数与底部导航一致；采样源 = 网格（内容从顶栏后面穿过） */
     private void setupTopBar(View v) {
-        com.lateshow.app.ui.widget.LiquidGlassBar topbar = v.findViewById(R.id.topBar);
+        topbar = v.findViewById(R.id.topBar);
         if (topbar != null) {
             topbar.setBackdropSource(grid);
             float d = getResources().getDisplayMetrics().density;
