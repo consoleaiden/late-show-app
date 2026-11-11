@@ -590,6 +590,45 @@
                         android:layout_marginLeft="10dp"
                         android:contentDescription="显示播放地址与下载按钮" />
                 </LinearLayout>
+
+                <!-- 播放偏好：未成年模式（仅获取/展示非 18+ 源站内容，VodSync v1.15.0+） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="未成年模式"
+                            android:textSize="12.5sp"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            style="@style/MetaLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:textAllCaps="false"
+                            android:text="开启后仅加载与展示非 18+ 源站的内容（需后端 v1.15.0+，旧后端将忽略此开关）"
+                            android:lineSpacingMultiplier="1.5" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/swMinorMode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="10dp"
+                        android:contentDescription="未成年模式" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 

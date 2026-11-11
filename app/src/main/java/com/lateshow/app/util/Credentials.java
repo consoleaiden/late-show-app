@@ -31,7 +31,10 @@ public final class Credentials {
             byte[] t = md.digest(token.getBytes(StandardCharsets.UTF_8));
             StringBuilder inner = new StringBuilder();
             for (byte b : t) inner.append(String.format("%02x", b & 0xff));
-            byte[] f = md.digest((base + "|" + inner).getBytes(StandardCharsets.UTF_8));
+            // 未成年模式参与命名空间：开关切换后所有接口缓存整体失效，
+            // 下一次请求必然拿到与开关一致口径的新数据（未成年=仅非 18+ 源站）
+            String scope = base + "|" + inner + "|m" + (PrefStore.get().minorMode() ? 1 : 0);
+            byte[] f = md.digest(scope.getBytes(StandardCharsets.UTF_8));
             StringBuilder out = new StringBuilder();
             for (int i = 0; i < 8; i++) out.append(String.format("%02x", f[i] & 0xff));
             return out.toString();

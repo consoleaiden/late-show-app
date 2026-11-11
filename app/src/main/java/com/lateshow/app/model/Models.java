@@ -226,6 +226,8 @@ public final class Models {
         @SerializedName("video_count") public int videoCount;
         @SerializedName("last_sync_at") public String lastSyncAt;
         public boolean synced;
+        /** v1.15.0：源站 18+ 标记（未成年模式过滤依据，老后端无此字段=false） */
+        @SerializedName("is_adult") public boolean isAdult;
     }
 
     public static class SourceListResp {
@@ -271,6 +273,8 @@ public final class Models {
         @SerializedName("play_line") public com.google.gson.JsonElement playLine;
         @SerializedName("play_line_effective") public String playLineEffective;
         @SerializedName("play_line_policy") public String playLinePolicy;
+        /** v1.15.0：源站 18+ 标记（未成年模式下后端已剔除 18+ 源站，本地兜底过滤用；老后端无此字段=false） */
+        @SerializedName("is_adult") public boolean isAdult;
         public boolean pick; // UI 勾选态
 
         /** 线路总数（play_line.lines，取不到返回 0） */

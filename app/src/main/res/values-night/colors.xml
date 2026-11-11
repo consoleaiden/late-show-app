@@ -23,9 +23,6 @@
     <color name="badSoft">#1AE0574F</color>
     <color name="maskText">#FFFFFF</color>
     <color name="barBg">#F00A0C0F</color>
-    <!-- 顶栏分类两缘渐变遮罩：暗色取 barBg 同源深色（与 values/chipFadeEdge 对应） -->
-    <color name="chipFadeEdge">#F20A0C0F</color>
-    <color name="chipFadeEdgeEnd">#000A0C0F</color>
     <!-- 详情页配色（与浅色同名色一一对应，见 values/colors.xml 注释）。
          信息带在夜间取 #1F2228：比页底 ink900 略亮一档，形成"信息带 / 内容区"两层，
          又不至于用浅色主题的中性灰那样把整块顶得发白发亮。 -->

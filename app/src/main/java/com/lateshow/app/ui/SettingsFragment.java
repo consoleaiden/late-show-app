@@ -194,6 +194,20 @@ public class SettingsFragment extends Fragment {
         swStreamTools.setChecked(PrefStore.get().showStreamTools());
         swStreamTools.setOnCheckedChangeListener((bv, on) -> PrefStore.get().setShowStreamTools(on));
 
+        // 播放偏好：未成年模式（VodSync v1.15.0 minor_mode）。开启后所有 API 请求带
+        // X-Minor-Mode: 1，服务端在内容读接口统一剔除 18+ 源站；缓存命名空间含本开关，
+        // 这里切换后立即失效旧缓存，回首页即按新口径拉取
+        android.widget.Switch swMinorMode = v.findViewById(R.id.swMinorMode);
+        if (swMinorMode != null) {
+            swMinorMode.setChecked(PrefStore.get().minorMode());
+            swMinorMode.setOnCheckedChangeListener((bv, on) -> {
+                PrefStore.get().setMinorMode(on);
+                com.lateshow.app.util.ApiCache.clear();
+                toast(on ? "未成年模式已开启：仅展示非 18+ 源站内容"
+                         : "未成年模式已关闭");
+            });
+        }
+
         // 离线与缓存：展示占用并提供清理入口（离线播放数据不随清缓存删除）
         tvCacheInfo = v.findViewById(R.id.tvCacheInfo);
         v.findViewById(R.id.btnClearCache).setOnClickListener(x -> {

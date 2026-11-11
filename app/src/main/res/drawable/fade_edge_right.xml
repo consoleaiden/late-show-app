@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 分类区右缘渐变遮罩：左端透明 → 右端实（盖住裁切缘）。与 fade_edge_left 镜像 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <gradient
-        android:type="linear"
-        android:angle="0"
-        android:startColor="@color/chipFadeEdgeEnd"
-        android:endColor="@color/chipFadeEdge" />
-</shape>

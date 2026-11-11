@@ -35,7 +35,27 @@ public final class SyncCatalog implements Catalog {
 
     @Override
     public void sources(VodSyncApi.ApiCb<Models.SyncSourcesResp> cb) {
-        VodSyncApi.get().get(ApiPaths.SOURCES, null, Models.SyncSourcesResp.class, cb);
+        VodSyncApi.get().get(ApiPaths.SOURCES, null, Models.SyncSourcesResp.class,
+                com.lateshow.app.store.PrefStore.get().minorMode() ? minorFilter(cb) : cb);
+    }
+
+    /**
+     * 未成年模式本地兜底过滤（v1.15.0）：服务端已在本服务读路径剔除 18+ 源站，
+     * 这里再按 {@code is_adult} 过滤一次，覆盖磁盘缓存尚未失效、后端版本错配等
+     * 边缘情况（双保险；过滤是纯内存操作，成本为零）。
+     */
+    private static VodSyncApi.ApiCb<Models.SyncSourcesResp> minorFilter(
+            final VodSyncApi.ApiCb<Models.SyncSourcesResp> cb) {
+        return new VodSyncApi.ApiCb<Models.SyncSourcesResp>() {
+            @Override public void onOk(Models.SyncSourcesResp r) {
+                if (r != null && r.list != null) {
+                    java.util.Iterator<Models.SyncSource> it = r.list.iterator();
+                    while (it.hasNext()) if (it.next().isAdult) it.remove();
+                }
+                cb.onOk(r);
+            }
+            @Override public void onErr(String m) { cb.onErr(m); }
+        };
     }
 
     @Override

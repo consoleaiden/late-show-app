@@ -525,6 +525,16 @@ public final class PrefStore {
         sp.edit().putBoolean("show_stream_tools", show).apply();
     }
 
+    // ---------- 播放偏好：未成年模式（仅获取/展示非 18+ 源站内容，VodSync v1.15.0+） ----------
+
+    public boolean minorMode() {
+        return sp.getBoolean("minor_mode", false);
+    }
+
+    public void setMinorMode(boolean on) {
+        sp.edit().putBoolean("minor_mode", on).apply();
+    }
+
     // ---------- 播放倍速 ----------
 
     public float playSpeed() {

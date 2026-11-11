@@ -179,7 +179,7 @@
 
     <!-- 顶部液态玻璃栏：与底部导航同一实现（LiquidGlassBar 三级降级）。
          结构：单个全宽叠加层 —— 分类横滑铺满胶囊内部（正边距 51↔4dp，永不越过胶囊圆角），
-         两侧渐变遮罩盖住分类的裁切缘，源站/搜索按钮叠在分类上层、滑出即离开可视区 -->
+         源站/搜索按钮叠在分类上层、滑出即离开可视区 -->
     <com.lateshow.app.ui.widget.LiquidGlassBar
         android:id="@+id/topBar"
         android:layout_width="match_parent"
@@ -204,23 +204,6 @@
                 android:layout_marginRight="51dp"
                 android:overScrollMode="never"
                 android:clipToPadding="false" />
-
-            <!-- 两侧渐变遮罩：盖住分类在自身边缘被裁切的部分，随分类边距同节奏移动 -->
-            <View
-                android:id="@+id/fadeL"
-                android:layout_width="13dp"
-                android:layout_height="36dp"
-                android:layout_gravity="left|center_vertical"
-                android:layout_marginLeft="51dp"
-                android:background="@drawable/fade_edge_left" />
-
-            <View
-                android:id="@+id/fadeR"
-                android:layout_width="13dp"
-                android:layout_height="36dp"
-                android:layout_gravity="right|center_vertical"
-                android:layout_marginRight="51dp"
-                android:background="@drawable/fade_edge_right" />
 
             <FrameLayout
                 android:id="@+id/btnSource"

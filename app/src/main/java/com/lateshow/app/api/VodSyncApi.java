@@ -93,16 +93,22 @@ public final class VodSyncApi {
             Request req = chain.request();
             String token = PrefStore.get().apiToken();
             String path = req.url().encodedPath();
+            boolean own = sameHost(req.url().host(), hostOf(baseUrl()));
             // 只给「自己服务器」加头，且跳过免鉴权路径（C-07）。
             boolean authed = false;
-            if (!token.isEmpty()
-                    && !ApiPaths.isPublic(path)
-                    && sameHost(req.url().host(), hostOf(baseUrl()))) {
+            if (own && !token.isEmpty()
+                    && !ApiPaths.isPublic(path)) {
                 req = req.newBuilder()
                         .header("Authorization", "Bearer " + token)
                         .header("X-API-Key", token)
                         .build();
                 authed = true;
+            }
+            // 未成年模式（VodSync v1.15.0 minor_mode）：开启后本服务的每个 API 请求
+            // 都带 X-Minor-Mode: 1，服务端在全部内容读接口统一剔除 18+ 源站；
+            // 老后端会忽略未知请求头，无需能力门控。关闭 = 不带头，服务端零开销。
+            if (own && PrefStore.get().minorMode()) {
+                req = req.newBuilder().header("X-Minor-Mode", "1").build();
             }
             AppLog.d(DBG, "→ " + req.method() + " " + path
                     + " host=" + req.url().host()
@@ -216,9 +222,20 @@ public final class VodSyncApi {
      * 兜底用：当播放/图片地址确实由本服务代理转发时，理论上需要带凭据。
      * 审计 A-06 后不再把 Token 追加到 URL query（URL 会进日志、剪贴板、播放器缓存与 CDN 日志）。
      * 若后端代理播放需要鉴权，应改用短期签名 URL（见后端协同报告 B-09）。
+     *
+     * <p>未成年模式（v1.15.0）：指向本服务的播放/图片地址无法自定义请求头（播放器内核、
+     * <img> 等），按后端契约改加 {@code ?minor_mode=1} 查询参数（非敏感，仅模式开关）。
      */
     public String decorate(String url) {
-        return url;
+        try {
+            if (!PrefStore.get().minorMode()) return url;
+            HttpUrl u = HttpUrl.parse(url);
+            if (u == null || !sameHost(u.host(), hostOf(baseUrl()))) return url;
+            if (u.queryParameter("minor_mode") != null) return url;
+            return u.newBuilder().addQueryParameter("minor_mode", "1").build().toString();
+        } catch (Exception e) {
+            return url;
+        }
     }
 
     /** 鉴权状态探测（免鉴权接口）：判断服务端是否开启访问控制 */
