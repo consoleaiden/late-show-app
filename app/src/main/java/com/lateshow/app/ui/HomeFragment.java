@@ -496,8 +496,10 @@ public class HomeFragment extends Fragment {
         menuSeq++;
         menuPanel.animate().cancel();
         menuPanel.removeAllViews();
-        menuPanel.addView(content, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // 保留内容自带的精确 LayoutParams（wrapMenuScroll 已按行数给出高度）。
+        // 不能用 WRAP_CONTENT 覆盖挂载：那样 clampMenuHeight 会把「未定高」当成
+        // 「拉满可用高度」处理，弹层变成固定全高，内容少时下方一大片空白。
+        menuPanel.addView(content);
         menuOverlay.setVisibility(View.VISIBLE);
         menuOverlay.setAlpha(1f);
         if (menuBack != null) menuBack.setEnabled(true);
@@ -1307,8 +1309,12 @@ public class HomeFragment extends Fragment {
     }
 
     /**
-     * 用导航栏真实坐标再收敛一次高度（最终保险）：不管 insets、刘海、手势条怎么变，
-     * 弹层底边永远停在导航胶囊上方 10dp。
+     * 弹层高度收敛：自适应内容高度，但永远不超过导航胶囊上方 10dp 的可用上限（上限不增大）。
+     *
+     * <p>实现为「实测内容高度 与 上限 取小」：内容容器（NestedScrollView）的子 View 在
+     * UNSPECIFIED 高度下测量，拿到的是行内容真实高度，不受容器当前高度影响——
+     * 行数少时弹层收缩到内容高度，行数多时被上限截断进入滚动。
+     * 之前把 WRAP_CONTENT 直接改成上限值，是「固定全高 + 下方空白」的根因。
      */
     private void clampMenuHeight(View content) {
         if (content == null || menuPanel == null) return;
@@ -1320,9 +1326,24 @@ public class HomeFragment extends Fragment {
         menuPanel.getLocationOnScreen(pn);
         int avail = tb[1] - pn[1] - dp(10);
         if (avail <= dp(120)) return;
+
+        // 实测内容高度 = 内容容器子 View 的真实高度 + 容器自身上下 padding
+        int contentH;
+        if (content instanceof ViewGroup && ((ViewGroup) content).getChildCount() > 0) {
+            ViewGroup g = (ViewGroup) content;
+            contentH = g.getChildAt(0).getHeight() + g.getPaddingTop() + g.getPaddingBottom();
+        } else {
+            contentH = content.getHeight();
+        }
+        if (contentH <= 0) {
+            // 首帧布局尚未完成：下一帧再收敛一次（layout 后子 View 高度即可用）
+            menuPanel.postDelayed(() -> clampMenuHeight(content), 16);
+            return;
+        }
+        int target = Math.min(contentH, avail);
         ViewGroup.LayoutParams lp = content.getLayoutParams();
-        if (lp != null && (lp.height == ViewGroup.LayoutParams.WRAP_CONTENT || lp.height > avail)) {
-            lp.height = avail;
+        if (lp != null && lp.height != target) {
+            lp.height = target;
             content.setLayoutParams(lp);
         }
     }
