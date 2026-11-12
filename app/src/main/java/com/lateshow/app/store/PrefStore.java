@@ -575,6 +575,24 @@ public final class PrefStore {
         sp.edit().putLong("ad_filter_pull_at", at).apply();
     }
 
+    /** 参与规则内测：拉规则时改用 beta 通道（后端按 channel 分版本线） */
+    public boolean adFilterBeta() {
+        return sp.getBoolean("ad_filter_beta", false);
+    }
+
+    public void setAdFilterBeta(boolean on) {
+        sp.edit().putBoolean("ad_filter_beta", on).apply();
+    }
+
+    /** 删除区间缓存（JSON：url -> [s0,e0,...]，原时间轴 ms），用于续播定位与进度回写 */
+    public String adFilterSpans() {
+        return sp.getString("ad_filter_spans", "");
+    }
+
+    public void setAdFilterSpans(String json) {
+        sp.edit().putString("ad_filter_spans", json == null ? "" : json).apply();
+    }
+
     /**
      * 命中上报队列：每项一条 JSON 串，以 \u0001 连接存储（JSON 内不会出现该字符）。
      * 上报失败保留到下次重试，超过上限滚动丢弃最旧（服务端按 url+at 幂等去重）。

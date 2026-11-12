@@ -43,12 +43,23 @@ public final class HlsAdFilter {
         public final int removedRuns;
         public final long removedMs;
         public final long totalMs;
+        /**
+         * 被删除区间在**原始时间轴**上的位置，{@code [startMs0, endMs0, startMs1, ...]}。
+         *
+         * <p>用途：过滤后时间轴比原始时间轴短，续播定位与进度回写都要在两条轴之间换算
+         * （见 {@code AdFilter.mapStartMs / unmapPosition}）。空数组 = 没有可映射区间。
+         *
+         * <p>按 run 在列表中的累计时长推算而非取 PTS：广告与正片分属不同源，PTS 不连续
+         * 是常态，只有「播放列表自己定义的时长」才是播放器时间轴的依据。
+         */
+        public final long[] removedSpans;
 
-        Result(String playlist, int removedRuns, long removedMs, long totalMs) {
+        Result(String playlist, int removedRuns, long removedMs, long totalMs, long[] removedSpans) {
             this.playlist = playlist;
             this.removedRuns = removedRuns;
             this.removedMs = removedMs;
             this.totalMs = totalMs;
+            this.removedSpans = removedSpans == null ? new long[0] : removedSpans;
         }
     }
 
@@ -130,7 +141,7 @@ public final class HlsAdFilter {
         String activeKey = null, activeMap = null;
         String headerKey = null, headerMap = null;
         double pendDur = -1;
-        boolean sawStreamInf = false, sawByteRange = false, sawEndlist = false;
+        boolean sawByteRange = false, sawEndlist = false;
         boolean sawDiscSeqAfterSegs = false;
         boolean sawSegs = false;   // 是否已进入段落区（头部 KEY/MAP 只在这里之前有效）
         long mediaSeq = 0;
@@ -174,7 +185,11 @@ public final class HlsAdFilter {
             }
             if (ln.startsWith("#EXT-X-BYTERANGE")) { sawByteRange = true; continue; }
             if (ln.startsWith("#EXT-X-ENDLIST")) { sawEndlist = true; continue; }
-            if (ln.startsWith("#EXT-X-STREAM-INF")) { sawStreamInf = true; header.add(ln); continue; }
+            // master 播放列表：内容只是变体声明（子列表地址），既没有分片也没有 DISCONTINUITY，
+            // 过滤无从下手。必须在解析阶段就定性，否则会一路走到「裸 URI 没有前置 EXTINF」
+            // 那条结构异常分支，日志里看着像解析坏了，实际是完全正常的 master。
+            if (ln.startsWith("#EXT-X-STREAM-INF")) return reject("master-playlist");
+            if (ln.startsWith("#EXT-X-MEDIA:")) return reject("master-playlist");
             if (ln.startsWith("#EXT-X-MEDIA-SEQUENCE")) {
                 mediaSeq = parseSeq(ln);
                 header.add(ln);
@@ -211,8 +226,8 @@ public final class HlsAdFilter {
         if (cur != null && cur.segCount > 0) runs.add(cur);
 
         // ---------- 前置校验：任何不满足一律放行 ----------
-        if (sawStreamInf || sawByteRange || !sawEndlist) return reject("not-vod(master=" + sawStreamInf
-                + ",byterange=" + sawByteRange + ",no-endlist=" + !sawEndlist + ")");
+        if (sawByteRange || !sawEndlist) return reject("not-vod(byterange=" + sawByteRange
+                + ",no-endlist=" + !sawEndlist + ")");
         if (mediaSeq != 0 || sawDiscSeqAfterSegs) return reject("seq(media=" + mediaSeq
                 + ",discAfterSegs=" + sawDiscSeqAfterSegs + ")");
         if (uriCount == 0 || runs.size() < 2) return reject("no-runs(uri=" + uriCount
@@ -250,10 +265,21 @@ public final class HlsAdFilter {
         }
         if (removed.isEmpty()) return reject("no-ad-candidate");
 
+        // 累计每个 run 在原时间轴上的起点，顺带记录被删区间（供续播定位 / 进度回写换算）
         double totalDur = 0, keptDur = 0;
+        long cursorMs = 0;
+        long[] spanAcc = new long[removed.size() * 2];
+        int spanCount = 0;
         for (Run r : runs) {
+            long runMs = Math.round(r.dur * 1000);
             totalDur += r.dur;
-            if (!removed.contains(r)) keptDur += r.dur;
+            if (removed.contains(r)) {
+                spanAcc[spanCount++] = cursorMs;
+                spanAcc[spanCount++] = cursorMs + runMs;
+            } else {
+                keptDur += r.dur;
+            }
+            cursorMs += runMs;
         }
         if (keptDur < rules.safetyFloor * totalDur) {
             AppLog.d(TAG, "safety clamp hit: kept=" + Math.round(keptDur) + "s total="
@@ -287,9 +313,21 @@ public final class HlsAdFilter {
         out.append("#EXT-X-ENDLIST\n");
 
         AppLog.d(TAG, "filtered " + removedRuns + " ad run(s): "
-                + Math.round(totalDur - keptDur) + "s / " + Math.round(totalDur) + "s");
+                + Math.round(totalDur - keptDur) + "s / " + Math.round(totalDur) + "s"
+                + " spans=" + describeSpans(spanAcc, spanCount));
         return new Result(out.toString(), removedRuns,
-                Math.round((totalDur - keptDur) * 1000), Math.round(totalDur * 1000));
+                Math.round((totalDur - keptDur) * 1000), Math.round(totalDur * 1000),
+                spanCount == 0 ? new long[0] : java.util.Arrays.copyOf(spanAcc, spanCount));
+    }
+
+    /** 区间数组转 "a-b,c-d"（秒，保留一位小数），仅用于日志。 */
+    private static String describeSpans(long[] spans, int count) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i + 1 < count; i += 2) {
+            if (sb.length() > 1) sb.append(',');
+            sb.append(spans[i] / 1000).append('-').append(spans[i + 1] / 1000);
+        }
+        return sb.append(']').toString();
     }
 
     private static Run newRun(String key, String map) {

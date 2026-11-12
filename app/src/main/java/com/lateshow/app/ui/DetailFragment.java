@@ -1880,6 +1880,18 @@ public class DetailFragment extends Fragment {
             int skip = PrefStore.get().skipIntroSec();
             if (skip > 0) startMs = skip * 1000L;
         }
+        // 到此为止 startMs 都是**原始时间轴**（历史进度 / 跳过片头秒数）。
+        // 去广告会把片头片尾整段删掉，播放器时间轴随之变短：起播前换算一次，
+        // 之后 curStartMs / 线路重播 / 内嵌↔全屏传递都统一用过滤后轴，不再二次映射。
+        long rawStartMs = startMs;
+        // 用 guessStreamUrl 而不是剧集原始地址：有的源站给的是播放页，实际流地址是它的
+        // index.m3u8，过滤缓存的 key 跟着真实流走。
+        String mapKey = guessStreamUrl(e.url);
+        startMs = com.lateshow.app.util.AdFilter.mapStartMs(mapKey, rawStartMs);
+        if (startMs != rawStartMs) {
+            com.lateshow.app.util.PlayHeaders.diag("resume map raw=" + rawStartMs
+                    + " -> " + startMs);
+        }
 
         // 播放即产生历史 → 同时把完整播放数据落盘，保证收藏/历史页离线可播
         if (detail != null) {
@@ -1888,8 +1900,12 @@ public class DetailFragment extends Fragment {
                     detail.typeName, detail.vodContent, epCountOf(detail), true);
         }
 
-        // 先写一条历史占位（播放器内会持续更新进度）
-        saveProgress(startMs / 1000, h != null ? h.totalSec : 0);
+        // 先写一条历史占位（播放器内会持续更新进度）；总时长同样先换到过滤后轴，
+        // saveProgress 里再统一换回去，避免「原始轴进 → 被二次反向映射」放大数值。
+        curPlayUrl = mapKey;   // saveProgress 按它换算，此时还没走 playUrl
+        long totalForSave = h != null && h.totalSec > 0
+                ? com.lateshow.app.util.AdFilter.mapStartMs(mapKey, h.totalSec * 1000L) / 1000 : 0;
+        saveProgress(startMs / 1000, totalForSave);
         lineFallbackTries = 0;   // 用户点播（非自动兜底）：线路兜底计数复位
         startInline(e.url, startMs);
     }
@@ -2661,6 +2677,16 @@ public class DetailFragment extends Fragment {
     }
 
     private void saveProgress(long playedSec, long totalSec) {
+        // 入参是「过滤后时间轴」上的位置（播放器 reported 的就是它）；历史语义是
+        // 「这部剧看到哪」，必须换回原始时间轴，否则开一次去广告就把记录往后推一个广告时长。
+        if (curPlayUrl != null) {
+            playedSec = com.lateshow.app.util.AdFilter
+                    .unmapPosition(curPlayUrl, playedSec * 1000L) / 1000;
+            if (totalSec > 0) {
+                totalSec = com.lateshow.app.util.AdFilter
+                        .unmapPosition(curPlayUrl, totalSec * 1000L) / 1000;
+            }
+        }
         List<Models.Episode> eps = currentEpisodes();
         Models.Episode e = eps.isEmpty() ? null : eps.get(Math.min(curEp, eps.size() - 1));
         PrefStore.HistItem item = new PrefStore.HistItem();

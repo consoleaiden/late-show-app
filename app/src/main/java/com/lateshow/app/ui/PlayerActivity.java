@@ -172,6 +172,8 @@ public class PlayerActivity extends AppCompatActivity {
         // 智能去广告：按 TTL 拉取后端规则包 + 冲刷命中上报（老后端无 adfilter 能力时静默跳过）
         com.lateshow.app.util.AdFilter.ensureFresh();
         streamUrl = com.lateshow.app.api.VodSyncApi.get().decorate(url);
+        // startMs 来自详情页内嵌播放器的当前位置，已经在「过滤后时间轴」上：
+        // 时间轴映射只在详情页入口做一次，这里再做会重复前移（见 AdFilter.mapStartMs）。
         com.lateshow.app.util.PlayHeaders.diag("fullscreen play " + streamUrl + " startMs=" + startMs);
         MediaItem mi = MediaItem.fromUri(streamUrl);
         player.setMediaItem(mi, Math.max(0, startMs));
@@ -318,6 +320,12 @@ public class PlayerActivity extends AppCompatActivity {
 
     private void saveProgress(long playedSec, long totalSec) {
         lastSavedSec = playedSec;
+        // 进度回写必须换回原始时间轴：历史是「这部剧看到哪」的语义，与本次是否开了
+        // 去广告无关。不换算的话，开过滤看一次就会把记录往后推一个广告时长。
+        playedSec = com.lateshow.app.util.AdFilter.unmapPosition(streamUrl, playedSec * 1000) / 1000;
+        if (totalSec > 0) {
+            totalSec = com.lateshow.app.util.AdFilter.unmapPosition(streamUrl, totalSec * 1000) / 1000;
+        }
         PrefStore.HistItem h = new PrefStore.HistItem();
         h.slug = slug;
         h.sourceName = sourceName;

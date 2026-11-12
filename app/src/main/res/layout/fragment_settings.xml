@@ -668,6 +668,61 @@
                         android:layout_marginLeft="10dp"
                         android:contentDescription="智能去广告" />
                 </LinearLayout>
+
+                <!-- 规则包状态：来源（内置/服务端）+ 版本 + 待上报条数；点击强制刷新 -->
+                <TextView
+                    android:id="@+id/tvAdFilterInfo"
+                    style="@style/MetaLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingMultiplier="1.4"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:textAllCaps="false"
+                    android:text="规则：内置规则"
+                    android:visibility="gone" />
+
+                <!-- 内测通道：拉规则时带 channel=beta（后端按渠道分版本线） -->
+                <LinearLayout
+                    android:id="@+id/rowAdFilterBeta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="参与规则内测"
+                            android:textSize="12.5sp"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            style="@style/MetaLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:textAllCaps="false"
+                            android:text="优先获取内测规则包（可能更激进，误判时可随时关闭；仅影响规则包来源，不影响播放）"
+                            android:lineSpacingMultiplier="1.5" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/swAdFilterBeta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="10dp"
+                        android:contentDescription="参与规则内测" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 

@@ -145,7 +145,8 @@ public final class AdFilterDataSource implements DataSource {
         PlayHeaders.diag("adfilter url=" + dataSpec.uri
                 + " upstreamLen=" + len + " bytes=" + in.length
                 + " swapped=" + (out != null)
-                + (out != null ? "" : " skip=" + AdFilter.lastSkipReason()));
+                + (out != null ? " hit=" + AdFilter.lastSummary()
+                               : " skip=" + AdFilter.lastSkipReason()));
         body = out != null ? out : in;   // out==null（未命中/失败）→ 原样放行
         pos = 0;
         buffered = true;

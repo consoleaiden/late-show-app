@@ -227,6 +227,40 @@ public class SettingsFragment extends Fragment {
             });
         }
 
+        // 去广告规则包状态：只在后端声明 adfilter 能力时展示——老后端根本没这两个接口，
+        // 显示「规则：内置」会让人误以为服务端出了故障。
+        final boolean backendAdFilter =
+                com.lateshow.app.api.ServerCaps.supports(com.lateshow.app.util.AdFilter.CAP);
+        android.widget.TextView tvAdFilterInfo = v.findViewById(R.id.tvAdFilterInfo);
+        android.view.View rowBeta = v.findViewById(R.id.rowAdFilterBeta);
+        android.widget.Switch swAdFilterBeta = v.findViewById(R.id.swAdFilterBeta);
+        if (tvAdFilterInfo != null) {
+            tvAdFilterInfo.setVisibility(backendAdFilter ? android.view.View.VISIBLE
+                    : android.view.View.GONE);
+            tvAdFilterInfo.setOnClickListener(x -> {
+                com.lateshow.app.util.AdFilter.refreshNow();
+                toast("正在刷新去广告规则…");
+                // 拉取是异步的：稍后再读一次状态，避免点完仍然显示旧版本
+                handler.postDelayed(this::refreshAdFilterInfo, 1500);
+            });
+        }
+        if (rowBeta != null) {
+            rowBeta.setVisibility(backendAdFilter ? android.view.View.VISIBLE
+                    : android.view.View.GONE);
+        }
+        if (swAdFilterBeta != null) {
+            swAdFilterBeta.setChecked(PrefStore.get().adFilterBeta());
+            swAdFilterBeta.setOnCheckedChangeListener((bv, on) -> {
+                if (PrefStore.get().adFilterBeta() == on) return;
+                PrefStore.get().setAdFilterBeta(on);
+                com.lateshow.app.util.AdFilter.refreshNow();   // 换渠道立刻重拉，不等 TTL
+                toast(on ? "已参与规则内测：改用 beta 通道拉取规则"
+                         : "已退出规则内测：改用正式通道");
+                handler.postDelayed(this::refreshAdFilterInfo, 1500);
+            });
+        }
+        refreshAdFilterInfo();
+
         // 离线与缓存：展示占用并提供清理入口（离线播放数据不随清缓存删除）
         tvCacheInfo = v.findViewById(R.id.tvCacheInfo);
         v.findViewById(R.id.btnClearCache).setOnClickListener(x -> {
@@ -720,6 +754,14 @@ public class SettingsFragment extends Fragment {
         return String.format(java.util.Locale.US, "%.1f MB", b / 1024f / 1024f);
     }
 
+    /** 去广告规则状态行：规则来源 + 版本 + 待上报条数（后端无 adfilter 能力时整行隐藏） */
+    private void refreshAdFilterInfo() {
+        if (getView() == null) return;
+        android.widget.TextView tv = getView().findViewById(R.id.tvAdFilterInfo);
+        if (tv == null || tv.getVisibility() != android.view.View.VISIBLE) return;
+        tv.setText(com.lateshow.app.util.AdFilter.statusLine() + " · 点击立即刷新");
+    }
+
     /** 检查 GitHub Release 是否有新版本，有则提示更新 */
     private void doCheckUpdate() {
         if (!isAdded() || getContext() == null) return;
@@ -766,6 +808,7 @@ public class SettingsFragment extends Fragment {
     public void onResume() {
         super.onResume();
         renderModeSwitch();
+        refreshAdFilterInfo();   // 规则版本/待上报条数可能在别处变过（起播拉取、上报成功）
         // 每次进入设置页（首次 + 切回 tab）：自动执行一次 3 秒超时的播放源连接测试
         if (!com.lateshow.app.api.Catalogs.isStatic()) probeSource();
     }
