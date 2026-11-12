@@ -2178,8 +2178,11 @@ public class DetailFragment extends Fragment {
                     // 真机实测（2026-11-10）：源站 CDN 对 ExoPlayer 默认 UA 返回 403，
                     // 浏览器 UA 可正常访问 —— 播放请求统一带浏览器 UA
                     .setUserAgent(com.lateshow.app.util.PlayHeaders.UA);
+            // 播放器构建：DataSource 经 AdFilterDataSource 包装，m3u8 响应体在交还播放器前
+            // 原位重写（剔除广告 run，内置规则本地执行）；分片请求不受影响，仍直连 CDN
             player = new ExoPlayer.Builder(requireContext())
-                    .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
+                    .setMediaSourceFactory(new DefaultMediaSourceFactory(
+                            new com.lateshow.app.util.AdFilterDataSource.Factory(httpFactory)))
                     .build();
             playerView.setPlayer(player);
             // 绑定时若画面容器还没量出尺寸（0×0），等首次布局完成再重新绑定画面纹理
@@ -2257,6 +2260,8 @@ public class DetailFragment extends Fragment {
             attachSeekGesture();
             saveHandler.postDelayed(saveTick, 5000);
         }
+        // 智能去广告：按 TTL 拉取后端规则包 + 冲刷命中上报（老后端无 adfilter 能力时静默跳过）
+        com.lateshow.app.util.AdFilter.ensureFresh();
         playUrl(url, startMs);
         // 排障（真机 2026-11-10「有声音没画面」）：记录容器可见后的实际尺寸，
         // 若下一帧仍是 0x0 说明重排被跳过，配合 onRenderedFirstFrame 的自愈兜底

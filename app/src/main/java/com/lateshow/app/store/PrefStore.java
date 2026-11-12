@@ -541,6 +541,66 @@ public final class PrefStore {
         sp.edit().putBoolean("minor_mode", on).apply();
     }
 
+    // ---------- 播放偏好：智能去广告（App 端 HLS 播放列表过滤，默认开启） ----------
+
+    public boolean adFilter() {
+        return sp.getBoolean("ad_filter", true);
+    }
+
+    public void setAdFilter(boolean on) {
+        sp.edit().putBoolean("ad_filter", on).apply();
+    }
+
+    /** 后端规则包原文（JsonObject.toString）；"" = 无包，用内置规则 */
+    public String adFilterPack() {
+        return sp.getString("ad_filter_pack", "");
+    }
+
+    public int adFilterPackVersion() {
+        return sp.getInt("ad_filter_pack_ver", 0);
+    }
+
+    public void setAdFilterPack(String json, int version) {
+        sp.edit().putString("ad_filter_pack", json == null ? "" : json)
+                .putInt("ad_filter_pack_ver", version)
+                .apply();
+    }
+
+    /** 上次规则拉取时间（ms）；失败也记录，防抖避免每次播放都打接口 */
+    public long adFilterPullAt() {
+        return sp.getLong("ad_filter_pull_at", 0L);
+    }
+
+    public void setAdFilterPullAt(long at) {
+        sp.edit().putLong("ad_filter_pull_at", at).apply();
+    }
+
+    /**
+     * 命中上报队列：每项一条 JSON 串，以 \u0001 连接存储（JSON 内不会出现该字符）。
+     * 上报失败保留到下次重试，超过上限滚动丢弃最旧（服务端按 url+at 幂等去重）。
+     */
+    public List<String> adFilterReports() {
+        String raw = sp.getString("ad_filter_reports", "");
+        List<String> out = new ArrayList<>();
+        if (raw != null && !raw.isEmpty()) {
+            for (String s : raw.split("\u0001")) {
+                if (!s.isEmpty()) out.add(s);
+            }
+        }
+        return out;
+    }
+
+    public void setAdFilterReports(List<String> items) {
+        StringBuilder sb = new StringBuilder();
+        if (items != null) {
+            for (String s : items) {
+                if (sb.length() > 0) sb.append('\u0001');
+                sb.append(s);
+            }
+        }
+        sp.edit().putString("ad_filter_reports", sb.toString()).apply();
+    }
+
     // ---------- 源站 18+ 标记表（未成年模式下过滤本地播放历史 / 收藏） ----------
     //
     // 为什么不给每条历史/收藏加「是否 18+」字段：源站才是这件事的唯一权威，条目本来就只用

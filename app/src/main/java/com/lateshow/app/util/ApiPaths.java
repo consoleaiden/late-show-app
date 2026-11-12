@@ -54,6 +54,10 @@ public final class ApiPaths {
     public static final String TAG_STATUS = V1 + "/tag/status";
     public static final String MAINTENANCE_TAG_INDEX = V1 + "/maintenance/tag-index";
 
+    /** 智能去广告：规则包拉取 / 命中上报（后端 v1.16.0+，契约见 docs/ADFILTER_BACKEND_SPEC.md） */
+    public static final String ADFILTER_RULES = V1 + "/adfilter/rules";
+    public static final String ADFILTER_REPORT = V1 + "/adfilter/report";
+
     public static String video(String slug, long vodId) {
         return VIDEOS + "/" + slug + "/" + vodId;
     }

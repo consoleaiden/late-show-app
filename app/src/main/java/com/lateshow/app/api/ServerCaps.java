@@ -24,11 +24,13 @@ public final class ServerCaps {
 
     public static final String CAP_TAG_SEARCH = "tag_search";
     public static final String CAP_BACKFILL_PLAY_FROM = "backfill_play_from";
+    public static final String CAP_ADFILTER = "adfilter";
 
     private static final java.util.Map<String, String> MIN_VERSION_FOR_CAP = new java.util.HashMap<>();
     static {
         MIN_VERSION_FOR_CAP.put(CAP_TAG_SEARCH, "1.14.0");
         MIN_VERSION_FOR_CAP.put(CAP_BACKFILL_PLAY_FROM, "1.11.0");
+        MIN_VERSION_FOR_CAP.put(CAP_ADFILTER, "1.16.0");
     }
 
     private static volatile String sVersion = "";

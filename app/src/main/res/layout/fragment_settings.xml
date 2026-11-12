@@ -629,6 +629,45 @@
                         android:layout_marginLeft="10dp"
                         android:contentDescription="未成年模式" />
                 </LinearLayout>
+
+                <!-- 播放偏好：智能去广告（App 端 HLS 播放列表过滤，默认开启） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="智能去广告"
+                            android:textSize="12.5sp"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            style="@style/MetaLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:textAllCaps="false"
+                            android:text="播放时自动识别并跳过 m3u8 片源中的片头/中插广告（本地执行；识别异常时自动放行原片，不影响播放）"
+                            android:lineSpacingMultiplier="1.5" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/swAdFilter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="10dp"
+                        android:contentDescription="智能去广告" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 

@@ -215,6 +215,18 @@ public class SettingsFragment extends Fragment {
             });
         }
 
+        // 播放偏好：智能去广告（App 端 HLS 播放列表过滤，默认开启；后端规则包可选增强）
+        android.widget.Switch swAdFilter = v.findViewById(R.id.swAdFilter);
+        if (swAdFilter != null) {
+            swAdFilter.setChecked(PrefStore.get().adFilter());
+            swAdFilter.setOnCheckedChangeListener((bv, on) -> {
+                if (PrefStore.get().adFilter() == on) return;   // 程序化回填，不重复处理
+                PrefStore.get().setAdFilter(on);
+                toast(on ? "智能去广告已开启"
+                         : "智能去广告已关闭：将播放原始片源");
+            });
+        }
+
         // 离线与缓存：展示占用并提供清理入口（离线播放数据不随清缓存删除）
         tvCacheInfo = v.findViewById(R.id.tvCacheInfo);
         v.findViewById(R.id.btnClearCache).setOnClickListener(x -> {

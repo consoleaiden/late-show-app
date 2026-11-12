@@ -109,8 +109,11 @@ public class PlayerActivity extends AppCompatActivity {
         httpFactory.setDefaultRequestProperties(
                 com.lateshow.app.util.PlayHeaders.props(url, false));
 
+        // 播放器构建：DataSource 经 AdFilterDataSource 包装，m3u8 响应体在交还播放器前
+        // 原位重写（剔除广告 run，内置规则本地执行）；分片请求不受影响，仍直连 CDN
         player = new ExoPlayer.Builder(this)
-                .setMediaSourceFactory(new DefaultMediaSourceFactory(httpFactory))
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(
+                        new com.lateshow.app.util.AdFilterDataSource.Factory(httpFactory)))
                 .build();
         pv.setPlayer(player);
         // 控制栏/半透明遮罩 2 秒后自动隐藏（media3 默认 5 秒）
@@ -166,6 +169,8 @@ public class PlayerActivity extends AppCompatActivity {
             }
         });
 
+        // 智能去广告：按 TTL 拉取后端规则包 + 冲刷命中上报（老后端无 adfilter 能力时静默跳过）
+        com.lateshow.app.util.AdFilter.ensureFresh();
         streamUrl = com.lateshow.app.api.VodSyncApi.get().decorate(url);
         com.lateshow.app.util.PlayHeaders.diag("fullscreen play " + streamUrl + " startMs=" + startMs);
         MediaItem mi = MediaItem.fromUri(streamUrl);
