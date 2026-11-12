@@ -101,13 +101,23 @@ public final class HlsAdFilter {
 
     private HlsAdFilter() { }
 
+    /** 最近一次 fail-open 拒绝的原因（诊断用，release 由上层 PlayHeaders.diag 输出）；null = 没拒绝过 */
+    private static volatile String rejectReason;
+
+    public static String lastRejectReason() { return rejectReason; }
+
+    private static Result reject(String reason) {
+        rejectReason = reason;
+        return null;
+    }
+
     /** 入口：返回过滤结果；null = 原样放行。永不抛异常。 */
     public static Result filter(String baseUrl, String text, Rules rules) {
         try {
             return doFilter(baseUrl, text, rules);
         } catch (Exception e) {
             AppLog.w(TAG, "parse fail -> passthrough: " + e);
-            return null;
+            return reject("parse-exception: " + e);
         }
     }
 
@@ -133,7 +143,7 @@ public final class HlsAdFilter {
 
             if (isUri) {
                 if (cur == null) {
-                    if (pendDur < 0) return null;   // 没有前置 EXTINF 的裸 URI：结构异常
+                    if (pendDur < 0) return reject("bare-uri-without-extinf");   // 没有前置 EXTINF 的裸 URI：结构异常
                     cur = newRun(activeKey, activeMap);
                 }
                 sawSegs = true;
@@ -148,7 +158,7 @@ public final class HlsAdFilter {
 
             if (ln.startsWith("#EXTINF:")) {
                 double d = parseDur(ln);
-                if (d < 0) return null;
+                if (d < 0) return reject("bad-extinf: " + ln);
                 if (cur == null) cur = newRun(activeKey, activeMap);
                 sawSegs = true;
                 cur.lines.add(ln);
@@ -171,7 +181,7 @@ public final class HlsAdFilter {
                 continue;
             }
             if (ln.startsWith("#EXT-X-KEY")) {
-                if (cur != null && cur.segCount > 0) return null;   // run 中途换 KEY：复杂状态
+                if (cur != null && cur.segCount > 0) return reject("key-mid-run");   // run 中途换 KEY：复杂状态
                 activeKey = ln;
                 if (cur != null) cur.keyLine = ln;   // run 前导期声明：直接成为本 run 生效行
                 // 只有播放列表头部（首个 EXTINF 之前）的 KEY 行才留在 header 并参与重建去重；
@@ -180,7 +190,7 @@ public final class HlsAdFilter {
                 continue;
             }
             if (ln.startsWith("#EXT-X-MAP")) {
-                if (cur != null && cur.segCount > 0) return null;   // run 中途换 MAP：复杂状态
+                if (cur != null && cur.segCount > 0) return reject("map-mid-run");   // run 中途换 MAP：复杂状态
                 activeMap = ln;
                 if (cur != null) cur.mapLine = ln;
                 if (cur == null && !sawSegs) headerMap = ln;
@@ -201,9 +211,12 @@ public final class HlsAdFilter {
         if (cur != null && cur.segCount > 0) runs.add(cur);
 
         // ---------- 前置校验：任何不满足一律放行 ----------
-        if (sawStreamInf || sawByteRange || !sawEndlist) return null;
-        if (mediaSeq != 0 || sawDiscSeqAfterSegs) return null;
-        if (uriCount == 0 || runs.size() < 2) return null;
+        if (sawStreamInf || sawByteRange || !sawEndlist) return reject("not-vod(master=" + sawStreamInf
+                + ",byterange=" + sawByteRange + ",no-endlist=" + !sawEndlist + ")");
+        if (mediaSeq != 0 || sawDiscSeqAfterSegs) return reject("seq(media=" + mediaSeq
+                + ",discAfterSegs=" + sawDiscSeqAfterSegs + ")");
+        if (uriCount == 0 || runs.size() < 2) return reject("no-runs(uri=" + uriCount
+                + ",runs=" + runs.size() + ")");
 
         for (Run r : runs) r.sig = signature(baseUrl, r);
 
@@ -214,7 +227,7 @@ public final class HlsAdFilter {
             if (g == null) { g = new ArrayList<>(); groups.put(r.sig, g); }
             g.add(r);
         }
-        if (groups.size() < 2) return null;   // 全部同源，没有可删结构
+        if (groups.size() < 2) return reject("single-group");   // 全部同源，没有可删结构
 
         List<Run> longest = null;
         double longestDur = 0;
@@ -223,7 +236,7 @@ public final class HlsAdFilter {
             for (Run r : g) d += r.dur;
             if (d > longestDur) { longestDur = d; longest = g; }
         }
-        if (longest == null || longestDur <= 0) return null;
+        if (longest == null || longestDur <= 0) return reject("no-longest");
 
         Set<Run> removed = new HashSet<>();
         for (Map.Entry<String, List<Run>> e : groups.entrySet()) {
@@ -235,7 +248,7 @@ public final class HlsAdFilter {
             if (!ad && d <= rules.absoluteMaxSec && rules.patternHit(g.get(0).firstUri)) ad = true;
             if (ad) removed.addAll(g);
         }
-        if (removed.isEmpty()) return null;
+        if (removed.isEmpty()) return reject("no-ad-candidate");
 
         double totalDur = 0, keptDur = 0;
         for (Run r : runs) {
@@ -245,7 +258,7 @@ public final class HlsAdFilter {
         if (keptDur < rules.safetyFloor * totalDur) {
             AppLog.d(TAG, "safety clamp hit: kept=" + Math.round(keptDur) + "s total="
                     + Math.round(totalDur) + "s -> passthrough");
-            return null;
+            return reject("safety-clamp(kept=" + Math.round(keptDur) + ",total=" + Math.round(totalDur) + ")");
         }
 
         // ---------- 按 run 重建 ----------
@@ -266,7 +279,7 @@ public final class HlsAdFilter {
                     lastMap = r.mapLine;
                 }
             } else if (lastMap != null) {
-                return null;   // MAP 无法安全复位
+                return reject("map-reset");   // MAP 无法安全复位
             }
             for (String l : r.lines) out.append(l).append('\n');
             prevSig = r.sig;

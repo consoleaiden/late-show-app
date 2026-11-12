@@ -212,7 +212,12 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public void onPlayerError(androidx.media3.common.PlaybackException error) {
                 com.lateshow.app.util.PlayHeaders.diag("error " + error.getErrorCodeName()
+                        + " msg=" + error.getMessage()
                         + " stream=" + streamUrl);
+                for (Throwable c = error.getCause(); c != null; c = c.getCause()) {
+                    com.lateshow.app.util.PlayHeaders.diag("  cause " + c.getClass().getSimpleName()
+                            + ": " + c.getMessage());
+                }
             }
 
             @Override

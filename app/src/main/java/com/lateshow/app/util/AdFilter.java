@@ -40,16 +40,35 @@ public final class AdFilter {
 
     // ==================== 过滤入口（AdFilterDataSource 调用） ====================
 
+    /** 最近一次未执行过滤的原因（诊断用）；null = 本次实际执行了过滤 */
+    private static volatile String skipReason;
+
+    public static String lastSkipReason() { return skipReason; }
+
     /**
      * @return 过滤后的播放列表字节；null = 原样放行（开关关/站点 off/未命中/解析失败/安全钳）
      */
     public static byte[] filter(Uri uri, byte[] body) {
-        if (uri == null || body == null || body.length == 0 || !PrefStore.get().adFilter()) return null;
+        if (uri == null || body == null || body.length == 0) {
+            skipReason = "empty-input";
+            return null;
+        }
+        if (!PrefStore.get().adFilter()) {
+            skipReason = "switch-off";
+            return null;
+        }
         HlsAdFilter.Rules rules = rules();
-        if (rules.offFor(uri.getHost())) return null;
+        if (rules.offFor(uri.getHost())) {
+            skipReason = "site-off";
+            return null;
+        }
         HlsAdFilter.Result res = HlsAdFilter.filter(uri.toString(),
                 new String(body, StandardCharsets.UTF_8), rules);
-        if (res == null) return null;
+        if (res == null) {
+            skipReason = "filter:" + HlsAdFilter.lastRejectReason();
+            return null;
+        }
+        skipReason = null;
         record(uri.toString(), res);
         return res.playlist.getBytes(StandardCharsets.UTF_8);
     }

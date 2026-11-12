@@ -75,11 +75,19 @@ public final class AdFilterDataSource implements DataSource {
                 bos.write(buf, 0, n);
                 if (bos.size() > 8 * 1024 * 1024) break;   // 防御：超大响应放弃过滤
             }
+        } catch (IOException e) {
+            com.lateshow.app.util.PlayHeaders.diag("adfilter buffer-read fail url="
+                    + dataSpec.uri + " got=" + bos.size() + " err=" + e);
+            throw e;
         } finally {
             up.close();   // 上游已读完，提前关闭；close() 里不再重复委托
         }
         byte[] in = bos.toByteArray();
         byte[] out = AdFilter.filter(dataSpec.uri, in);
+        com.lateshow.app.util.PlayHeaders.diag("adfilter url=" + dataSpec.uri
+                + " upstreamLen=" + len + " bytes=" + in.length
+                + " swapped=" + (out != null)
+                + (out != null ? "" : " skip=" + AdFilter.lastSkipReason()));
         body = out != null ? out : in;   // out==null（未命中/失败）→ 原样放行
         pos = 0;
         swapped = true;

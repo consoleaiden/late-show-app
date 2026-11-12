@@ -2233,7 +2233,13 @@ public class DetailFragment extends Fragment {
                 }
                 @Override public void onPlayerError(PlaybackException error) {
                     com.lateshow.app.util.PlayHeaders.diag("error " + error.getErrorCodeName()
+                            + " msg=" + error.getMessage()
                             + " raw=" + curRawUrl + " stream=" + curPlayUrl);
+                    // 插桩：完整 cause 链（HttpDataSourceException 的 message 里带具体 IO 细节）
+                    for (Throwable c = error.getCause(); c != null; c = c.getCause()) {
+                        com.lateshow.app.util.PlayHeaders.diag("  cause " + c.getClass().getSimpleName()
+                                + ": " + c.getMessage());
+                    }
                     // 有些源站的 "播放地址" 其实是一个网页播放页，ExoPlayer 拿到 HTML 必然失败：
                     // 先尝试从页面里把真正的 m3u8 抠出来重试一次，还不行才提示（并建议换线路）
                     if (!triedHtmlResolve && isPlayPage(curRawUrl)) {
