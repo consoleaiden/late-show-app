@@ -497,4 +497,13 @@ public class MainActivity extends AppCompatActivity {
     public void notifyDataSourceChanged() {
         if (homeFragment != null) homeFragment.onDataSourceChanged();
     }
+
+    /**
+     * 设置页切换「未成年模式」后调用：首页按新口径重拉源站与首屏，
+     * 收藏页重渲染（本地收藏/播放历史要按 18+ 源站过滤，不重刷会留着上一模式的卡片）。
+     */
+    public void notifyMinorModeChanged() {
+        if (homeFragment != null) homeFragment.onMinorModeChanged();
+        if (favFragment != null) favFragment.refresh();
+    }
 }

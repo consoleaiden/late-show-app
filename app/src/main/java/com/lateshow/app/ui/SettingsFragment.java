@@ -195,16 +195,23 @@ public class SettingsFragment extends Fragment {
         swStreamTools.setOnCheckedChangeListener((bv, on) -> PrefStore.get().setShowStreamTools(on));
 
         // 播放偏好：未成年模式（VodSync v1.15.0 minor_mode）。开启后所有 API 请求带
-        // X-Minor-Mode: 1，服务端在内容读接口统一剔除 18+ 源站；缓存命名空间含本开关，
-        // 这里切换后立即失效旧缓存，回首页即按新口径拉取
+        // X-Minor-Mode: 1，服务端在内容读接口统一剔除 18+ 源站；缓存命名空间含本开关。
+        // 开↔关必须走同一条失效链路：清接口缓存 + 清源站名映射 + 置脏 + 立刻通知首页重载，
+        // 只靠「回首页时缓存刚好过期」会出现「关→开 不刷新」的方向性差异。
         android.widget.Switch swMinorMode = v.findViewById(R.id.swMinorMode);
         if (swMinorMode != null) {
             swMinorMode.setChecked(PrefStore.get().minorMode());
             swMinorMode.setOnCheckedChangeListener((bv, on) -> {
+                if (PrefStore.get().minorMode() == on) return;   // 程序化回填，不重复处理
                 PrefStore.get().setMinorMode(on);
                 com.lateshow.app.util.ApiCache.clear();
+                com.lateshow.app.util.SourceCache.clear();
+                com.lateshow.app.api.Catalogs.markDirty();
+                if (getActivity() instanceof com.lateshow.app.MainActivity) {
+                    ((com.lateshow.app.MainActivity) getActivity()).notifyMinorModeChanged();
+                }
                 toast(on ? "未成年模式已开启：仅展示非 18+ 源站内容"
-                         : "未成年模式已关闭");
+                         : "未成年模式已关闭：源站与内容已恢复完整");
             });
         }
 

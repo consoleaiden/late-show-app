@@ -53,6 +53,8 @@ public class HomeFragment extends Fragment {
     private VideoAdapter videoAdapter;
 
     private final List<Models.SyncSource> sources = new ArrayList<>();
+    /** 下一次 refreshSources 必须穿透缓存（未成年模式切换等口径变化后使用，只用一次） */
+    private boolean forceSources = false;
     private String curSlug = "";      // 空 = 全部源站
     private String curName = "全部源站";
     private String curCategory = null; // null = 全部
@@ -907,8 +909,14 @@ public class HomeFragment extends Fragment {
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
-        if (hidden) dismissSourceMenu();
-        else resetChrome();   // 切回首页：无论离开时滚动到什么状态，顶栏/底导航都回位
+        if (hidden) {
+            dismissSourceMenu();
+        } else {
+            resetChrome();   // 切回首页：无论离开时滚动到什么状态，顶栏/底导航都回位
+            // Tab 切换走 show()/hide()，不会触发 onResume：设置页里改过数据源 / 未成年模式时，
+            // 脏标记必须在这里消费掉，否则首页会一直显示切换前口径的源站与列表
+            if (com.lateshow.app.api.Catalogs.consumeDirty()) onDataSourceChanged();
+        }
     }
 
     /** 顶栏/底导航强制回位（切回首页或详情页收起露出首页时由宿主触发） */
@@ -1084,6 +1092,26 @@ public class HomeFragment extends Fragment {
         pingHealth(cyc); // 三者同一轮次：源站/首屏/探测谁先成功都点亮圆环
     }
 
+    /**
+     * 未成年模式切换（设置页触发）：开↔关走同一条路径，回首页必然重拉源站与列表。
+     *
+     * <p>旧实现只清了接口缓存，但 Tab 切换走 show()/hide() 不触发 onResume，首页的
+     * {@code sources} 内存列表与海报墙谁都不重载——于是「关→开」看起来毫无变化，
+     * 而「开→关」偶尔因为缓存到期碰巧发了一次请求，两条路径表现不一致。
+     * 现在统一由这里把状态改动作废到底：清源站名映射 → 必要时重置选中源站 → 强制走网络。
+     */
+    public void onMinorModeChanged() {
+        com.lateshow.app.util.SourceCache.clear();
+        if (PrefStore.get().minorMode()
+                && PrefStore.get().isAdultSource(PrefStore.get().currentSourceSlug())) {
+            // 当前选中的源站刚被判定为 18+：退回「全部源站」，
+            // 否则后续列表请求会带着一个已被服务端剔除的 source，稳定拿到空结果
+            PrefStore.get().setCurrentSource("", "全部源站");
+        }
+        forceSources = true;      // 下一轮 refreshSources 必须穿透缓存
+        onDataSourceChanged();    // 内部已消费脏标记，并重置筛选 + 重拉源站与首屏
+    }
+
     /** 源站列表缓存 key：带模式前缀，两种模式不互相命中 */
     private String ckSources() {
         return CK_SOURCES + "|" + com.lateshow.app.api.Catalogs.cacheTag();
@@ -1093,10 +1121,15 @@ public class HomeFragment extends Fragment {
     private void refreshSources() {
         final String ck = ckSources();
         final int cyc = ringCycle; // 结果归属发起时的轮次，过期即丢弃
-        Models.SyncSourcesResp cached = ApiCache.get(ck, Models.SyncSourcesResp.class, TTL_LIST);
-        if (cached != null && cached.list != null && !cached.list.isEmpty()) {
-            applySources(cached, true);
-            return; // 缓存新鲜，不再发请求
+        // 口径刚变过（未成年模式开关）：缓存一律不可信，直接走网络
+        final boolean bypass = forceSources;
+        forceSources = false;
+        if (!bypass) {
+            Models.SyncSourcesResp cached = ApiCache.get(ck, Models.SyncSourcesResp.class, TTL_LIST);
+            if (cached != null && cached.list != null && !cached.list.isEmpty()) {
+                applySources(cached, true);
+                return; // 缓存新鲜，不再发请求
+            }
         }
         com.lateshow.app.api.Catalogs.get().sources(
             new VodSyncApi.ApiCb<Models.SyncSourcesResp>() {
@@ -1135,8 +1168,25 @@ public class HomeFragment extends Fragment {
         return msg + "\n可在设置页切换到「资源站直连」";
     }
 
+    /**
+     * 后端是否具备 18+ 标记能力（VodSync v1.15.0+）。
+     * 版本未知（healthz 还没回来）时按「有」处理：标记表在拿到真实响应后自然会被纠正；
+     * 只有明确是老版本才跳过，避免一次旧响应把已有标记清空。
+     */
+    private static boolean backendLabelsAdult() {
+        String v = com.lateshow.app.api.ServerCaps.version();
+        return v.isEmpty() || com.lateshow.app.api.ServerCaps.compare(v, "1.15.0") >= 0;
+    }
+
     /** 渲染源站列表与统计信息；fromCache=true 表示数据来自本地缓存 */
     private void applySources(Models.SyncSourcesResp r, boolean fromCache) {
+        // 同步刷新「18+ 源站标记表」：本地播放历史 / 收藏的过滤依据（见 PrefStore#updateAdultSources）。
+        // 两道保护：① 直连模式的源站清单没有 is_adult 概念，不参与；
+        // ② 1.15.0 之前的老后端根本不发 is_adult，不能用它把已有标记抹成空。
+        if (!com.lateshow.app.api.Catalogs.isStatic() && backendLabelsAdult()) {
+            PrefStore.get().updateAdultSources(r != null ? r.list : null,
+                    !PrefStore.get().minorMode());
+        }
         sources.clear();
         if (r.list != null) {
             for (Models.SyncSource s : r.list) {
@@ -1144,6 +1194,15 @@ public class HomeFragment extends Fragment {
             }
         }
         com.lateshow.app.util.SourceCache.putSync(sources);
+        // 兜底：选中源站在当前口径下已不可用（刚开启未成年模式，或后端已下线该源站）→ 回到「全部源站」
+        if (!curSlug.isEmpty() && PrefStore.get().isAdultSource(curSlug)
+                && PrefStore.get().minorMode()) {
+            curSlug = "";
+            curName = "全部源站";
+            PrefStore.get().setCurrentSource("", "全部源站");
+            final View v = getView();
+            if (v != null) v.post(this::reload);
+        }
         // 圆环状态由 pingHealth / 网络请求的 reportSourceProbe 决定，这里不再直接改
         if (pendingMenu) {
             pendingMenu = false;

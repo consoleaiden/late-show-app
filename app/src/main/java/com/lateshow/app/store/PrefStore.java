@@ -475,6 +475,12 @@ public final class PrefStore {
         SourceCache.clear();
         SearchIntent.clear();
         ServerCaps.update("", null);
+        // 18+ 标记是「哪台服务器的哪个 slug」的知识，换主机后必须作废：
+        // 同一 slug 在另一台服务器上可能是完全不同的源站
+        synchronized (LOCK) {
+            adultSlugs = new java.util.HashSet<String>();
+            sp.edit().remove(KEY_ADULT).apply();
+        }
         Catalogs.markDirty();
     }
 
@@ -533,6 +539,84 @@ public final class PrefStore {
 
     public void setMinorMode(boolean on) {
         sp.edit().putBoolean("minor_mode", on).apply();
+    }
+
+    // ---------- 源站 18+ 标记表（未成年模式下过滤本地播放历史 / 收藏） ----------
+    //
+    // 为什么不给每条历史/收藏加「是否 18+」字段：源站才是这件事的唯一权威，条目本来就只用
+    // slug 指代源站。把标记冗余到每条记录上要解决「存量记录回填」「后端改判后快照过期」
+    // 「写路径疏漏导致标记不一致」三类问题，而这里只需要一个几十条的小集合 + O(1) 命中，
+    // 零迁移、改判即生效，性能上也更省（见 adultSourceSlugs 的批量快照用法）。
+
+    private static final String KEY_ADULT = "adult_sources";
+    /** 仅存 18+ 源站 slug；null = 尚未从磁盘加载 */
+    private Set<String> adultSlugs;
+
+    /** 该源站是否被标记为 18+。未知源站一律 false：宁可显示，也不误伤用户自己的记录 */
+    public boolean isAdultSource(String slug) {
+        if (slug == null) return false;
+        synchronized (LOCK) {
+            ensureAdultLocked();
+            return adultSlugs.contains(slug);
+        }
+    }
+
+    /** 18+ 源站 slug 快照：列表渲染前取一次，循环里 contains 判定，避免逐条进锁 */
+    public Set<String> adultSourceSlugs() {
+        synchronized (LOCK) {
+            ensureAdultLocked();
+            return adultSlugs.isEmpty()
+                    ? java.util.Collections.<String>emptySet()
+                    : new java.util.HashSet<>(adultSlugs);
+        }
+    }
+
+    /**
+     * 用 /api/v1/sources 的响应刷新标记表。
+     *
+     * @param authoritative true  = 拿到的是完整源站清单（未成年模式关闭），整体重建；
+     *                      false = 未成年模式开启，服务端已剔除 18+ 源站，此时只能按
+     *                      「出现即非 18+」清标记，<b>绝不能整体重建</b>——否则一次过滤后的
+     *                      响应就会把全部标记抹掉，本地记录就再也过滤不住了。
+     */
+    public void updateAdultSources(List<Models.SyncSource> list, boolean authoritative) {
+        if (list == null) return;
+        synchronized (LOCK) {
+            ensureAdultLocked();
+            boolean changed = false;
+            if (authoritative) {
+                Set<String> next = new java.util.HashSet<>();
+                for (Models.SyncSource s : list) {
+                    if (s != null && s.slug != null && s.isAdult) next.add(s.slug);
+                }
+                if (!next.equals(adultSlugs)) {
+                    adultSlugs = next;
+                    changed = true;
+                }
+            } else {
+                for (Models.SyncSource s : list) {
+                    if (s != null && s.slug != null && !s.isAdult && adultSlugs.remove(s.slug)) {
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) sp.edit().putString(KEY_ADULT, gson.toJson(adultSlugs)).apply();
+        }
+    }
+
+    private void ensureAdultLocked() {
+        if (adultSlugs != null) return;
+        Set<String> loaded = null;
+        try {
+            String raw = sp.getString(KEY_ADULT, null);
+            if (raw != null && !raw.isEmpty()) {
+                loaded = gson.fromJson(raw, new TypeToken<Set<String>>() {}.getType());
+            }
+        } catch (Exception e) {
+            // 派生数据：解析失败直接重建，不影响用户记录
+            AppLog.w("PrefStore", "18+ 源站标记表解析失败，已重置：" + e.getMessage());
+        }
+        adultSlugs = loaded != null ? loaded : new java.util.HashSet<String>();
     }
 
     // ---------- 播放倍速 ----------

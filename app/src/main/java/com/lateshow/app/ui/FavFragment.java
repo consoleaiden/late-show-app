@@ -233,8 +233,16 @@ public class FavFragment extends Fragment {
         CARD_EXEC.execute(() -> {
             final List<CardItem> cards = new ArrayList<>();
             final int[] cachedCount = {0};
+            // 未成年模式：过滤掉来自 18+ 源站的本地记录。
+            // 只在渲染时过滤、不动存储——关掉开关记录原样回来，也不会误删用户数据。
+            // 标记集合取一次快照，循环里 O(1) 命中，不进锁、不查盘。
+            final java.util.Set<String> adult =
+                    PrefStore.get().minorMode()
+                            ? PrefStore.get().adultSourceSlugs()
+                            : java.util.Collections.<String>emptySet();
             if (hist) {
                 for (PrefStore.HistItem h : PrefStore.get().hists()) {
+                    if (adult.contains(h.slug)) continue;
                     CardItem c = new CardItem();
                     c.kind = CardItem.KIND_HIST;
                     c.slug = h.slug;
@@ -255,6 +263,7 @@ public class FavFragment extends Fragment {
                 }
             } else {
                 for (PrefStore.FavItem f : PrefStore.get().favs()) {
+                    if (adult.contains(f.slug)) continue;
                     CardItem c = new CardItem();
                     c.kind = CardItem.KIND_FAV;
                     c.slug = f.slug;
