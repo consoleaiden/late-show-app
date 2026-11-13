@@ -79,13 +79,14 @@
             android:contentDescription="播放设置" />
     </LinearLayout>
 
-    <!-- 播放地址 / 下载工具条：默认隐藏，由设置页「播放偏好」开关控制 -->
+    <!-- 播放地址 / 下载工具条：默认隐藏，由设置页「播放偏好」开关控制。
+         位置贴屏幕底部、留出控制条高度（约 72dp），原来放在顶部 64dp 处浮在半空很难找。 -->
     <include
         layout="@layout/view_stream_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_marginTop="64dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginBottom="72dp"
         android:layout_marginLeft="10dp"
         android:layout_marginRight="10dp" />
 </FrameLayout>

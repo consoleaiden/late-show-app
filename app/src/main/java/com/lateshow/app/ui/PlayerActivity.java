@@ -116,8 +116,9 @@ public class PlayerActivity extends AppCompatActivity {
                         new com.lateshow.app.util.AdFilterDataSource.Factory(httpFactory)))
                 .build();
         pv.setPlayer(player);
-        // 控制栏/半透明遮罩 2 秒后自动隐藏（media3 默认 5 秒）
-        pv.setControllerShowTimeoutMs(2000);
+        // 控制栏/半透明遮罩超时自动隐藏（media3 默认 5 秒）。原来 2 秒太短，
+        // 手指抬起就已经消失，容易被当成「没有控制条」（真机 2026-11-13）
+        pv.setControllerShowTimeoutMs(5000);
         // 倍速 + 播放设置（悬浮工具，右上角），并把上次倍速立即应用
         final View playerTools = findViewById(R.id.playerTools);
         com.lateshow.app.util.PlayerPanel.attach(
@@ -190,9 +191,11 @@ public class PlayerActivity extends AppCompatActivity {
         player.addListener(new Player.Listener() {
             @Override
             public void onVideoSizeChanged(androidx.media3.common.VideoSize vs) {
+                // 比例：显式下发，避免 ARFL 停在 0（= 填满容器）= 竖屏视频被拉成横屏
+                applyVideoSize(vs);
                 // 跟随视频本身方向：横屏视频→横屏，竖屏视频→竖屏（未知尺寸保持不变）
-                if (vs.width == 0 || vs.height == 0) return;
-                int want = vs.width >= vs.height
+                if (vidW == 0 || vidH == 0) return;
+                int want = vidW >= vidH
                         ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                         : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT;
                 if (want != getRequestedOrientation()) setRequestedOrientation(want);
@@ -247,6 +250,44 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
     /** 播放/缓冲期间保持屏幕常亮；暂停、播完、idle 时恢复系统息屏策略 */
+    /** 最近一次视频尺寸（已折算旋转角） */
+    private int vidW = 0, vidH = 0;
+
+    /**
+     * 记下视频真实尺寸并立刻下发比例。
+     *
+     * <p>media3 只在 onVideoSizeChanged 事件那一刻把比例写给内部 AspectRatioFrameLayout；
+     * 该值停在 0 时语义是「填满容器」，720×1280 竖屏会被拉成整屏 16:9（画面畸形）。
+     * 这里不依赖事件时序，自己算并显式下发，幂等。
+     */
+    private void applyVideoSize(androidx.media3.common.VideoSize vs) {
+        if (vs == null) return;
+        int w = vs.width, h = vs.height;
+        if (w <= 0 || h <= 0) return;
+        if (vs.unappliedRotationDegrees == 90 || vs.unappliedRotationDegrees == 270) {
+            int t = w;
+            w = h;
+            h = t;
+        }
+        vidW = w;
+        vidH = h;
+        applyVideoAspect();
+    }
+
+    /** 按类型找到内部 AspectRatioFrameLayout 并写比例（不反射私有字段名） */
+    private void applyVideoAspect() {
+        if (pv == null || vidW <= 0 || vidH <= 0) return;
+        final float aspect = (float) vidW / (float) vidH;
+        for (int i = 0; i < pv.getChildCount(); i++) {
+            View c = pv.getChildAt(i);
+            if (c instanceof androidx.media3.ui.AspectRatioFrameLayout) {
+                ((androidx.media3.ui.AspectRatioFrameLayout) c).setAspectRatio(aspect);
+            }
+        }
+        com.lateshow.app.util.PlayHeaders.diag("fs aspect " + vidW + "x" + vidH
+                + " -> " + String.format(java.util.Locale.US, "%.4f", aspect));
+    }
+
     private void syncKeepScreenOn() {
         boolean on = player != null && player.getPlayWhenReady()
                 && player.getPlaybackState() != Player.STATE_IDLE

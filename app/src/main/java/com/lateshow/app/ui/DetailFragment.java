@@ -676,9 +676,22 @@ public class DetailFragment extends Fragment {
         lastBgAlpha = bgAlpha;
         applyScrimAlpha(bgAlpha);
         // 内嵌播放中：收起时让播放器先淡出，露出下面一直在位的海报，
-        // 这样落点仍然是海报↔卡片，不会出现「视频缩成一张卡片」的跳变
+        // 这样落点仍然是海报↔卡片，不会出现「视频缩成一张卡片」的跳变。
+        //
+        // 只有「确实在收起」时才允许淡出（closing 由拖拽/返回设置）。原先只判断
+        // inlineActive，凡是形变进度被抬高的场合（进场动画未收敛、旋转重算、动画被
+        // cancel）都会把播放层连同控制条、地址条一起抹成透明 —— 真机表现就是
+        // 「画面像海报、点哪都没反应」（2026-11-13）。
         if (inlineActive && playerContainer != null) {
-            playerContainer.setAlpha(1f - smooth(0.52f, 0.90f, p));
+            boolean collapsing = closing && p > 0.5f;
+            float vAlpha = collapsing ? (1f - smooth(0.52f, 0.90f, p)) : 1f;
+            playerContainer.setAlpha(vAlpha);
+            if (vAlpha < 0.99f) {
+                com.lateshow.app.util.PlayHeaders.diag("player fade p="
+                        + String.format(java.util.Locale.US, "%.3f", p) + " alpha="
+                        + String.format(java.util.Locale.US, "%.3f", vAlpha)
+                        + " closing=" + closing);
+            }
         }
         radiusPx = dp(CARD_RADIUS_DP) * p;
         surface.invalidateOutline();
@@ -709,6 +722,12 @@ public class DetailFragment extends Fragment {
         if (motionAnim != null) {
             motionAnim.cancel();
             motionAnim = null;
+            // 动画被打断时 alpha 会停在取消的那一帧，可能已经接近全透明：
+            // 播放态下按当前形变进度重新对齐播放器透明度，否则画面与控制条会一直看不见
+            if (inlineActive && playerContainer != null && motion != null) {
+                float p = Math.max(0f, Math.min(1f, motion.getProgress()));
+                playerContainer.setAlpha(1f - smooth(0.52f, 0.90f, p));
+            }
         }
     }
 
@@ -2028,6 +2047,9 @@ public class DetailFragment extends Fragment {
     @Override public void onConfigurationChanged(@NonNull android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         applyPlayerGeometry();
+        // 旋转后画面容器尺寸变了，比例必须重新下发：ARFL 会按新尺寸重算，
+        // 少了这一步竖屏视频在横屏下会被拉满整条 16:9（真机 2026-11-13）
+        applyVideoAspect();
         if (inlineActive) {
             int shift = playingBandShift();
             com.lateshow.app.util.PlayHeaders.diag("rotate -> posterH=" + posterH
@@ -2205,8 +2227,9 @@ public class DetailFragment extends Fragment {
             playerView.setPlayer(player);
             // 绑定时若画面容器还没量出尺寸（0×0），等首次布局完成再重新绑定画面纹理
             ensurePlayerSurfaceBound();
-            // 控制栏/半透明遮罩 2 秒后自动隐藏
-            playerView.setControllerShowTimeoutMs(2000);
+            // 控制栏/半透明遮罩超时自动隐藏。原来 2 秒太短：手指刚抬起来就已经消失了，
+            // 很容易被当成「没有控制条」（真机 2026-11-13）。回到 media3 默认的 5 秒。
+            playerView.setControllerShowTimeoutMs(5000);
             // 点全屏按钮才进入横屏全屏
             playerView.setFullscreenButtonClickListener(v -> goFullscreen());
             // 倍速 + 播放设置（悬浮工具，见布局右上角）
@@ -2246,6 +2269,7 @@ public class DetailFragment extends Fragment {
                 // 这是一次 requestLayout，页面稳定或过渡中可能被 MotionLayout 吞掉
                 // （layoutDuringTransition=honorRequest 已在布局上放开，这里再兜一次底）
                 @Override public void onVideoSizeChanged(VideoSize videoSize) {
+                    applyVideoSize(videoSize);
                     if (playerView != null) playerView.post(DetailFragment.this::forceTraversal);
                 }
                 // 黑屏自愈：首帧已渲染但画面容器仍 0x0（偶发：容器可见后未触发重排），
@@ -2320,6 +2344,55 @@ public class DetailFragment extends Fragment {
      * 海报区高度，让 GONE→VISIBLE 的子树真正量出尺寸）；一旦量出宽高就重新绑定一次播放器
      * （media3 会重建画面纹理），保证纹理尺寸与视图一致。
      */
+    /** 最近一次视频尺寸（已折算旋转角），旋转 / 重绑画面后用于重新下发比例 */
+    private int vidW = 0, vidH = 0;
+
+    /**
+     * 记下视频真实尺寸，并立刻把比例下发给播放器。
+     *
+     * <p>media3 只在 onVideoSizeChanged 事件那一刻把比例写给内部的 AspectRatioFrameLayout。
+     * 该值一旦停在 0，ARFL 的语义就是「填满容器」—— 720×1280 的竖屏视频会被拉成
+     * 1080×608（16:9），画面横向畸形；控制条叠在同一个 PlayerView 上，也跟着一起错位。
+     * 真机 2026-11-13 复现：竖屏短剧在详情页小窗播放时画面铺满且变形、控件全部不可见。
+     *
+     * <p>这里不再依赖事件时序与 ARFL 内部状态：自己算比例并显式下发，幂等可重复调用。
+     */
+    private void applyVideoSize(VideoSize vs) {
+        if (vs == null) return;
+        int w = vs.width, h = vs.height;
+        if (w <= 0 || h <= 0) return;
+        // 画面纹理是 TextureView，不会像 SurfaceView 那样由系统代转；
+        // 旋转角必须在这里折算成宽高，否则竖屏流会被当成横屏比例
+        if (vs.unappliedRotationDegrees == 90 || vs.unappliedRotationDegrees == 270) {
+            int t = w;
+            w = h;
+            h = t;
+        }
+        vidW = w;
+        vidH = h;
+        applyVideoAspect();
+    }
+
+    /**
+     * 把缓存的比例写给 PlayerView 内部的 AspectRatioFrameLayout。
+     * 不反射私有字段名（混淆后会失效），直接按类型在子 View 里找。
+     */
+    private void applyVideoAspect() {
+        if (playerView == null || vidW <= 0 || vidH <= 0) return;
+        final float aspect = (float) vidW / (float) vidH;
+        boolean applied = false;
+        for (int i = 0; i < playerView.getChildCount(); i++) {
+            View c = playerView.getChildAt(i);
+            if (c instanceof androidx.media3.ui.AspectRatioFrameLayout) {
+                ((androidx.media3.ui.AspectRatioFrameLayout) c).setAspectRatio(aspect);
+                applied = true;
+            }
+        }
+        com.lateshow.app.util.PlayHeaders.diag("aspect " + vidW + "x" + vidH
+                + " -> " + String.format(java.util.Locale.US, "%.4f", aspect)
+                + " applied=" + applied + " pv=" + playerView.getWidth() + "x" + playerView.getHeight());
+    }
+
     private void ensurePlayerSurfaceBound() {
         if (playerView == null || player == null) return;
         if (playerView.getWidth() > 0 && playerView.getHeight() > 0) return;
@@ -2361,6 +2434,8 @@ public class DetailFragment extends Fragment {
                     "view " + w + "x" + h + " -> rebind surface (try " + surfaceHealTries + ")");
             playerView.setPlayer(null);
             playerView.setPlayer(player);
+            // 重绑会丢掉 media3 内部缓存的比例（不再补发 onVideoSizeChanged），必须自己补
+            applyVideoAspect();
             return;
         }
         if (surfaceHealTries == 0 || surfaceHealTries == 4) {

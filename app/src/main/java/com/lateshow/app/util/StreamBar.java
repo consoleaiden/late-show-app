@@ -38,13 +38,18 @@ public final class StreamBar {
         final boolean show = PrefStore.get().showStreamTools();
         if (!show || TextUtils.isEmpty(url)) {
             bar.setVisibility(View.GONE);
-            AppLog.d("StreamBar", "bind hide show=" + show + " urlLen="
-                    + (url == null ? -1 : url.length()));
+            com.lateshow.app.util.PlayHeaders.diag("streamBar hide show=" + show
+                    + " urlLen=" + (url == null ? -1 : url.length()));
             return;
         }
         bar.setVisibility(View.VISIBLE);
-        AppLog.d("StreamBar", "bind show urlLen=" + url.length()
-                + " visible=" + (bar.getVisibility() == View.VISIBLE) + " url=" + sanitize(url));
+        // 地址条与视频画面（TextureView）同层：显式压到最上层并给一点阴影，
+        // 否则在某些机型的合成顺序里会被画面盖住（真机 2026-11-13：详情页小窗看不到地址条）
+        bar.bringToFront();
+        bar.setElevation(4f * bar.getResources().getDisplayMetrics().density);
+        // 用常开的 diag 日志（AppLog 在 release 包完全关闭，排障时看不到）
+        com.lateshow.app.util.PlayHeaders.diag("streamBar show urlLen=" + url.length()
+                + " w=" + bar.getWidth() + " vis=" + bar.getVisibility());
         // 审计 A-34 / A-06：展示、复制与外发前统一剥掉可能残留的凭据 query 参数
         final String safe = sanitize(url);
         TextView tv = root.findViewById(R.id.tvStreamUrl);
