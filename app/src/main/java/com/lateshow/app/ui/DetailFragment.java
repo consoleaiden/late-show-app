@@ -2359,6 +2359,8 @@ public class DetailFragment extends Fragment {
      */
     private void applyVideoSize(VideoSize vs) {
         if (vs == null) return;
+        com.lateshow.app.util.PlayHeaders.diag("videosize raw=" + vs.width + "x" + vs.height
+                + " rot=" + vs.unappliedRotationDegrees + " par=" + vs.pixelWidthHeightRatio);
         int w = vs.width, h = vs.height;
         if (w <= 0 || h <= 0) return;
         // 画面纹理是 TextureView，不会像 SurfaceView 那样由系统代转；
@@ -2374,23 +2376,57 @@ public class DetailFragment extends Fragment {
     }
 
     /**
-     * 把缓存的比例写给 PlayerView 内部的 AspectRatioFrameLayout。
-     * 不反射私有字段名（混淆后会失效），直接按类型在子 View 里找。
+     * 把缓存的比例落到 PlayerView 内部的内容帧上。
+     *
+     * <p>只调 AspectRatioFrameLayout.setAspectRatio() 不够：它靠 requestLayout 触发重测，
+     * 而详情页的 MotionLayout 会吞掉页面稳定后的 requestLayout（项目已知坑，真机
+     * 2026-11-13 实测 ARFL 始终停在 1080x608 = 视频被拉满 16:9）。这里直接把内容帧的
+     * LayoutParams 钉成「按视频比例 fit 进画面区」的精确尺寸并居中，再延迟复查，
+     * 尺寸不对就继续钉，直到生效为止。
      */
     private void applyVideoAspect() {
         if (playerView == null || vidW <= 0 || vidH <= 0) return;
+        androidx.media3.ui.AspectRatioFrameLayout arfl = findContentFrame();
+        if (arfl == null) return;
         final float aspect = (float) vidW / (float) vidH;
-        boolean applied = false;
+        arfl.setAspectRatio(aspect);
+        pinContentFrame(arfl, aspect, 0);
+    }
+
+    private androidx.media3.ui.AspectRatioFrameLayout findContentFrame() {
         for (int i = 0; i < playerView.getChildCount(); i++) {
             View c = playerView.getChildAt(i);
             if (c instanceof androidx.media3.ui.AspectRatioFrameLayout) {
-                ((androidx.media3.ui.AspectRatioFrameLayout) c).setAspectRatio(aspect);
-                applied = true;
+                return (androidx.media3.ui.AspectRatioFrameLayout) c;
             }
         }
-        com.lateshow.app.util.PlayHeaders.diag("aspect " + vidW + "x" + vidH
-                + " -> " + String.format(java.util.Locale.US, "%.4f", aspect)
-                + " applied=" + applied + " pv=" + playerView.getWidth() + "x" + playerView.getHeight());
+        return null;
+    }
+
+    /** 把内容帧尺寸钉成 fit(aspect) 的精确值；未生效则延迟复查（最多 20 次，120ms 一次） */
+    private void pinContentFrame(androidx.media3.ui.AspectRatioFrameLayout arfl, float aspect, int tries) {
+        if (playerView == null || tries > 20) return;
+        int cw = playerView.getWidth(), ch = playerView.getHeight();
+        if (cw <= 0 || ch <= 0) {
+            playerView.postDelayed(() -> pinContentFrame(arfl, aspect, tries + 1), 120);
+            return;
+        }
+        int w, h;
+        if ((float) cw / ch > aspect) {
+            h = ch;
+            w = Math.round(ch * aspect);
+        } else {
+            w = cw;
+            h = Math.round(cw / aspect);
+        }
+        if (arfl.getWidth() == w && arfl.getHeight() == h) return;   // 已生效，停止复查
+        arfl.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                w, h, android.view.Gravity.CENTER));
+        playerView.requestLayout();
+        forceTraversal();
+        com.lateshow.app.util.PlayHeaders.diag("aspect pin " + vidW + "x" + vidH
+                + " -> " + w + "x" + h + " (try " + tries + ") pv=" + cw + "x" + ch);
+        playerView.postDelayed(() -> pinContentFrame(arfl, aspect, tries + 1), 120);
     }
 
     private void ensurePlayerSurfaceBound() {

@@ -274,18 +274,53 @@ public class PlayerActivity extends AppCompatActivity {
         applyVideoAspect();
     }
 
-    /** 按类型找到内部 AspectRatioFrameLayout 并写比例（不反射私有字段名） */
-    private void applyVideoAspect() {
-        if (pv == null || vidW <= 0 || vidH <= 0) return;
-        final float aspect = (float) vidW / (float) vidH;
+    /** 按类型找到内部内容帧（AspectRatioFrameLayout） */
+    private androidx.media3.ui.AspectRatioFrameLayout findContentFrame() {
+        if (pv == null) return null;
         for (int i = 0; i < pv.getChildCount(); i++) {
             View c = pv.getChildAt(i);
             if (c instanceof androidx.media3.ui.AspectRatioFrameLayout) {
-                ((androidx.media3.ui.AspectRatioFrameLayout) c).setAspectRatio(aspect);
+                return (androidx.media3.ui.AspectRatioFrameLayout) c;
             }
         }
-        com.lateshow.app.util.PlayHeaders.diag("fs aspect " + vidW + "x" + vidH
-                + " -> " + String.format(java.util.Locale.US, "%.4f", aspect));
+        return null;
+    }
+
+    /**
+     * 按视频比例 fit 内容帧：先 setAspectRatio，再把 LayoutParams 钉成精确尺寸并居中，
+     * 未生效则延迟复查。只靠 setAspectRatio 的 requestLayout 在部分页面状态下不可靠。
+     */
+    private void applyVideoAspect() {
+        if (pv == null || vidW <= 0 || vidH <= 0) return;
+        androidx.media3.ui.AspectRatioFrameLayout arfl = findContentFrame();
+        if (arfl == null) return;
+        final float aspect = (float) vidW / (float) vidH;
+        arfl.setAspectRatio(aspect);
+        pinContentFrame(arfl, aspect, 0);
+    }
+
+    private void pinContentFrame(androidx.media3.ui.AspectRatioFrameLayout arfl, float aspect, int tries) {
+        if (pv == null || tries > 20) return;
+        int cw = pv.getWidth(), ch = pv.getHeight();
+        if (cw <= 0 || ch <= 0) {
+            pv.postDelayed(() -> pinContentFrame(arfl, aspect, tries + 1), 120);
+            return;
+        }
+        int w, h;
+        if ((float) cw / ch > aspect) {
+            h = ch;
+            w = Math.round(ch * aspect);
+        } else {
+            w = cw;
+            h = Math.round(cw / aspect);
+        }
+        if (arfl.getWidth() == w && arfl.getHeight() == h) return;   // 已生效，停止复查
+        arfl.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                w, h, android.view.Gravity.CENTER));
+        pv.requestLayout();
+        com.lateshow.app.util.PlayHeaders.diag("fs aspect pin " + vidW + "x" + vidH
+                + " -> " + w + "x" + h + " (try " + tries + ")");
+        pv.postDelayed(() -> pinContentFrame(arfl, aspect, tries + 1), 120);
     }
 
     private void syncKeepScreenOn() {
