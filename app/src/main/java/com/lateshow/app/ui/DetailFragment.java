@@ -383,6 +383,8 @@ public class DetailFragment extends Fragment {
                 View tools = getView() != null ? getView().findViewById(R.id.playerTools) : null;
                 if (tools != null) tools.setVisibility(
                         visibility == View.VISIBLE && inlineActive ? View.VISIBLE : View.GONE);
+                com.lateshow.app.util.PlayHeaders.diag("inline ctrl vis=" + visibility
+                        + " inlineActive=" + inlineActive + " tools=" + (tools != null ? tools.getVisibility() : -1));
             }
         });
 
@@ -2217,6 +2219,18 @@ public class DetailFragment extends Fragment {
                     if (state == Player.STATE_READY) {
                         long d = player.getDuration() / 1000;
                         if (d > 0) saveProgress(player.getCurrentPosition() / 1000, d);
+                        // 插桩（部分视频无控制条/无法快进排查）：时间轴属性决定控制条行为
+                        try {
+                            androidx.media3.common.Timeline.Window w = player.getCurrentTimeline()
+                                    .getWindow(player.getCurrentMediaItemIndex(),
+                                            new androidx.media3.common.Timeline.Window());
+                            com.lateshow.app.util.PlayHeaders.diag("inline ready dur=" + player.getDuration()
+                                    + " winDur=" + w.windowDurationMs + " winSeekable=" + w.isSeekable()
+                                    + " winLive=" + w.isLive() + " pvW=" + playerView.getWidth()
+                                    + " pvH=" + playerView.getHeight());
+                        } catch (Exception e) {
+                            com.lateshow.app.util.PlayHeaders.diag("inline ready timeline info fail: " + e);
+                        }
                     } else if (state == Player.STATE_ENDED) {
                         long d = player.getDuration() / 1000;
                         saveProgress(Math.max(0, d), d);

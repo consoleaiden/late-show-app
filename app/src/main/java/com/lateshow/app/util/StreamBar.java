@@ -11,6 +11,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import com.lateshow.app.R;
 import com.lateshow.app.store.PrefStore;
+import com.lateshow.app.util.AppLog;
 
 /**
  * 播放地址工具条（view_stream_bar）的统一绑定。
@@ -30,13 +31,20 @@ public final class StreamBar {
     public static void bind(View root, String url) {
         if (root == null) return;
         final View bar = root.findViewById(R.id.streamBar);
-        if (bar == null) return;
+        if (bar == null) {
+            AppLog.w("StreamBar", "bind fail: view not found in root " + root);
+            return;
+        }
         final boolean show = PrefStore.get().showStreamTools();
         if (!show || TextUtils.isEmpty(url)) {
             bar.setVisibility(View.GONE);
+            AppLog.d("StreamBar", "bind hide show=" + show + " urlLen="
+                    + (url == null ? -1 : url.length()));
             return;
         }
         bar.setVisibility(View.VISIBLE);
+        AppLog.d("StreamBar", "bind show urlLen=" + url.length()
+                + " visible=" + (bar.getVisibility() == View.VISIBLE) + " url=" + sanitize(url));
         // 审计 A-34 / A-06：展示、复制与外发前统一剥掉可能残留的凭据 query 参数
         final String safe = sanitize(url);
         TextView tv = root.findViewById(R.id.tvStreamUrl);

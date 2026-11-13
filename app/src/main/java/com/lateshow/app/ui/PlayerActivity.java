@@ -127,6 +127,8 @@ public class PlayerActivity extends AppCompatActivity {
         pv.setControllerVisibilityListener(new androidx.media3.ui.PlayerView.ControllerVisibilityListener() {
             @Override public void onVisibilityChanged(int visibility) {
                 playerTools.setVisibility(visibility == View.VISIBLE ? View.VISIBLE : View.GONE);
+                com.lateshow.app.util.PlayHeaders.diag("fs ctrl vis=" + visibility
+                        + " fullyVisible=" + pv.isControllerFullyVisible());
             }
         });
         // 手势：横向滑动快进/快退（划满全屏 = 总时长 1/2，半屏 = 1/4）；
@@ -136,6 +138,8 @@ public class PlayerActivity extends AppCompatActivity {
             @Override public long durationMs() { return player != null ? player.getDuration() : 0; }
             @Override public long positionMs() { return player != null ? player.getCurrentPosition() : 0; }
             @Override public void onSeekStart() {
+                com.lateshow.app.util.PlayHeaders.diag("fs gesture seekStart dur="
+                        + (player != null ? player.getDuration() : -1));
                 if (pv.isControllerFullyVisible()) pv.hideController();
                 seekOverlay.setVisibility(View.VISIBLE);
             }
@@ -147,6 +151,8 @@ public class PlayerActivity extends AppCompatActivity {
                 if (player != null) player.seekTo(targetMs);
             }
             @Override public void onTap() {
+                com.lateshow.app.util.PlayHeaders.diag("fs gesture tap fullyVisible="
+                        + pv.isControllerFullyVisible());
                 if (pv.isControllerFullyVisible()) pv.hideController();
                 else pv.showController();
             }
@@ -200,6 +206,17 @@ public class PlayerActivity extends AppCompatActivity {
                     if (dur > 0 && lastSavedSec == 0) {
                         // 已知总时长，立即补一条总时长
                         saveProgress(player.getCurrentPosition() / 1000, dur);
+                    }
+                    // 插桩（部分视频无控制条/无法快进排查）：时间轴属性决定控制条行为
+                    try {
+                        androidx.media3.common.Timeline.Window w = player.getCurrentTimeline()
+                                .getWindow(player.getCurrentMediaItemIndex(),
+                                        new androidx.media3.common.Timeline.Window());
+                        com.lateshow.app.util.PlayHeaders.diag("fs ready dur=" + player.getDuration()
+                                + " winDur=" + w.windowDurationMs + " winSeekable=" + w.isSeekable()
+                                + " winLive=" + w.isLive() + " periods=" + player.getCurrentTimeline().getWindowCount());
+                    } catch (Exception e) {
+                        com.lateshow.app.util.PlayHeaders.diag("fs ready timeline info fail: " + e);
                     }
                     // 黑屏自愈：画面容器偶发 0x0（有声音没画面）时强制重排一次
                     if (pv.getWidth() == 0 || pv.getHeight() == 0) {

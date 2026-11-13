@@ -73,9 +73,18 @@ public final class GestureSeek {
         final boolean[] vRight = {false};
         final float[] vBase = {0f};
         final float[] vLast = {0f};
+        final long[] lastGateLog = {0L};   // 插桩：门控放行的节流日志
 
         v.setOnTouchListener((view, ev) -> {
-            if (enabled != null && !enabled.getAsBoolean()) return false;
+            if (enabled != null && !enabled.getAsBoolean()) {
+                // 插桩（部分视频无控制条排查）：手势被门控放行，触摸落到下层
+                long now = android.os.SystemClock.elapsedRealtime();
+                if (now - lastGateLog[0] > 3000) {
+                    lastGateLog[0] = now;
+                    com.lateshow.app.util.PlayHeaders.diag("gesture gated -> passthrough");
+                }
+                return false;
+            }
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     down[0] = ev.getX();
