@@ -46,11 +46,8 @@ public final class PlayerPanel {
     /** 播放地址按需现取：换集/换线路后地址会变，attach 时机上不能定死 */
     public interface UrlProvider { String get(); }
 
-    /** 绑定倍速 chip 与播放设置按钮（chip 保留快捷入口，全量功能在面板里） */
-    public static void attach(final View btnSpeed, final View btnGear,
-                              final ExoPlayer player, final UrlProvider urls) {
-        refreshSpeedLabel(btnSpeed);
-        btnSpeed.setOnClickListener(v -> showSpeedMenu(v, player));
+    /** 绑定播放设置按钮（倍速已并入面板，倍速 chip 已删除） */
+    public static void attach(final View btnGear, final ExoPlayer player, final UrlProvider urls) {
         btnGear.setOnClickListener(v -> {
             if (panel != null && panel.isShowing()) {
                 panel.dismiss();            // 再点一次设置按钮 = 关闭
@@ -109,17 +106,17 @@ public final class PlayerPanel {
         box.addView(rowSpeed, matchWrap());
 
         // 广告提报：一次性功能，执行后面板即收
-        box.addView(newRow(ctx, "广告提报（有广告）", v -> {
+        box.addView(newRow(ctx, "广告提报", v -> {
             closePanel();
             StreamBar.reportAdUrl(ctx, urls.get());
         }), matchWrap());
 
-        box.addView(newRow(ctx, "播放设置（跳过片头/片尾）", v -> {
+        box.addView(newRow(ctx, "播放设置", v -> {
             closePanel();
             showSettingsDialog(ctx);
         }), matchWrap());
 
-        box.addView(newRow(ctx, "复制播放地址", v -> {
+        box.addView(newRow(ctx, "复制地址", v -> {
             closePanel();
             StreamBar.copyUrl(ctx, urls.get());
         }), matchWrap());
@@ -185,19 +182,7 @@ public final class PlayerPanel {
 
     // ==================== 倍速 ====================
 
-    /** 倍速弹出菜单（chip 直接调用）：档位选中即生效并持久化 */
-    public static void showSpeedMenu(final View anchor, final ExoPlayer player) {
-        showSpeedMenu(anchor, player, null);
-    }
-
-    /** 带选中回调的倍速菜单（聚合面板用它刷新行文案、续期计时） */
-    public static void showSpeedMenu(final View anchor, final ExoPlayer player, final Runnable onPick) {
-        buildSpeedMenu(anchor.getContext(), anchor, player, () -> {
-            refreshSpeedLabel(anchor);
-            if (onPick != null) onPick.run();
-        }).show();
-    }
-
+    /** 倍速弹出菜单（聚合面板倍速行调用）：档位选中即生效并持久化 */
     private static PopupMenu buildSpeedMenu(final Context ctx, final View anchor,
                                             final ExoPlayer player, final Runnable onPick) {
         PopupMenu pm = new PopupMenu(ctx, anchor, Gravity.END);
@@ -252,12 +237,6 @@ public final class PlayerPanel {
                 })
                 .setNegativeButton("取消", null)
                 .show();
-    }
-
-    public static void refreshSpeedLabel(View chip) {
-        if (chip instanceof TextView) {
-            ((TextView) chip).setText(speedLabel(PrefStore.get().playSpeed()));
-        }
     }
 
     public static String speedLabel(float s) {

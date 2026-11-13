@@ -2240,7 +2240,7 @@ public class DetailFragment extends Fragment {
             // 播放设置聚合面板（倍速/广告提报/跳过片头片尾/复制地址/下载），内嵌与全屏共用；
             // 播放地址换集会变，用 UrlProvider 现取（与地址条一致，decorate 归一化后的直链）
             com.lateshow.app.util.PlayerPanel.attach(
-                    getView().findViewById(R.id.btnSpeed), getView().findViewById(R.id.btnGear), player,
+                    getView().findViewById(R.id.btnGear), player,
                     () -> curPlayUrl != null
                             ? VodSyncApi.get().decorate(curPlayUrl)
                             : guessStreamUrl(curUrl));

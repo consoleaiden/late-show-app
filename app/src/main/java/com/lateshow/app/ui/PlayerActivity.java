@@ -123,7 +123,7 @@ public class PlayerActivity extends AppCompatActivity {
         // 地址按需现取（streamUrl 字段，decorate 后的真正在播直链），并把上次倍速立即应用
         final View playerTools = findViewById(R.id.playerTools);
         com.lateshow.app.util.PlayerPanel.attach(
-                findViewById(R.id.btnSpeed), findViewById(R.id.btnGear), player, () -> streamUrl);
+                findViewById(R.id.btnGear), player, () -> streamUrl);
         com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
         // 胶囊跟随控制栏显隐：轻点屏幕出现、约 2 秒后随控制栏自动隐藏（与内嵌一致）
         pv.setControllerVisibilityListener(new androidx.media3.ui.PlayerView.ControllerVisibilityListener() {

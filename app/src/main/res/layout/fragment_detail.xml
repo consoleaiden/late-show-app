@@ -138,7 +138,7 @@
                                     app:layout_constraintStart_toStartOf="parent"
                                     app:layout_constraintEnd_toEndOf="parent" />
 
-                                <!-- 播放器工具：倍速 + 设置（始终悬浮在右上角） -->
+                                <!-- 播放器工具：设置（聚合面板，倍速等已并入；始终悬浮在右上角） -->
                                 <LinearLayout
                                     android:id="@+id/playerTools"
                                     android:layout_width="wrap_content"
@@ -150,25 +150,9 @@
                                     app:layout_constraintEnd_toEndOf="parent">
 
                                     <TextView
-                                        android:id="@+id/btnSpeed"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="26dp"
-                                        android:gravity="center"
-                                        android:paddingLeft="10dp"
-                                        android:paddingRight="10dp"
-                                        android:background="@drawable/bg_chip_dark"
-                                        android:alpha="0.85"
-                                        android:text="1.0x"
-                                        android:textSize="12sp"
-                                        android:textColor="#FFFFFF"
-                                        android:fontFamily="monospace"
-                                        android:contentDescription="倍速" />
-
-                                    <TextView
                                         android:id="@+id/btnGear"
                                         android:layout_width="26dp"
                                         android:layout_height="26dp"
-                                        android:layout_marginLeft="6dp"
                                         android:gravity="center"
                                         android:background="@drawable/bg_chip_dark"
                                         android:alpha="0.85"
