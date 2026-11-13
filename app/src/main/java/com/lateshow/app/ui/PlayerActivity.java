@@ -213,7 +213,7 @@ public class PlayerActivity extends AppCompatActivity {
                                 .getWindow(player.getCurrentMediaItemIndex(),
                                         new androidx.media3.common.Timeline.Window());
                         com.lateshow.app.util.PlayHeaders.diag("fs ready dur=" + player.getDuration()
-                                + " winDur=" + w.windowDurationMs + " winSeekable=" + w.isSeekable()
+                                + " winDur=" + (w.durationUs / 1000) + " winSeekable=" + w.isSeekable
                                 + " winLive=" + w.isLive() + " periods=" + player.getCurrentTimeline().getWindowCount());
                     } catch (Exception e) {
                         com.lateshow.app.util.PlayHeaders.diag("fs ready timeline info fail: " + e);

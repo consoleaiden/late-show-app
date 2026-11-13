@@ -2225,7 +2225,7 @@ public class DetailFragment extends Fragment {
                                     .getWindow(player.getCurrentMediaItemIndex(),
                                             new androidx.media3.common.Timeline.Window());
                             com.lateshow.app.util.PlayHeaders.diag("inline ready dur=" + player.getDuration()
-                                    + " winDur=" + w.windowDurationMs + " winSeekable=" + w.isSeekable()
+                                    + " winDur=" + (w.durationUs / 1000) + " winSeekable=" + w.isSeekable
                                     + " winLive=" + w.isLive() + " pvW=" + playerView.getWidth()
                                     + " pvH=" + playerView.getHeight());
                         } catch (Exception e) {
