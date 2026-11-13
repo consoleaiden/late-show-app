@@ -65,6 +65,13 @@ public final class PlayerPanel {
         if (panel != null) panel.dismiss();
     }
 
+    /** 把当前保存的倍速应用到播放器（创建/换集后调用） */
+    public static void applySavedSpeed(ExoPlayer player) {
+        if (player != null) {
+            player.setPlaybackParameters(new PlaybackParameters(PrefStore.get().playSpeed()));
+        }
+    }
+
     // ==================== 播放设置聚合面板 ====================
 
     /**
