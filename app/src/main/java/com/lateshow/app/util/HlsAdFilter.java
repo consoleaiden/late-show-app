@@ -22,7 +22,13 @@ import java.util.Set;
  *       只作高置信兜底，绝不用于删除；</li>
  *   <li>保留总时长最长的源组；其余组满足「总时长 &lt; 50% × 最长组 且 ≤ 300s 绝对上限」
  *       判为广告（绝对上限防多段拼片误杀：正片分段即使不同目录也在分钟级）；</li>
- *   <li>安全钳：过滤后总时长 &lt; 原始 80% → 整体放弃（宁可放过广告，不可误删正片）。</li>
+ *   <li>★ 重复插入判据：同一组内出现两个分片序列完全相同的 run，说明这批文件是被
+ *       「重复贴进去的素材」——正片不会自我重复，只有广告会被插多遍。此项不受
+ *       「广告必须短于正片」的时长比例约束（实测样本：开头 25.8s 广告 + 中插同款
+ *       25.8s 广告 vs 70.2s 正片，广告占比 42%，旧规则因 42% &gt; 50%×正片 而放行）；</li>
+ *   <li>安全钳：过滤后总时长 &lt; 原始 80% → 整体放弃（宁可放过广告，不可误删正片）。
+ *       命中重复插入判据时判定置信度高，下限放宽到 50%——短剧单集只有 1~2 分钟，
+ *       广告占四成是这类源站的常态，用 80% 会把有效判据全部挡回去。</li>
  * </ol>
  *
  * <p>重建（比"在原文本上删段"更稳）：按保留 run 逐个重放各自的 KEY/MAP 行——
@@ -71,6 +77,21 @@ public final class HlsAdFilter {
         public long absoluteMaxSec = 300;
         /** 安全钳下限：过滤后时长必须 ≥ 原始时长 × 该值，否则整体放弃 */
         public double safetyFloor = 0.8;
+        /**
+         * 高置信场景（命中「重复插入」判据）的安全钳下限。
+         *
+         * <p>短剧单集常只有 1~2 分钟，站方塞 25s 开头广告 + 25s 中插广告是常态，
+         * 删除量能到四成。用 0.8 会把本来判对了的结果全部挡回去，所以这里给一个
+         * 更松的下限；但绝不放到 0.5 以下——那意味着删掉一半以上，任何误判都会毁掉播放。
+         */
+        public double safetyFloorHighConfidence = 0.5;
+        /**
+         * 「重复插入」判据的相对上限：被判组时长必须 &lt; 该比例 × 最长组。
+         *
+         * <p>正片被整段重复贴两遍、且广告比它还长——这种结构一旦判错就是删掉正片，
+         * 所以留一道上限：广告明显比正片短的站才用这条判据，比例失真的保守放行。
+         */
+        public double duplicateMaxRatio = 0.8;
         /** 高置信 URL 模式（小写子串匹配）；只作兜底，命中且 ≤ absoluteMaxSec 才删 */
         public List<String> urlPatterns = new ArrayList<>(java.util.Arrays.asList(
                 "/ad/", "/ads/", "/adv/", "/advert", "/gg/", "/preroll/", "/midroll/", "ad.m3u8"));
@@ -97,12 +118,16 @@ public final class HlsAdFilter {
     private static final class Run {
         /** 本 run 的全部行（KEY/MAP/DISCONTINUITY 除外，按原顺序） */
         final List<String> lines = new ArrayList<>();
+        /** 本 run 的分片 URI（相对/原始形式，按出现顺序），用于识别「同一批文件被贴了两遍」 */
+        final List<String> segUris = new ArrayList<>();
         /** 本 run 生效的 #EXT-X-KEY 行文本；null = 从未声明过（重建时需显式 METHOD=NONE 复位） */
         String keyLine;
         /** 本 run 生效的 #EXT-X-MAP 行文本；null = 无 */
         String mapLine;
         /** 签名：host|目录|KEY|MAP */
         String sig;
+        /** segUris 拼接串，重复检测用（分片数一般几十个，直接拼比存哈希更省事也更少坑） */
+        String segKey;
         /** 总时长（秒） */
         double dur;
         /** 首个分片 URI（已解析绝对形式），供 URL 模式兜底 */
@@ -159,6 +184,7 @@ public final class HlsAdFilter {
                 }
                 sawSegs = true;
                 cur.lines.add(ln);
+                cur.segUris.add(ln);
                 if (cur.firstUri == null) cur.firstUri = resolve(baseUrl, ln);
                 cur.segCount++;
                 cur.dur += pendDur;
@@ -233,7 +259,12 @@ public final class HlsAdFilter {
         if (uriCount == 0 || runs.size() < 2) return reject("no-runs(uri=" + uriCount
                 + ",runs=" + runs.size() + ")");
 
-        for (Run r : runs) r.sig = signature(baseUrl, r);
+        for (Run r : runs) {
+            r.sig = signature(baseUrl, r);
+            StringBuilder kb = new StringBuilder();
+            for (String s : r.segUris) kb.append(s).append('\n');
+            r.segKey = kb.toString();
+        }
 
         // ---------- 归组 + 广告判定 ----------
         Map<String, List<Run>> groups = new LinkedHashMap<>();
@@ -254,16 +285,28 @@ public final class HlsAdFilter {
         if (longest == null || longestDur <= 0) return reject("no-longest");
 
         Set<Run> removed = new HashSet<>();
+        boolean highConfidence = false;
         for (Map.Entry<String, List<Run>> e : groups.entrySet()) {
             List<Run> g = e.getValue();
-            if (g == longest) continue;
+            if (g == longest) continue;                       // 最长组永远保留（原逻辑）
             double d = 0;
             for (Run r : g) d += r.dur;
-            boolean ad = d < rules.relativeMaxRatio * longestDur && d <= rules.absoluteMaxSec;
-            if (!ad && d <= rules.absoluteMaxSec && rules.patternHit(g.get(0).firstUri)) ad = true;
-            if (ad) removed.addAll(g);
+            if (d > rules.absoluteMaxSec) continue;           // 超过绝对上限：当正片分段
+            boolean ad = d < rules.relativeMaxRatio * longestDur;
+            boolean dup = false;
+            if (!ad && d < rules.duplicateMaxRatio * longestDur && hasSelfDuplicate(g)) {
+                ad = true;                                    // 同一批文件被贴了两遍
+                dup = true;
+            }
+            if (!ad && rules.patternHit(g.get(0).firstUri)) ad = true;
+            if (ad) {
+                removed.addAll(g);
+                if (dup) highConfidence = true;
+            }
         }
         if (removed.isEmpty()) return reject("no-ad-candidate");
+        // 所有组都被判成广告 → 结构异常（连正片都被重复贴过），宁可不删
+        if (removed.size() == runs.size()) return reject("all-removed");
 
         // 累计每个 run 在原时间轴上的起点，顺带记录被删区间（供续播定位 / 进度回写换算）
         double totalDur = 0, keptDur = 0;
@@ -281,15 +324,26 @@ public final class HlsAdFilter {
             }
             cursorMs += runMs;
         }
-        if (keptDur < rules.safetyFloor * totalDur) {
+        // 高置信（重复插入）场景放宽到 safetyFloorHighConfidence：短剧单集只有 1~2 分钟，
+        // 广告占四成是这类源站的常态，用 0.8 会把判对了的结果全部挡回去。
+        double floor = highConfidence
+                ? Math.min(rules.safetyFloor, rules.safetyFloorHighConfidence)
+                : rules.safetyFloor;
+        if (keptDur < floor * totalDur) {
             AppLog.d(TAG, "safety clamp hit: kept=" + Math.round(keptDur) + "s total="
-                    + Math.round(totalDur) + "s -> passthrough");
-            return reject("safety-clamp(kept=" + Math.round(keptDur) + ",total=" + Math.round(totalDur) + ")");
+                    + Math.round(totalDur) + "s floor=" + floor + " -> passthrough");
+            return reject("safety-clamp(kept=" + Math.round(keptDur) + ",total=" + Math.round(totalDur)
+                    + ",floor=" + floor + ")");
         }
 
         // ---------- 按 run 重建 ----------
         StringBuilder out = new StringBuilder(text.length());
         for (String h : header) out.append(h).append('\n');
+        // 头部的 KEY/MAP 在解析时只记进变量、从未进入 header 列表，重建必须在开头显式补一行。
+        // 否则「头部声明 AES-128、第一个保留 run 沿用同一 KEY」时密钥行会整条消失，
+        // 播放器按明文解析 → 整片花屏。METHOD=NONE 多写一行无害，加密流少写一行是灾难。
+        if (headerKey != null) out.append(headerKey).append('\n');
+        if (headerMap != null) out.append(headerMap).append('\n');
         String lastKey = headerKey, lastMap = headerMap, prevSig = null;
         int removedRuns = 0;
         for (Run r : runs) {
@@ -353,6 +407,22 @@ public final class HlsAdFilter {
         }
         return host + "|" + dir + "|" + (r.keyLine == null ? "-" : r.keyLine)
                 + "|" + (r.mapLine == null ? "-" : r.mapLine);
+    }
+
+    /**
+     * 组内是否存在「两个 run 的分片序列完全相同」。
+     *
+     * <p>正片不会把同一批文件连贴两遍；出现即说明这是被复制插入的素材块
+     * （实测短剧源站：同一段 25.8s 广告贴在片头和片中，文件名逐个相同）。
+     */
+    private static boolean hasSelfDuplicate(List<Run> g) {
+        if (g.size() < 2) return false;
+        Set<String> seen = new HashSet<>();
+        for (Run r : g) {
+            if (r.segKey == null || r.segKey.isEmpty()) continue;
+            if (!seen.add(r.segKey)) return true;
+        }
+        return false;
     }
 
     private static String resolve(String baseUrl, String uri) {

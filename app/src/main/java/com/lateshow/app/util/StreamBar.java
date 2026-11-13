@@ -61,6 +61,9 @@ public final class StreamBar {
         if (copy != null) copy.setOnClickListener(v -> copy(v.getContext(), safe));
         View download = root.findViewById(R.id.btnDownloadStream);
         if (download != null) download.setOnClickListener(v -> open(v.getContext(), safe));
+        // 举报用的是剥掉凭据后的地址：服务端只按 host/路径聚合，token 传上去反而增加泄露面
+        View report = root.findViewById(R.id.btnReportAd);
+        if (report != null) report.setOnClickListener(v -> reportAd(v.getContext(), safe));
     }
 
     /** 开关关闭或播放器收起时立即隐藏，避免残留在画面上 */
@@ -70,8 +73,20 @@ public final class StreamBar {
         if (bar != null) bar.setVisibility(View.GONE);
     }
 
-    private static void copy(Context ctx, String url) {
+    /** 「有广告」：把当前地址作为未过滤样本提交给运营侧（走报告通道，removed=0 即标记） */
+    private static void reportAd(Context ctx, String url) {
         if (TextUtils.isEmpty(url)) return;
+        boolean ok = AdFilter.reportSample(url);
+        if (ok) {
+            Toast.makeText(ctx, "已提交，规则更新后会自动生效", Toast.LENGTH_SHORT).show();
+        } else {
+            // 老后端没有 adfilter 能力：至少把地址复制出来，用户还能反馈给开发者
+            copy(ctx, url);
+            Toast.makeText(ctx, "当前服务器不支持上报，地址已复制", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private static void copy(Context ctx, String url) {        if (TextUtils.isEmpty(url)) return;
         ClipboardManager cm = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("play-url", url));
         Toast.makeText(ctx, "播放地址已复制", Toast.LENGTH_SHORT).show();

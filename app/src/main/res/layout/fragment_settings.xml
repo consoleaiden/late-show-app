@@ -683,6 +683,20 @@
                     android:text="规则：内置规则"
                     android:visibility="gone" />
 
+                <!-- 未过滤广告的反馈入口：地址条「有广告」按钮，或点这里提交剪贴板里的地址 -->
+                <TextView
+                    android:id="@+id/tvAdFilterHelp"
+                    style="@style/MetaLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:lineSpacingMultiplier="1.4"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:textAllCaps="false"
+                    android:text="有广告没过滤掉？播放页地址条点「有广告」直接提交；也可先复制播放地址，再点这里提交"
+                    android:visibility="gone" />
+
                 <!-- 内测通道：拉规则时带 channel=beta（后端按渠道分版本线） -->
                 <LinearLayout
                     android:id="@+id/rowAdFilterBeta"

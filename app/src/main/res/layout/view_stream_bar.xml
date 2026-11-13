@@ -55,4 +55,20 @@
         android:textColor="#FF9A6A"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="下载当前视频" />
+
+    <!-- 广告没过滤干净时的一键反馈：把当前播放地址提交给运营侧，
+         服务端用 removed_runs=0 识别（自动统计只会在真删掉广告时入库）。 -->
+    <TextView
+        android:id="@+id/btnReportAd"
+        android:layout_width="wrap_content"
+        android:layout_height="30dp"
+        android:gravity="center"
+        android:paddingLeft="9dp"
+        android:paddingRight="9dp"
+        android:text="有广告"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:textColor="#FF6B6B"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="报告此视频有未过滤的广告" />
 </LinearLayout>

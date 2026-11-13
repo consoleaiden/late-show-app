@@ -360,8 +360,57 @@ public final class AdFilter {
         }
     }
 
-    /** 上报队列快照；成功即清空，失败保留到下次（服务端幂等：按 url+at 去重） */
-    private static void flushReports() {
+    /**
+     * 用户主动举报「这条视频有没过滤掉的广告」。
+     *
+     * <p>复用同一条上报通道，用 {@code removed_runs=0} 作天然标记：自动统计只在真正
+     * 删掉广告时才会入库（{@link #record} 仅在 res != null 时调用，至少 1 个 run），
+     * 因此服务端看到 removed_runs=0 的记录必然来自用户举报，不需要新接口或新字段。
+     * 运营侧按 `removed_runs = 0` 或 `removed_ms = 0` 过滤即可拿到举报样本。
+     *
+     * <p>即时发送：用户点完就发，不进 TTL 批次等待；失败仍留在队列里等下次重试。
+     *
+     * @return true = 已受理（入队成功），false = 后端不支持该能力或地址无效
+     */
+    public static boolean reportSample(String url) {
+        if (url == null || url.trim().isEmpty()) return false;
+        if (!ServerCaps.supports(CAP)) return false;
+        final String u = url.trim();
+        try {
+            List<String> list = PrefStore.get().adFilterReports();
+            if (queued(list, u)) return true;   // 队列里已有同一地址：连点不重复入队
+            JsonObject it = new JsonObject();
+            it.addProperty("url", u);
+            it.addProperty("rule_version", PrefStore.get().adFilterPackVersion());
+            it.addProperty("removed_runs", 0);
+            it.addProperty("removed_ms", 0);
+            it.addProperty("total_ms", 0);
+            it.addProperty("at", System.currentTimeMillis() / 1000L);
+            list.add(it.toString());
+            while (list.size() > REPORT_MAX) list.remove(0);
+            PrefStore.get().setAdFilterReports(list);
+            AppLog.d(TAG, "sample queued: " + u);
+            flushReports();      // 举报要立刻到达，不等攒批
+            return true;
+        } catch (Exception e) {
+            AppLog.w(TAG, "reportSample fail: " + e);
+            return false;
+        }
+    }
+
+    /** 队列里是否已有同一地址（队列上限 50 条，直接线性扫） */
+    private static boolean queued(List<String> list, String url) {
+        for (String s : list) {
+            try {
+                com.google.gson.JsonObject o =
+                        com.google.gson.JsonParser.parseString(s).getAsJsonObject();
+                if (o.has("url") && url.equals(o.get("url").getAsString())) return true;
+            } catch (Exception ignored) { }
+        }
+        return false;
+    }
+
+    /** 上报队列快照；成功即清空，失败保留到下次（服务端幂等：按 url+at 去重） */    private static void flushReports() {
         try {
             long now = System.currentTimeMillis();
             if (now < sReportBackoffUntil) return;   // 退避中：刚失败过，别每次起播都去撞

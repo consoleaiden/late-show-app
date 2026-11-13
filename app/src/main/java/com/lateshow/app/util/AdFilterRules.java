@@ -38,6 +38,13 @@ public final class AdFilterRules {
                 r.relativeMaxRatio = clamp(dbl(t, "relative_max_ratio", r.relativeMaxRatio), 0.05, 0.95);
                 r.absoluteMaxSec = clampL(long_(t, "absolute_max_sec", r.absoluteMaxSec), 10, 1800);
                 r.safetyFloor = clamp(dbl(t, "safety_floor", r.safetyFloor), 0.5, 1.0);
+                // 高置信场景（命中「同一批分片被贴两遍」）的下限。不允许低于 0.4：
+                // 再低就意味着允许删掉一大半内容，任何误判都会毁掉播放。
+                r.safetyFloorHighConfidence = clamp(
+                        dbl(t, "safety_floor_high_confidence", r.safetyFloorHighConfidence), 0.4, 1.0);
+                // 「重复插入」判据的相对上限，只允许往保守方向调（0.3~0.9）
+                r.duplicateMaxRatio = clamp(
+                        dbl(t, "duplicate_max_ratio", r.duplicateMaxRatio), 0.3, 0.9);
             }
 
             if (p.has("url_patterns") && p.get("url_patterns").isJsonArray()) {

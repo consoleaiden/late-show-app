@@ -248,6 +248,12 @@ public class SettingsFragment extends Fragment {
             rowBeta.setVisibility(backendAdFilter ? android.view.View.VISIBLE
                     : android.view.View.GONE);
         }
+        android.widget.TextView tvAdFilterHelp = v.findViewById(R.id.tvAdFilterHelp);
+        if (tvAdFilterHelp != null) {
+            tvAdFilterHelp.setVisibility(backendAdFilter ? android.view.View.VISIBLE
+                    : android.view.View.GONE);
+            tvAdFilterHelp.setOnClickListener(x -> submitClipboardSample());
+        }
         if (swAdFilterBeta != null) {
             swAdFilterBeta.setChecked(PrefStore.get().adFilterBeta());
             swAdFilterBeta.setOnCheckedChangeListener((bv, on) -> {
@@ -760,6 +766,44 @@ public class SettingsFragment extends Fragment {
         android.widget.TextView tv = getView().findViewById(R.id.tvAdFilterInfo);
         if (tv == null || tv.getVisibility() != android.view.View.VISIBLE) return;
         tv.setText(com.lateshow.app.util.AdFilter.statusLine() + " · 点击立即刷新");
+    }
+
+    /**
+     * 提交剪贴板里的播放地址作为「未过滤广告」样本。
+     *
+     * <p>没走对话框输入：m3u8 地址又长又难敲，用户实际是从播放页「复制」过来的。
+     * 读不到 http(s) 地址时直接提示先去复制，不做无意义的手输入口。
+     */
+    private void submitClipboardSample() {
+        String url = readClipboardUrl();
+        if (url == null) {
+            toast("剪贴板里没有播放地址，请先在播放页地址条点「复制」");
+            return;
+        }
+        boolean ok = com.lateshow.app.util.AdFilter.reportSample(url);
+        String host = "";
+        try {
+            host = android.net.Uri.parse(url).getHost();
+        } catch (Exception ignored) { }
+        toast(ok ? "已提交" + (host == null ? "" : "（" + host + "）") + "，规则更新后自动生效"
+                 : "提交失败：当前服务器暂不支持样本上报");
+    }
+
+    /** 取剪贴板里第一个 http(s) 链接；没有返回 null */
+    private String readClipboardUrl() {
+        try {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                    requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+            if (cm == null || !cm.hasPrimaryClip()) return null;
+            android.content.ClipData c = cm.getPrimaryClip();
+            if (c == null || c.getItemCount() == 0) return null;
+            CharSequence t = c.getItemAt(0).coerceToText(requireContext());
+            if (t == null) return null;
+            String s = t.toString().trim();
+            return (s.startsWith("http://") || s.startsWith("https://")) ? s : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 检查 GitHub Release 是否有新版本，有则提示更新 */
