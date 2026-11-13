@@ -57,7 +57,8 @@
   "changed": true,
   "version": 3,
   "rules": {
-    "thresholds": { "relative_max_ratio": 0.5, "absolute_max_sec": 300, "safety_floor": 0.8 },
+    "thresholds": { "relative_max_ratio": 0.5, "absolute_max_sec": 300, "safety_floor": 0.8,
+                    "safety_floor_high_confidence": 0.5, "duplicate_max_ratio": 0.8 },
     "url_patterns": ["/ad/", "/ads/", "/adv/", "/advert", "/gg/", "/preroll/", "/midroll/", "ad.m3u8"],
     "site_overrides": [ { "host": "some-ad-heavy-site.com", "mode": "off" } ]
   }
@@ -75,6 +76,8 @@
 | `thresholds.relative_max_ratio` | double | 0.5 | [0.05, 0.95] | 广告源组相对时长上限：组时长 < 比例 × 最长源组时长 才判广告 |
 | `thresholds.absolute_max_sec` | long | 300 | [10, 1800] | 广告源组绝对时长上限（秒），防多段拼片正片被误杀 |
 | `thresholds.safety_floor` | double | 0.8 | [0.5, 1.0] | 安全钳：过滤后总时长 < 原始 × 该值 → 客户端整体放弃本次过滤 |
+| `thresholds.safety_floor_high_confidence` | double | 0.5 | [0.4, 1.0] | **v1.5.169 新增**。命中「同一批分片被贴两遍」判据时的安全钳下限（短剧单集只有 1~2 分钟，广告占四成是常态，0.8 会把判对的结果全挡回去） |
+| `thresholds.duplicate_max_ratio` | double | 0.8 | [0.3, 0.9] | **v1.5.169 新增**。「重复插入」判据的相对上限：被判组时长必须 < 该比例 × 最长组；广告比正片还长的结构一律放行 |
 | `url_patterns` | string[] | 内置 8 项 | ≤64 条，非空 | 高置信 URL 子串（小写匹配），命中且组时长 ≤ absolute_max_sec 才删；**禁止放入 `/shop/` `/sale/` `/brand/` 这类语义词**（会对正常影视目录误杀） |
 | `site_overrides[].host` | string | — | ≤256 条 | 站点域名（客户端按小写精确匹配播放地址 host） |
 | `site_overrides[].mode` | string | — | 当前仅 `"off"` | `off` = 该站点整体不过滤（用于误报站点止血） |
@@ -110,6 +113,23 @@
 | `removed_ms` | long | 删除的广告总时长（毫秒） |
 | `total_ms` | long | 过滤前列表总时长（毫秒） |
 | `at` | long | 过滤发生时刻，epoch 秒 |
+
+**用户主动举报样本（v1.5.169 起，复用本接口，无需新增端点）**
+
+播放页地址条的「有广告」按钮、设置页的反馈行，都会往同一个报告通道投递一条
+`removed_runs = 0, removed_ms = 0, total_ms = 0` 的记录。
+
+这不是脏数据，而是**样本举报标记**：自动统计只在真正删掉广告时才入库
+（客户端 `record()` 仅在过滤结果为非 null 时调用，至少 1 个 run），
+所以 `removed_runs == 0` 的记录**必然来自用户手动举报**。
+
+服务端建议：
+
+- 保持现有校验不变（`removed_ms ≤ total_ms` 对 0/0 天然成立，不会丢弃）；
+- 运营视图里把 `removed_runs = 0` 的记录单独列出（url + host + at 即可），
+  作为「规则漏判样本」的输入源，配合 `/adfilter/admin/stats` 的 host 分布决定是否调参；
+- 若要长期做样本库（存列表原文、供离线回归），再单开 `POST /adfilter/sample`
+  存 `{url, playlist, note}`；当前这版客户端只用 report 通道，不依赖该端点。
 
 **客户端发送行为**（服务端容量规划的依据）：本地攒批，队列 ≥5 条或规则拉取成功时触发；单批 ≤50 条；上报失败本地保留重试、超上限滚动丢弃最旧 → **服务端必须幂等**：按 `(token, url, at)` 去重，重复上报不产生重复记录。
 
@@ -276,6 +296,22 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/
 2. 误杀止血流程已闭环：`site_overrides` 加 `{host, mode:"off"}` 发新版 → 客户端 30 分钟 TTL 内生效，也可让用户点设置页状态行立刻拉取；
 3. 整体误杀：面板一键回滚（发新版本号 + 旧内容，客户端只比较版本大小，无需特殊分支）。
 
+**P0（v1.5.169 追加）—— 两行阈值必须登记，否则新参数被静默丢弃**
+
+`normalize()` 的 `_THRESHOLDS` 是白名单，表里没有的键**不报错、直接丢掉**。客户端 v1.5.169 起会读两个新参数，服务端不登记的话，面板上填了也不会下发（看着像客户端没生效，实际是服务端自己吞了）：
+
+```python
+_THRESHOLDS = {
+    "relative_max_ratio": (0.05, 0.95, False),
+    "absolute_max_sec": (10, 1800, True),
+    "safety_floor": (0.5, 1.0, False),
+    "safety_floor_high_confidence": (0.4, 1.0, False),   # 新增
+    "duplicate_max_ratio": (0.3, 0.9, False),            # 新增
+}
+```
+
+不登记也不会出事：客户端两个字段都有内置默认值（0.5 / 0.8），内置规则照常工作。只是失去了运营侧动态调参的能力。
+
 **P1 —— 建议补的聚合视图（纯后端，约半天）**
 
 `GET /adfilter/admin/stats` 目前只给全局 `removed_ratio`。误杀通常发生在**单个站点**上，全局比例会被其它正常站点稀释，看不出异常。建议增加按 host 的分布：
@@ -314,3 +350,34 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/
 1. **首次观看某片且从中间续播时有一次偏移**：删除区间要等播放列表真正下载完才知道，起播那一刻缓存还是空的，位置按原始轴下发，最多偏移一个广告总时长；第二次起就准确（缓存已建立）。从 0 开始看不受影响。
 2. 播放列表 URL 每次变化（源站换域名/换目录）会导致缓存 miss，退化为上面的情况。
 3. 上报是采样性质：队列上限 50 条，超出滚动丢弃最旧，服务端统计应看趋势而非绝对值。
+
+### 7.5 v1.5.169 判据增强：「同一批分片被贴两遍」
+
+**触发样本**（`https://vip2.bfbfhao.com/20241007/LrKc9O6T/index.m3u8`，854x1652 竖屏短剧）：
+
+| run | 时长 | 分片目录 | 备注 |
+|---|---|---|---|
+| A | 25.76s | `/20261009/RCP0FQBQ/9622kb/hls` | 片头广告 |
+| B | 10.00s | `/20241007/LrKc9O6T/hls` | 正片 |
+| C | 25.76s | `/20261009/RCP0FQBQ/9622kb/hls` | **与 A 逐文件相同** |
+| D | 60.20s | `/20241007/LrKc9O6T/hls` | 正片 |
+
+旧规则按「组时长 < 50% × 最长组」判定，广告组 51.5s 对正片组 70.2s = 73%，不满足 → `no-ad-candidate` 整包放行。
+
+**新判据**：同一源组内出现两个**分片序列完全相同**的 run → 该组是「被重复贴进去的素材」。
+正片不会自我重复，只有广告会被插多遍。这条不受时长比例约束，但有上限
+`duplicate_max_ratio`（默认 0.8，广告比正片还长的结构一律放行）。
+
+命中时安全钳下限从 0.8 放宽到 `safety_floor_high_confidence`（默认 0.5）：短剧单集只有
+1~2 分钟，广告占四成是常态，0.8 会把判对的结果全部挡回去。本样本 kept = 70.2/121.7 = 57.7%，通过。
+
+**同日修复**：重建播放列表时，头部声明的 `#EXT-X-KEY` / `#EXT-X-MAP` 只记进了变量、
+从未写回 `header` 列表，导致「头部声明 AES-128 + 首个保留 run 沿用同一 KEY」时密钥行整条消失
+→ 播放器按明文解析 → 整片花屏。现在重建开头显式补回。
+
+**回归覆盖**：15 个真实/合成样本 × 2 种 baseUrl = 30 组，判定仅新样本 2 组变化，其余 28 组一致；
+输出字节唯一差异是补回的头部 KEY 行。边界用例（AES 头部、正片自身重复、广告重复、直播流）全部符合预期。
+
+**试过但撤掉的方案**：「分片目录与播放列表目录一致 = 正片」的锚定判据。实测会反向出错——
+短剧源站的广告素材常常和列表同目录，锚定会把广告锁成正片、进而删掉真正片。目录关系不可靠，
+重复插入才是结构层面的硬证据。
