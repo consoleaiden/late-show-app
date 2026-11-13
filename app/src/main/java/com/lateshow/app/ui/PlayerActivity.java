@@ -119,10 +119,11 @@ public class PlayerActivity extends AppCompatActivity {
         // 控制栏/半透明遮罩超时自动隐藏（media3 默认 5 秒）。原来 2 秒太短，
         // 手指抬起就已经消失，容易被当成「没有控制条」（真机 2026-11-13）
         pv.setControllerShowTimeoutMs(5000);
-        // 倍速 + 播放设置（悬浮工具，右上角），并把上次倍速立即应用
+        // 播放设置聚合面板（倍速/广告提报/跳过片头片尾/复制地址/下载），内嵌与全屏共用；
+        // 地址按需现取（streamUrl 字段，decorate 后的真正在播直链），并把上次倍速立即应用
         final View playerTools = findViewById(R.id.playerTools);
         com.lateshow.app.util.PlayerPanel.attach(
-                findViewById(R.id.btnSpeed), findViewById(R.id.btnGear), player);
+                findViewById(R.id.btnSpeed), findViewById(R.id.btnGear), player, () -> streamUrl);
         com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
         // 胶囊跟随控制栏显隐：轻点屏幕出现、约 2 秒后随控制栏自动隐藏（与内嵌一致）
         pv.setControllerVisibilityListener(new androidx.media3.ui.PlayerView.ControllerVisibilityListener() {

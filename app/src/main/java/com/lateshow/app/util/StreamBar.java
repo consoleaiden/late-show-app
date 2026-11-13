@@ -73,6 +73,27 @@ public final class StreamBar {
         if (bar != null) bar.setVisibility(View.GONE);
     }
 
+    // ===== 供播放设置聚合面板（PlayerPanel）复用的公开入口：行为与地址条完全一致，
+    // 统一先剥凭据参数（审计 A-34 / A-06），地址为空时静默忽略。 =====
+
+    /** 复制播放地址 */
+    public static void copyUrl(Context ctx, String url) {
+        if (TextUtils.isEmpty(url)) return;
+        copy(ctx, sanitize(url));
+    }
+
+    /** 下载（交给系统浏览器 / 下载器处理） */
+    public static void downloadUrl(Context ctx, String url) {
+        if (TextUtils.isEmpty(url)) return;
+        open(ctx, sanitize(url));
+    }
+
+    /** 广告提报：把当前地址作为未过滤样本提交给运营侧（removed_runs=0 即标记） */
+    public static void reportAdUrl(Context ctx, String url) {
+        if (TextUtils.isEmpty(url)) return;
+        reportAd(ctx, sanitize(url));
+    }
+
     /** 「有广告」：把当前地址作为未过滤样本提交给运营侧（走报告通道，removed=0 即标记） */
     private static void reportAd(Context ctx, String url) {
         if (TextUtils.isEmpty(url)) return;

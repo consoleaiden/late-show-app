@@ -2143,6 +2143,7 @@ public class DetailFragment extends Fragment {
     private void leaveInline() {
         if (!inlineActive) return;
         inlineActive = false;
+        com.lateshow.app.util.PlayerPanel.dismissPanel();  // 聚合面板是悬浮窗，退播放态前先收
         if (playerContainer != null && playerView != null) {
             // 常驻布局：只隐藏、不 GONE（见 onViewCreated 注释）
             playerContainer.setAlpha(0f);
@@ -2230,11 +2231,19 @@ public class DetailFragment extends Fragment {
             // 控制栏/半透明遮罩超时自动隐藏。原来 2 秒太短：手指刚抬起来就已经消失了，
             // 很容易被当成「没有控制条」（真机 2026-11-13）。回到 media3 默认的 5 秒。
             playerView.setControllerShowTimeoutMs(5000);
+            // 关掉控制条的自动弹出（默认 STATE_READY / playWhenReady 变化时会自动显示）：
+            // 起播直接进入正常画面，不再先盖一层半透明遮罩 + 控制按钮 + 全屏按钮等 5 秒。
+            // 轻点画面呼出/隐藏控制条的行为不受影响（toggle 走触摸逻辑，与 autoShow 无关）。
+            playerView.setControllerAutoShow(false);
             // 点全屏按钮才进入横屏全屏
             playerView.setFullscreenButtonClickListener(v -> goFullscreen());
-            // 倍速 + 播放设置（悬浮工具，见布局右上角）
+            // 播放设置聚合面板（倍速/广告提报/跳过片头片尾/复制地址/下载），内嵌与全屏共用；
+            // 播放地址换集会变，用 UrlProvider 现取（与地址条一致，decorate 归一化后的直链）
             com.lateshow.app.util.PlayerPanel.attach(
-                    getView().findViewById(R.id.btnSpeed), getView().findViewById(R.id.btnGear), player);
+                    getView().findViewById(R.id.btnSpeed), getView().findViewById(R.id.btnGear), player,
+                    () -> curPlayUrl != null
+                            ? VodSyncApi.get().decorate(curPlayUrl)
+                            : guessStreamUrl(curUrl));
             com.lateshow.app.util.PlayerPanel.applySavedSpeed(player);
             player.addListener(new Player.Listener() {
                 @Override public void onPlaybackStateChanged(int state) {
@@ -2756,6 +2765,7 @@ public class DetailFragment extends Fragment {
     /** 点全屏按钮：暂停内嵌播放并携带当前进度进入横屏全屏 */
     private void goFullscreen() {
         if (player == null || curUrl == null) return;
+        com.lateshow.app.util.PlayerPanel.dismissPanel();  // 聚合面板是悬浮窗，先收再进全屏
         long pos = player.getCurrentPosition();
         player.pause();
         Intent it = new Intent(requireContext(), PlayerActivity.class);
