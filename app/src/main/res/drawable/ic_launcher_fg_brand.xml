@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 方寸自适应图标前景（108 viewport，安全区 66dp 内）：
+     fangcun-app-icon.svg 等比缩放 0.3125（外框 128→40，中心 (80,80)→(54,54)），
+     坐标换算 p\' = 0.3125·p + 29（frame: 16..144 → 34..74, rx 2.8; tri 线宽 2.8→0.9）。
+     前景只含线条，底色由 ic_launcher_background（brandInk 暖墨）承担。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:pathData="M36.8,34 L71.2,34 A2.8,2.8 0 0 1 74,36.8 L74,71.2 A2.8,2.8 0 0 1 71.2,74 L36.8,74 A2.8,2.8 0 0 1 34,71.2 L34,36.8 A2.8,2.8 0 0 1 36.8,34 Z"
+        android:strokeColor="#F2ECE6"
+        android:strokeWidth="0.8"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:pathData="M61.33,55.54 L51.08,61.36 Q48.44,62.85 48.44,59.80 L48.44,48.17 Q48.44,45.11 51.08,46.61 L61.33,52.50 Q64,54 61.33,55.54 Z"
+        android:strokeColor="#FE5A35"
+        android:strokeWidth="0.9"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+</vector>

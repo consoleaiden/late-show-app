@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 方寸自适应图标：暖墨底 + 线条前景（API 26+；更低版本走 mipmap 各密度 PNG） -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/brandInk" />
+    <foreground android:drawable="@drawable/ic_launcher_fg_brand" />
+    <monochrome android:drawable="@drawable/ic_launcher_fg_brand" />
+</adaptive-icon>

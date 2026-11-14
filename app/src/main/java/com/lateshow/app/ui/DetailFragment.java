@@ -136,6 +136,8 @@ public class DetailFragment extends Fragment {
     private boolean offlineMode = false;
     /** 详情/分集加载态：骨架 + 呼吸动画 + 失败重试 */
     private View loadingLayer, loadingSpinner, loadingSkeleton, btnRetry;
+    /** 方寸品牌加载动画（挂在 loadingSpinner 上，见 onViewCreated） */
+    private com.lateshow.app.util.FangcunLoadingDrawable brandLoading;
     private TextView loadingText;
     private android.animation.ObjectAnimator skeletonAnim;
     private final Handler loadHandler = new Handler(Looper.getMainLooper());
@@ -320,6 +322,12 @@ public class DetailFragment extends Fragment {
         contentCol = v.findViewById(R.id.contentCol);
         loadingLayer = v.findViewById(R.id.loadingLayer);
         loadingSpinner = v.findViewById(R.id.loadingSpinner);
+        // 方寸品牌加载动画：无背景色，方框色随明暗主题翻转（brandMarkStroke）；可见时 start、
+        // 隐藏时 pause（离屏不空转）
+        if (loadingSpinner instanceof ImageView) {
+            brandLoading = new com.lateshow.app.util.FangcunLoadingDrawable(requireContext());
+            ((ImageView) loadingSpinner).setImageDrawable(brandLoading);
+        }
         loadingText = v.findViewById(R.id.loadingText);
         loadingSkeleton = v.findViewById(R.id.loadingSkeleton);
         btnRetry = v.findViewById(R.id.btnRetry);
@@ -877,6 +885,7 @@ public class DetailFragment extends Fragment {
         loadingLayer.setVisibility(View.VISIBLE);
         loadingLayer.setAlpha(1f);
         loadingSpinner.setVisibility(View.VISIBLE);
+        if (brandLoading != null) brandLoading.start();
         loadingText.setText("正在加载影片详情与分集…");
         loadingSkeleton.setVisibility(View.VISIBLE);
         btnRetry.setVisibility(View.GONE);
@@ -909,6 +918,7 @@ public class DetailFragment extends Fragment {
                         loadingLayer.setVisibility(View.GONE);
                         loadingLayer.setAlpha(1f);
                     }
+                    if (brandLoading != null) brandLoading.pause();
                 }).start();
     }
 
@@ -923,6 +933,7 @@ public class DetailFragment extends Fragment {
         loadingLayer.setVisibility(View.VISIBLE);
         loadingLayer.setAlpha(1f);
         loadingSpinner.setVisibility(View.GONE);
+        if (brandLoading != null) brandLoading.pause();
         loadingSkeleton.setVisibility(View.GONE);
         loadingText.setText(msg);
         btnRetry.setVisibility(View.VISIBLE);

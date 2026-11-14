@@ -550,7 +550,7 @@ public final class UpdateChecker {
                 && !act.getPackageManager().canRequestPackageInstalls()) {
             new MaterialAlertDialogBuilder(act)
                     .setTitle("需要安装权限")
-                    .setMessage("请允许「夜场 LATE SHOW」安装应用，返回后再次点击更新即可。")
+                    .setMessage("请允许「方寸」安装应用，返回后再次点击更新即可。")
                     .setPositiveButton("去开启", (d, w) -> {
                         try {
                             act.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 深色主题下的品牌色覆盖：方框描边翻转为宣白（浅色主题见 values/brand_colors.xml） -->
+<resources>
+    <color name="brandMarkStroke">#F2ECE6</color>
+</resources>

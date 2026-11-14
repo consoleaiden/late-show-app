@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 开屏专用主题：暗场海报底，明暗主题下都固定暖墨（品牌开屏海报即暗场）。
+         只在本文件定义一次（values-night 不覆盖），保证两种主题下开屏观感一致。 -->
+    <style name="Theme.LateShow.Splash" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/brandInk</item>
+        <item name="android:statusBarColor">@color/brandInk</item>
+        <item name="android:navigationBarColor">@color/brandInk</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="colorPrimary">@color/brandTri</item>
+        <item name="colorSurface">@color/brandInk</item>
+        <item name="android:colorBackground">@color/brandInk</item>
+    </style>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 方寸品牌色（唯一配置点）。品牌源文件：fangcun-brand-kit（朱砂 #FE5A35 / 暖墨 #1B1412 / 宣白 #F2ECE6） -->
+<resources>
+    <!-- 品牌暖墨底：开屏 / 启动图标背景，两种主题下固定使用（开屏海报本来就是暗场） -->
+    <color name="brandInk">#1B1412</color>
+    <!-- 品牌宣白：暗场上的线条与题字（开屏、夜间 loading） -->
+    <color name="brandPaper">#F2ECE6</color>
+    <!-- 品牌朱砂：主题强调色的品牌来源，与 acc（#FF5A36）同源 -->
+    <color name="brandTri">#FE5A35</color>
+    <!-- 品牌方框描边：浅色主题用暖墨、深色主题用宣白（values-night 覆盖） -->
+    <color name="brandMarkStroke">#1B1412</color>
+</resources>

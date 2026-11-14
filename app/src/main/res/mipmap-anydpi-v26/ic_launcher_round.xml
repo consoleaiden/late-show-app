@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 方寸自适应圆角图标（与方图标同构图，系统按圆形遮罩裁切） -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/brandInk" />
+    <foreground android:drawable="@drawable/ic_launcher_fg_brand" />
+    <monochrome android:drawable="@drawable/ic_launcher_fg_brand" />
+</adaptive-icon>

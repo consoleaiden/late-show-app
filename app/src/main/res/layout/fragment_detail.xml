@@ -562,12 +562,13 @@
                             android:clickable="true"
                             android:visibility="gone">
 
-                            <ProgressBar
+                            <!-- 方寸品牌加载动画（自绘 Drawable，无背景色，方框色随明暗主题翻转） -->
+                            <androidx.appcompat.widget.AppCompatImageView
                                 android:id="@+id/loadingSpinner"
-                                android:layout_width="34dp"
-                                android:layout_height="34dp"
-                                android:indeterminate="true"
-                                android:indeterminateTint="@color/acc" />
+                                android:layout_width="44dp"
+                                android:layout_height="44dp"
+                                android:scaleType="fitCenter"
+                                android:contentDescription="加载中" />
 
                             <TextView
                                 android:id="@+id/loadingText"

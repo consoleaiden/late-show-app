@@ -892,13 +892,29 @@
             </LinearLayout>
         </LinearLayout>
 
-        <TextView
-            style="@style/MetaLabel"
+        <!-- 品牌页脚：字标 + 名称（方框色随明暗主题翻转，见 brandMarkStroke） -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
             android:layout_marginTop="16dp"
-            android:text="夜场 LATE SHOW · 开源影视聚合客户端" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginLeft="2dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_brand_mark"
+                android:contentDescription="方寸字标" />
+
+            <TextView
+                style="@style/MetaLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:text="方寸 · 开源影视聚合客户端" />
+        </LinearLayout>
     </LinearLayout>
     </ScrollView>
 

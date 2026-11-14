@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 方寸品牌字标（浅色主题）：暖墨方框 + 朱砂三角（几何来自 fangcun-logo.svg，160 基准）。
+     题字「方寸」不放进矢量（VectorDrawable 无文本），由调用处的 TextView 用衬线字体补齐。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+
+    <path
+        android:pathData="M25,16 L135,16 A9,9 0 0 1 144,25 L144,135 A9,9 0 0 1 135,144 L25,144 A9,9 0 0 1 16,135 L16,25 A9,9 0 0 1 25,16 Z"
+        android:strokeColor="@color/brandMarkStroke"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:pathData="M103.45,84.93 L70.67,103.56 Q62.22,108.33 62.22,98.56 L62.22,61.33 Q62.22,51.56 70.67,56.36 L103.45,75.2 Q112,80 103.45,84.93 Z"
+        android:strokeColor="@color/brandTri"
+        android:strokeWidth="2.8"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+</vector>
