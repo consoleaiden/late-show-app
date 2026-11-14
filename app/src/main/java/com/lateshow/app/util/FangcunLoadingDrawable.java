@@ -99,6 +99,16 @@ public final class FangcunLoadingDrawable extends Drawable {
         if (!anim.isRunning()) anim.start();
     }
 
+    /**
+     * 三角颜色：主题引擎开启时由宿主传入当前方案主色，否则保持构造时的品牌朱砂。
+     * 方框色不随主题变（明/暗场各自用 brandMarkStroke 保证对比度）。
+     */
+    public void setAccentColor(int color) {
+        if (triPaint.getColor() == color) return;
+        triPaint.setColor(color);
+        invalidateSelf();
+    }
+
     /** 暂停并回到静止完整态（宿主隐藏时调用，避免离屏空转） */
     public void pause() {
         paused = true;

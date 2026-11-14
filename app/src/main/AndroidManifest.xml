@@ -48,6 +48,18 @@
             android:exported="false"
             android:windowSoftInputMode="adjustPan" />
 
+        <!-- 自定义主题管理主页（预设选用 / 明暗双绑定） -->
+        <activity
+            android:name=".theme.ThemeGalleryActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode" />
+
+        <!-- 主题编辑器（新建 / 编辑自定义配色方案） -->
+        <activity
+            android:name=".theme.ThemeEditorActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode" />
+
         <!-- 应用内更新：把缓存的 APK 以 content:// 形式交给系统安装器 -->
         <provider
             android:name="androidx.core.content.FileProvider"

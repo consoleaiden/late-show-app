@@ -498,6 +498,18 @@ public final class PrefStore {
         sp.edit().putInt("theme", t).apply();
     }
 
+    /**
+     * 主题方案是否启用（默认关闭 = 沿用原内置明暗配色，保证升级后观感不变）。
+     * 用户在「自定义主题」里选择方案后开启；关闭后 lightId/darkId 的绑定自动失效。
+     */
+    public boolean themeEngineOn() {
+        return sp.getBoolean("theme_engine_on", false);
+    }
+
+    public void setThemeEngineOn(boolean on) {
+        sp.edit().putBoolean("theme_engine_on", on).apply();
+    }
+
     // ---------- 播放偏好：跳过片头/片尾 ----------
 
     public int skipIntroSec() {

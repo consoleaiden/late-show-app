@@ -37,9 +37,12 @@ public class SplashActivity extends AppCompatActivity {
         View slogan = findViewById(R.id.splashSlogan);
         View root = findViewById(R.id.splashRoot);
 
+        // 三角跟随当前方案主色（引擎关闭时回退品牌朱砂）；方框恒为宣白，保证暗场可读
+        int tri = com.lateshow.app.theme.ThemeEngine.isEnabled(this)
+                ? com.lateshow.app.theme.ThemeEngine.accentOf(this)
+                : ContextCompat.getColor(this, R.color.brandTri);
         FangcunMarkDrawable d = new FangcunMarkDrawable(
-                ContextCompat.getColor(this, R.color.brandPaper),
-                ContextCompat.getColor(this, R.color.brandTri));
+                ContextCompat.getColor(this, R.color.brandPaper), tri);
         mark.setImageDrawable(d);
 
         ValueAnimator draw = ValueAnimator.ofFloat(0f, 1f);

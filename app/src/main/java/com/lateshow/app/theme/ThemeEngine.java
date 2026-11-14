@@ -1,0 +1,852 @@
+package com.lateshow.app.theme;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.view.View;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.util.Pair;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import com.lateshow.app.R;
+
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 主题引擎：预设 + 自定义配色方案的持久化、解析与运行时换肤。
+ *
+ * 设计要点：
+ *  <ul>
+ *    <li>主题方案（{@link ThemeScheme}）是一份 JSON，存在 SharedPreferences；</li>
+ *    <li>亮色 / 暗色各自绑定一个方案 id（{@code lightSchemeId} / {@code darkSchemeId}），
+ *        默认「方寸」= 原应用内置明暗配色；</li>
+ *    <li>{@link #applyRuntime(Context, View)} 把当前生效方案的解析色写到窗口背景 / 系统栏 /
+ *        各液态玻璃栏，Activity 重建后即可复用（无需每次 onCreate 都读盘）；</li>
+ *    <li>辅助色（{@code accent2}）默认由主色按 HSL 偏移自动生成，用户可覆盖为任意值。</li>
+ *  </ul>
+ */
+public final class ThemeEngine {
+
+    /** 保留原内置配色的方案 id（不可删除） */
+    public static final String ID_FANG_CUN = "fangcun";
+
+    private static volatile ThemeEngine sInstance;
+
+    private final SharedPreferences sp;
+    private final Gson gson = new Gson();
+
+    // ---- 进程内缓存：避免高频读盘（列表滑动、滚动等场景都会取色） ----
+    @Nullable private List<ThemeScheme> cachedList;
+    @Nullable private ThemeScheme cachedLight, cachedDark;
+    private int cacheVersion = -1;
+
+    private static final String KEY_SCHEMES = "theme_schemes";
+    private static final String KEY_LIGHT = "theme_light_id";
+    private static final String KEY_DARK = "theme_dark_id";
+
+    private ThemeEngine(Context ctx) {
+        sp = ctx.getApplicationContext()
+                .getSharedPreferences("lateshow_theme", Context.MODE_PRIVATE);
+    }
+
+    public static ThemeEngine get() {
+        if (sInstance == null) {
+            throw new IllegalStateException("ThemeEngine.init(context) 未调用");
+        }
+        return sInstance;
+    }
+
+    public static void init(Context ctx) {
+        if (sInstance == null) {
+            synchronized (ThemeEngine.class) {
+                if (sInstance == null) sInstance = new ThemeEngine(ctx);
+            }
+        }
+    }
+
+    // ==================== 数据模型 ====================
+
+    /**
+     * 一套主题配色方案。
+     *
+     * 可配置项（全部开放给用户）：
+     *  - name            方案名
+     *  - primary         主色（选中态 / 按钮 / 强调）
+     *  - secondary       辅助色（自动生成，可改）
+     *  - bgMode          页面背景：纯色 / 渐变
+     *  - bgColor         纯色背景
+     *  - bgFrom/bgTo     渐变色（bgMode=1 时生效）
+     *  - bgAngle         渐变角度（度，0=从左到右，90=从上到下，顺时针旋转）
+     *  - surface         卡片面 / 顶栏玻璃底
+     *  - textPrimary     一级文字
+     *  - textSecondary   二级文字
+     *  - navAlpha        底部导航栏不透明度（0~100）
+     *  - searchAlpha     搜索栏不透明度
+     *  - categoryAlpha   分类栏不透明度
+     *  - barBlur         玻璃模糊强度（0~100）
+     *  - barFrost        玻璃白雾强度（0~100）
+     */
+    public static class ThemeScheme {
+        public String id;
+        public String name;
+        public int primary;
+        public int secondary;
+        public boolean secondaryAuto;   // true = 跟随主色自动生成
+        public int bgMode;              // 0 纯色 / 1 渐变
+        public int bgColor;
+        public int bgFrom;
+        public int bgTo;
+        public int bgAngle;
+        public int surface;
+        public int textPrimary;
+        public int textSecondary;
+        public int navAlpha;
+        public int searchAlpha;
+        public int categoryAlpha;
+        public int barBlur;
+        public int barFrost;
+
+        public ThemeScheme() {}
+
+        /** 复制构造（编辑时基于副本修改） */
+        public ThemeScheme copy() {
+            ThemeScheme c = new ThemeScheme();
+            c.id = id;
+            c.name = name;
+            c.primary = primary;
+            c.secondary = secondary;
+            c.secondaryAuto = secondaryAuto;
+            c.bgMode = bgMode;
+            c.bgColor = bgColor;
+            c.bgFrom = bgFrom;
+            c.bgTo = bgTo;
+            c.bgAngle = bgAngle;
+            c.surface = surface;
+            c.textPrimary = textPrimary;
+            c.textSecondary = textSecondary;
+            c.navAlpha = navAlpha;
+            c.searchAlpha = searchAlpha;
+            c.categoryAlpha = categoryAlpha;
+            c.barBlur = barBlur;
+            c.barFrost = barFrost;
+            return c;
+        }
+    }
+
+    // ==================== 预设包 ====================
+
+    /**
+     * 预设主题（参考图配色提取）。
+     * primary 用于选中/强调；secondaryAuto=true 时辅助色由主色偏移生成。
+     */
+    public static List<ThemeScheme> presets() {
+        List<ThemeScheme> list = new ArrayList<>();
+        // ① 方寸（内置品牌配色）
+        list.add(scheme(ID_FANG_CUN, "方寸",
+                0xFFFF5A36, 0xFFFE5A35,
+                0xFFF2ECE6, 0xFF1B1412, 0xFFEDE5DD,
+                true));
+        // ② 薄荷气泡（参考图 1：青绿主调，浅薄荷底）
+        list.add(scheme("mint", "薄荷气泡",
+                0xFF49AAA0, 0xFF49AAA0,
+                0xFFDFF2EC, 0xFFFFFFFF, 0xFFF4FAF7,
+                false, 0xFF4FD8C4));
+        // ③ 暗夜霓虹（参考图 2：深紫夜场 + 粉橙点缀）
+        list.add(scheme("neon", "暗夜霓虹",
+                0xFFFF6FA5, 0xFF302B4F,
+                0xFF221F3A, 0xFF302B4F, 0xFF181527,
+                false, 0xFFFF9BC6));
+        // ④ 柠檬汽水（参考图 3：荧光绿 + 深空蓝）
+        list.add(scheme("lemon", "柠檬汽水",
+                0xFF9CD71B, 0xFF9CD71B,
+                0xFFEFF7D8, 0xFFFFFFFF, 0xFFF7FBE9,
+                false, 0xFFC9F26B));
+        // ⑤ 经典墨黑（参考图 4：纯黑极简 + 荧光绿按钮）
+        list.add(scheme("mono", "经典墨黑",
+                0xFFE8F53C, 0xFF111111,
+                0xFF17181A, 0xFF232426, 0xFF101112,
+                false, 0xFFD3F270));
+        // ⑥ 碧海蓝天（参考图 5：天空蓝渐变）
+        list.add(scheme("ocean", "碧海蓝天",
+                0xFF1565C7, 0xFF1565C7,
+                0xFFEAF4FC, 0xFFFFFFFF, 0xFFF6FBFF,
+                false, 0xFF4FA9EE));
+        // ⑦ 蓝莓软糖（参考图 6：蓝紫糖果）
+        list.add(scheme("berry", "蓝莓软糖",
+                0xFF5570EA, 0xFF5570EA,
+                0xFFEFF1FC, 0xFFFFFFFF, 0xFFF7F8FE,
+                false, 0xFF8DA3F5));
+        // ⑧ 奶油拿铁（参考图 7：米白 + 彩虹糖）
+        list.add(scheme("latte", "奶油拿铁",
+                0xFF5570EA, 0xFFF3E3C5,
+                0xFFFAF5EC, 0xFFF3E3C5, 0xFFEFE0C8,
+                false, 0xFF7C8CF0));
+        // ⑨ 灰调公寓（参考图 8：冷灰蓝 + 薄荷）
+        list.add(scheme("loft", "灰调公寓",
+                0xFF282831, 0xFF282831,
+                0xFFE8EDF2, 0xFFFFFFFF, 0xFFF4F7FA,
+                false, 0xFF5E7C93));
+        // ⑩ 蜜桃软糖（参考图 9：蜜桃粉彩）
+        list.add(scheme("peach", "蜜桃软糖",
+                0xFFCCF4E6, 0xFFCCF4E6,
+                0xFFF3FBF7, 0xFFFFFFFF, 0xFFF9FDFB,
+                false, 0xFF7FE0B8));
+        // ⑪ 珊瑚日落（参考图 10：橙红暖阳）
+        list.add(scheme("sunset", "珊瑚日落",
+                0xFFFFA37C, 0xFFFFA37C,
+                0xFFFDF3EC, 0xFFFFFFFF, 0xFFFEF8F3,
+                false, 0xFFFC8E5C));
+        // ⑫ 雨林光影（参考图 11：深绿自然）
+        list.add(scheme("forest", "雨林光影",
+                0xFF71C88D, 0xFF1A2E24,
+                0xFF1B2620, 0xFF24352B, 0xFF121B16,
+                false, 0xFF4FA36E));
+        // ⑬ 晴空万里（参考图 12：天蓝清爽）
+        list.add(scheme("sky", "晴空万里",
+                0xFF49AAA0, 0xFFD2EEFC,
+                0xFFE4F6FB, 0xFFD2EEFC, 0xFFC2E4F6,
+                false, 0xFF7AC7E8));
+        // ⑭ 薰衣草紫（参考图 13：淡紫柔光）
+        list.add(scheme("lavender", "薰衣草紫",
+                0xFFD2EEFC, 0xFFF0EBFA,
+                0xFFEFF5FC, 0xFFF0EBFA, 0xFFF6F2FD,
+                false, 0xFFBBA6EC));
+        // ⑮ 深海蓝调（参考图 14：蓝紫商务）
+        list.add(scheme("deepsea", "深海蓝调",
+                0xFF5570EA, 0xFFE6ECFD,
+                0xFFEDF1FC, 0xFFE6ECFD, 0xFFDDE5FA,
+                false, 0xFF839BF2));
+        // ⑯ 紫芋奶盖（参考图 15：香芋紫）
+        list.add(scheme("taro", "紫芋奶盖",
+                0xFFB493F5, 0xFFF3E9FD,
+                0xFFF5EEFD, 0xFFF3E9FD, 0xFFEDE1FB,
+                false, 0xFFC9AFF7));
+        // ⑰ 抹茶牛乳（参考图 16：低饱和抹茶）
+        list.add(scheme("matcha", "抹茶牛乳",
+                0xFF5570EA, 0xFFEFF6E8,
+                0xFFF4F2E7, 0xFFEFF6E8, 0xFFE9F1DE,
+                false, 0xFF7C8CF0));
+        // ⑱ 薄荷汽水（参考图 17：清新薄荷）
+        list.add(scheme("soda", "薄荷汽水",
+                0xFF5570EA, 0xFFE4F1F6,
+                0xFFF2F7FA, 0xFFE4F1F6, 0xFFDBECF3,
+                false, 0xFF7C8CF0));
+        // ⑲ 葡萄冰茶（参考图 18：葡萄紫）
+        list.add(scheme("grape", "葡萄冰茶",
+                0xFF9B6BF3, 0xFFF0E9FD,
+                0xFFF6F0FD, 0xFFF0E9FD, 0xFFEADFFB,
+                false, 0xFFB48EF6));
+        // ⑳ 活力橙（参考图 19：活力橙）
+        list.add(scheme("orange", "活力橙",
+                0xFF5570EA, 0xFFFCF0EA,
+                0xFFFDF3EC, 0xFFFCF0EA, 0xFFFAE6DB,
+                false, 0xFF7C8CF0));
+        // ㉑ 静谧蓝（参考图 20：静谧蓝）
+        list.add(scheme("calm", "静谧蓝",
+                0xFF4A6FA5, 0xFFEAF1F8,
+                0xFFF2F6FA, 0xFFEAF1F8, 0xFFE1EAF4,
+                false, 0xFF6E92C0));
+        return list;
+    }
+
+    private static ThemeScheme scheme(String id, String name, int primary, int surface,
+                                      int bgColor, int surface2, int bgTo,
+                                      boolean secondaryAuto) {
+        return scheme(id, name, primary, surface, bgColor, surface2, bgTo, secondaryAuto, 0);
+    }
+
+    private static ThemeScheme scheme(String id, String name, int primary, int surface,
+                                      int bgColor, int surface2, int bgTo,
+                                      boolean secondaryAuto, int secondary) {
+        ThemeScheme s = new ThemeScheme();
+        s.id = id;
+        s.name = name;
+        s.primary = primary;
+        s.secondaryAuto = secondaryAuto;
+        s.secondary = secondaryAuto ? autoSecondary(primary) : secondary;
+        s.bgMode = 0;
+        s.bgColor = bgColor;
+        s.bgFrom = bgColor;
+        s.bgTo = bgTo;
+        s.bgAngle = 135;
+        s.surface = surface2;
+        s.textPrimary = isLight(surface2) ? 0xFF1B2026 : 0xFFECEDEF;
+        s.textSecondary = isLight(surface2) ? 0xFF5C6672 : 0xFF98A0AA;
+        s.navAlpha = 88;
+        s.searchAlpha = 80;
+        s.categoryAlpha = 72;
+        s.barBlur = 36;
+        s.barFrost = 40;
+        return s;
+    }
+
+    /** 由主色按 HSL 偏移自动生成辅助色（色相 +25°，明度轻提，保证同族协调） */
+    public static int autoSecondary(int primary) {
+        float[] hsl = new float[3];
+        Color.colorToHSV(primary, hsl);
+        float h = (hsl[0] + 25f) % 360f;
+        float s = Math.max(0.18f, Math.min(0.9f, hsl[1]));
+        float l = Math.max(0.32f, Math.min(0.72f, hsl[2] * 0.55f + 0.25f));
+        return Color.HSVToColor(new float[]{h, s, l});
+    }
+
+    private static boolean isLight(int color) {
+        double lum = 0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color);
+        return lum >= 160;
+    }
+
+    // ==================== 持久化 ====================
+
+    /**
+     * 全部方案 = 内置预设（含「方寸」）+ 用户创建/修改过的。
+     * 用户保存的方案若与预设同 id 则覆盖预设；「方寸」始终以代码定义为准且置于首位。
+     */
+    public List<ThemeScheme> schemes() {
+        synchronized (this) {
+            int ver = sp.getInt("__ver", 0);
+            if (cachedList != null && ver == cacheVersion) return copyList(cachedList);
+            String raw = sp.getString(KEY_SCHEMES, null);
+            List<ThemeScheme> user = new ArrayList<>();
+            if (raw != null && !raw.isEmpty()) {
+                try {
+                    Type t = new TypeToken<List<ThemeScheme>>() {}.getType();
+                    List<ThemeScheme> parsed = gson.fromJson(raw, t);
+                    if (parsed != null) user = parsed;
+                } catch (Exception ignored) { }
+            }
+            java.util.LinkedHashMap<String, ThemeScheme> byId = new java.util.LinkedHashMap<>();
+            for (ThemeScheme p : presets()) byId.put(p.id, p);
+            for (ThemeScheme u : user) {
+                if (u == null || u.id == null) continue;
+                if (ID_FANG_CUN.equals(u.id)) continue;   // 内置方案始终用最新代码定义
+                // 旧版本可能把未修改的预设快照落盘：与当前代码定义一致时直接忽略，
+                // 让预设始终跟随最新版本。
+                ThemeScheme preset = findPreset(u.id);
+                if (preset != null && sameScheme(preset, u)) continue;
+                byId.put(u.id, u);
+            }
+            List<ThemeScheme> all = new ArrayList<>();
+            all.add(fangcunDefault());
+            for (ThemeScheme s : byId.values()) {
+                if (!ID_FANG_CUN.equals(s.id)) all.add(s);
+            }
+            cachedList = all;
+            cacheVersion = ver;
+            return copyList(all);
+        }
+    }
+
+    private static ThemeScheme fangcunDefault() {
+        ThemeScheme s = new ThemeScheme();
+        s.id = ID_FANG_CUN;
+        s.name = "方寸";
+        s.primary = 0xFFFF5A36;
+        s.secondaryAuto = true;
+        s.secondary = 0xFFFE5A35;
+        s.bgMode = 0;
+        s.bgColor = 0xFF0A0C0F;   // 运行时按模式分别解析，这里给深色占位
+        s.bgFrom = 0xFF0A0C0F;
+        s.bgTo = 0xFF0A0C0F;
+        s.bgAngle = 135;
+        s.surface = 0xFF101318;
+        s.textPrimary = 0xFFECEDEF;
+        s.textSecondary = 0xFF98A0AA;
+        s.navAlpha = 88;
+        s.searchAlpha = 80;
+        s.categoryAlpha = 72;
+        s.barBlur = 36;
+        s.barFrost = 40;
+        return s;
+    }
+
+    private static List<ThemeScheme> copyList(List<ThemeScheme> in) {
+        List<ThemeScheme> out = new ArrayList<>(in.size());
+        for (ThemeScheme s : in) out.add(s.copy());
+        return out;
+    }
+
+    /** 新增或更新方案（id 相同则覆盖） */
+    public synchronized void save(ThemeScheme scheme) {
+        if (scheme == null || scheme.id == null) return;
+        List<ThemeScheme> all = new ArrayList<>(schemes());
+        int idx = -1;
+        for (int i = 0; i < all.size(); i++) {
+            if (scheme.id.equals(all.get(i).id)) { idx = i; break; }
+        }
+        if (idx >= 0) all.set(idx, scheme); else all.add(scheme);
+        persist(all);
+    }
+
+    public synchronized void delete(String id) {
+        if (id == null || ID_FANG_CUN.equals(id)) return;   // 内置不可删
+        List<ThemeScheme> all = new ArrayList<>(schemes());
+        all.removeIf(s -> id.equals(s.id));
+        persist(all);
+        // 被删方案若正被某模式绑定 → 回退到方寸
+        if (id.equals(lightId())) setLightId(ID_FANG_CUN);
+        if (id.equals(darkId())) setDarkId(ID_FANG_CUN);
+    }
+
+    private void persist(List<ThemeScheme> all) {
+        // 只落盘「用户自定义」与「被改过的预设」：
+        //  - 内置方寸始终以代码为准，绝不落盘；
+        //  - 未修改的预设也不落盘，否则应用升级改了预设配色，老用户会被旧快照锁死。
+        List<ThemeScheme> toSave = new ArrayList<>();
+        for (ThemeScheme s : all) {
+            if (ID_FANG_CUN.equals(s.id)) continue;
+            ThemeScheme preset = findPreset(s.id);
+            if (preset == null || !sameScheme(preset, s)) toSave.add(s);
+        }
+        sp.edit().putString(KEY_SCHEMES, gson.toJson(toSave))
+                .putInt("__ver", sp.getInt("__ver", 0) + 1)
+                .apply();
+        cachedList = null;
+        cachedLight = cachedDark = null;
+    }
+
+    @Nullable
+    private static ThemeScheme findPreset(String id) {
+        if (id == null) return null;
+        for (ThemeScheme p : presets()) if (id.equals(p.id)) return p;
+        return null;
+    }
+
+    /** 方案是否与预设定义一致（用于判断是否需要落盘覆盖预设） */
+    private boolean sameScheme(ThemeScheme a, ThemeScheme b) {
+        return gson.toJson(a).equals(gson.toJson(b));
+    }
+
+    // ---------- 模式绑定 ----------
+
+    public String lightId() {
+        return sp.getString(KEY_LIGHT, ID_FANG_CUN);
+    }
+
+    public void setLightId(String id) {
+        sp.edit().putString(KEY_LIGHT, id == null ? ID_FANG_CUN : id).apply();
+        cachedLight = null;
+    }
+
+    public String darkId() {
+        return sp.getString(KEY_DARK, ID_FANG_CUN);
+    }
+
+    public void setDarkId(String id) {
+        sp.edit().putString(KEY_DARK, id == null ? ID_FANG_CUN : id).apply();
+        cachedDark = null;
+    }
+
+    // ==================== 运行时解析 ====================
+
+    /** 当前应生效的方案：按 AppCompatDelegate 的夜模式选绑定 */
+    public ThemeScheme current(boolean night) {
+        synchronized (this) {
+            ThemeScheme cached = night ? cachedDark : cachedLight;
+            if (cached != null) return cached;
+            String id = night ? darkId() : lightId();
+            ThemeScheme found = findById(id);
+            if (found == null) found = fangcunDefault();
+            if (night) cachedDark = found; else cachedLight = found;
+            return found;
+        }
+    }
+
+    @Nullable
+    public ThemeScheme findById(String id) {
+        for (ThemeScheme s : schemes()) {
+            if (id != null && id.equals(s.id)) return s;
+        }
+        return null;
+    }
+
+    /** 解析后的「实际使用色板」：背景已按明暗模式套用对应令牌 */
+    public Resolved resolve(boolean night) {
+        ThemeScheme s = current(night);
+        Resolved r = new Resolved();
+        r.scheme = s;
+        // 背景
+        if (s.bgMode == 1) {
+            r.bgStart = s.bgFrom;
+            r.bgEnd = s.bgTo;
+        } else {
+            r.bgStart = r.bgEnd = s.bgColor;
+        }
+        r.surface = s.surface;
+        r.textPrimary = s.textPrimary;
+        r.textSecondary = s.textSecondary;
+        r.primary = s.primary;
+        r.secondary = s.secondaryAuto ? autoSecondary(s.primary) : s.secondary;
+        r.onPrimary = isLight(r.primary) ? 0xFF1B2026 : 0xFFFFFFFF;
+        r.navAlpha = clamp100(s.navAlpha) / 100f;
+        r.searchAlpha = clamp100(s.searchAlpha) / 100f;
+        r.categoryAlpha = clamp100(s.categoryAlpha) / 100f;
+        r.barBlur = clamp100(s.barBlur);
+        r.barFrost = clamp100(s.barFrost);
+        r.angle = ((s.bgAngle % 360) + 360) % 360;
+        return r;
+    }
+
+    public static class Resolved {
+        public ThemeScheme scheme;
+        public int bgStart, bgEnd;
+        public int surface;
+        public int textPrimary, textSecondary;
+        public int primary, secondary, onPrimary;
+        public float navAlpha, searchAlpha, categoryAlpha;
+        public int barBlur, barFrost;
+        public int angle;
+    }
+
+    private static int clamp100(int v) {
+        return Math.max(0, Math.min(100, v));
+    }
+
+    // ==================== 实时应用 ====================
+
+        /**
+     * 把方案应用到窗口与内容容器（不重建 Activity，立即生效）。
+     * 页面内的列表/控件颜色在 Fragment 侧自行重绘（监听器由 Activity 分发）。
+     */
+    public void applyRuntime(Context ctx, View contentRoot) {
+        boolean night = com.lateshow.app.util.ThemeManager.actualNight(ctx);
+        Resolved r = resolve(night);
+
+        // 1. 内容容器背景：纯色或渐变
+        if (contentRoot != null) {
+            contentRoot.setBackground(backgroundDrawable(r));
+        }
+
+        // 2. 窗口底色 / 状态栏 / 导航栏（与内容背景一致，避免切换瞬间露边）
+        if (ctx instanceof android.app.Activity) {
+            android.view.Window w = ((android.app.Activity) ctx).getWindow();
+            if (w != null) {
+                w.setBackgroundDrawable(backgroundDrawable(r));
+                w.setStatusBarColor(r.bgStart);
+                w.setNavigationBarColor(withAlpha(r.bgStart, r.navAlpha));
+            }
+        }
+    }
+
+    /**
+     * 主题引擎未开启时，按「当前模式」回退到内置「方寸」配色。
+     * 用于渲染页头/卡片等仍走资源令牌的静态元素：开启 = 用户方案色，关闭 = 内置色。
+     */
+    @ColorInt
+    public static int accentOf(@NonNull Context ctx) {
+        // 引擎未初始化（极端情况下适配器先于 Activity 创建）：回退资源令牌，不抛异常
+        if (sInstance == null) return ContextCompat.getColor(ctx, R.color.acc);
+        return get().resolve(com.lateshow.app.util.ThemeManager.actualNight(ctx)).primary;
+    }
+
+    /**
+     * 强调文字色（替代写死在 XML 里的 @color/accText）。
+     *
+     * <p>内置 accText 的取向是：浅底用压暗的同色系、深底用提亮的同色系。这里按当前方案
+     * 背景亮度动态算出同方向的变体，保证主题切换后强调文字既随色相走、又始终可读。
+     * 引擎关闭时原样返回 @color/accText。
+     */
+    @ColorInt
+    public static int accentTextColor(@NonNull Context ctx) {
+        if (!isEnabled(ctx)) return ContextCompat.getColor(ctx, R.color.accText);
+        int accent = accentOf(ctx);
+        int bg = get().resolve(com.lateshow.app.util.ThemeManager.actualNight(ctx)).bgStart;
+        float lum = (0.299f * ((bg >> 16) & 0xFF) + 0.587f * ((bg >> 8) & 0xFF)
+                + 0.114f * (bg & 0xFF)) / 255f;
+        float[] hsv = new float[3];
+        android.graphics.Color.colorToHSV(accent, hsv);
+        if (lum > 0.5f) {   // 浅底：压暗 + 轻微加饱和
+            hsv[2] = Math.max(0.22f, hsv[2] * 0.62f);
+            hsv[1] = Math.min(1f, hsv[1] * 0.95f + 0.05f);
+        } else {            // 深底：提亮 + 降饱和
+            hsv[2] = Math.min(1f, hsv[2] * 1.35f + 0.22f);
+            hsv[1] = Math.min(1f, hsv[1] * 0.7f);
+        }
+        return android.graphics.Color.HSVToColor(hsv);
+    }
+
+    public android.graphics.drawable.Drawable backgroundDrawable(Resolved r) {
+        android.graphics.drawable.GradientDrawable d;
+        if (r.bgStart == r.bgEnd) {
+            d = new android.graphics.drawable.GradientDrawable();
+            d.setColor(r.bgStart);
+        } else {
+            d = new android.graphics.drawable.GradientDrawable(
+                    gradientOrientation(r.angle), new int[]{r.bgStart, r.bgEnd});
+        }
+        return d;
+    }
+
+    private static android.graphics.drawable.GradientDrawable.Orientation gradientOrientation(int deg) {
+        // GradientDrawable 只支持 8 个固定方向，取最近的一个（角度误差 ≤22.5°）
+        android.graphics.drawable.GradientDrawable.Orientation[] table = {
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,        // 0
+                android.graphics.drawable.GradientDrawable.Orientation.BL_TR,             // 45
+                android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,        // 90
+                android.graphics.drawable.GradientDrawable.Orientation.BR_TL,             // 135
+                android.graphics.drawable.GradientDrawable.Orientation.RIGHT_LEFT,        // 180
+                android.graphics.drawable.GradientDrawable.Orientation.TR_BL,             // 225
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,        // 270
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,             // 315
+        };
+        int idx = ((deg + 22) / 45) % 8;
+        return table[idx];
+    }
+
+    /** 按 alpha 百分比着色（含原色自带 alpha 的保留） */
+    public static int withAlpha(@ColorInt int color, float alpha) {
+        int a = Math.round(255 * Math.max(0f, Math.min(1f, alpha)));
+        return (a << 24) | (color & 0x00FFFFFF);
+    }
+
+    /**
+     * 给定底色返回对比文字色：亮底深字 / 暗底浅字。
+     *
+     * <p>阈值与 {@link #isLight(int)} 保持一致（亮度 ≥160 视为亮底），
+     * 与 {@link Resolved#onPrimary} 同源，避免各调用点各写一套阈值。
+     */
+    @ColorInt
+    public static int inkOn(@ColorInt int bg) {
+        return isLight(bg) ? 0xFF1B2026 : 0xFFFFFFFF;
+    }
+
+    /**
+     * 强调底上的文字色（替代写死在 XML 里的 @color/accInk / @color/btnPlayInk）。
+     *
+     * <p>选中胶囊 / 分段控件 / 主按钮的底色会随方案主色变，但文字色若固定，
+     * 遇到深色方案（深蓝、墨绿、黑）时深字会糊在底上读不出来。
+     * 引擎开启时按当前方案主色亮度自动选深/浅；关闭时原样返回 builtIn，
+     * 保证内置「方寸」观感完全不变。
+     */
+    @ColorInt
+    public static int accentInkColor(@NonNull Context ctx, @ColorInt int builtIn) {
+        if (!isEnabled(ctx)) return builtIn;
+        if (sInstance == null) return builtIn;
+        return get().resolve(com.lateshow.app.util.ThemeManager.actualNight(ctx)).onPrimary;
+    }
+
+    // ==================== 主题感知的通用底色 ====================
+    // 仓库里很多 drawable（bg_btn_main / bg_seg_on / dot_acc）把 @color/acc 写死在 XML 里，
+    // 运行时改不了。这里按同一形状用代码画一份，颜色取当前方案主色；
+    // 引擎关闭时原样返回原 drawable，保证内置观感完全不变。
+
+    /** 主题引擎是否已开启（静态工具用；PrefStore 未初始化时返回 false） */
+    public static boolean isEnabled(@NonNull Context ctx) {
+        try {
+            return com.lateshow.app.store.PrefStore.get().themeEngineOn();
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
+
+    private static float dp(@NonNull Context ctx, float v) {
+        return v * ctx.getResources().getDisplayMetrics().density;
+    }
+
+    /** 主按钮底（替代 bg_btn_main）：10dp 圆角 + 方案主色 */
+    @NonNull
+    public static android.graphics.drawable.Drawable accentButtonBg(@NonNull Context ctx) {
+        if (!isEnabled(ctx)) {
+            android.graphics.drawable.Drawable d =
+                    ContextCompat.getDrawable(ctx, R.drawable.bg_btn_main);
+            return d != null ? d : new android.graphics.drawable.ColorDrawable(0xFFFF5A36);
+        }
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(ctx, 10));
+        gd.setColor(accentOf(ctx));
+        return gd;
+    }
+
+    /** 分段控件选中底（替代 bg_seg_on）：胶囊 + 方案主色 */
+    @NonNull
+    public static android.graphics.drawable.Drawable accentPillBg(@NonNull Context ctx) {
+        if (!isEnabled(ctx)) {
+            android.graphics.drawable.Drawable d =
+                    ContextCompat.getDrawable(ctx, R.drawable.bg_seg_on);
+            return d != null ? d : new android.graphics.drawable.ColorDrawable(0xFFFF5A36);
+        }
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(ctx, 999));
+        gd.setColor(accentOf(ctx));
+        return gd;
+    }
+
+    /** 状态圆点（替代 dot_acc）：圆形 + 方案主色 */
+    @NonNull
+    public static android.graphics.drawable.Drawable accentDotBg(@NonNull Context ctx) {
+        if (!isEnabled(ctx)) {
+            android.graphics.drawable.Drawable d =
+                    ContextCompat.getDrawable(ctx, R.drawable.dot_acc);
+            return d != null ? d : new android.graphics.drawable.ColorDrawable(0xFFFF5A36);
+        }
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gd.setColor(accentOf(ctx));
+        int sz = Math.round(dp(ctx, 6));
+        gd.setSize(sz, sz);
+        return gd;
+    }
+
+    /**
+     * 底部导航选中光斑（替代 bg_nav_glow）：径向渐变，主色 13% → 全透明。
+     * 引擎关闭时原样返回 bg_nav_glow。
+     */
+    @NonNull
+    public static android.graphics.drawable.Drawable accentGlowBg(@NonNull Context ctx) {
+        if (!isEnabled(ctx)) {
+            android.graphics.drawable.Drawable d =
+                    ContextCompat.getDrawable(ctx, R.drawable.bg_nav_glow);
+            return d != null ? d : new android.graphics.drawable.ColorDrawable(0);
+        }
+        int accent = accentOf(ctx);
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gd.setColors(new int[]{withAlpha(accent, 0.13f), withAlpha(accent, 0f)});
+        gd.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        gd.setGradientRadius(dp(ctx, 19));
+        int sz = Math.round(dp(ctx, 38));
+        gd.setSize(sz, sz);
+        return gd;
+    }
+
+    /**
+     * 同步进度条（替代 pbar_sync）：3dp 圆角轨道 + 方案主色进度。
+     * 引擎关闭时原样返回 pbar_sync。
+     */
+    @NonNull
+    public static android.graphics.drawable.Drawable accentProgressBg(@NonNull Context ctx) {
+        if (!isEnabled(ctx)) {
+            android.graphics.drawable.Drawable d =
+                    ContextCompat.getDrawable(ctx, R.drawable.pbar_sync);
+            return d != null ? d : new android.graphics.drawable.ColorDrawable(0);
+        }
+        android.graphics.drawable.GradientDrawable track =
+                new android.graphics.drawable.GradientDrawable();
+        track.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        track.setCornerRadius(dp(ctx, 2));
+        track.setColor(ContextCompat.getColor(ctx, R.color.lineStrong));
+        android.graphics.drawable.GradientDrawable prog =
+                new android.graphics.drawable.GradientDrawable();
+        prog.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        prog.setCornerRadius(dp(ctx, 2));
+        prog.setColor(accentOf(ctx));
+        android.graphics.drawable.LayerDrawable ld =
+                new android.graphics.drawable.LayerDrawable(
+                        new android.graphics.drawable.Drawable[]{
+                                track,
+                                new android.graphics.drawable.ClipDrawable(
+                                        prog, android.view.Gravity.START,
+                                        android.graphics.drawable.ClipDrawable.HORIZONTAL)});
+        ld.setId(0, android.R.id.background);
+        ld.setId(1, android.R.id.progress);
+        return ld;
+    }
+
+    /**
+     * 选集/线路选中底（替代 bg_episode_current）：8dp 圆角 + 主色 13% 填充 + 1dp 主色描边。
+     * 引擎关闭时原样返回 bg_episode_current。
+     */
+    @NonNull
+    public static android.graphics.drawable.Drawable accentEpisodeBg(@NonNull Context ctx) {
+        if (!isEnabled(ctx)) {
+            android.graphics.drawable.Drawable d =
+                    ContextCompat.getDrawable(ctx, R.drawable.bg_episode_current);
+            return d != null ? d : new android.graphics.drawable.ColorDrawable(0);
+        }
+        int accent = accentOf(ctx);
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(ctx, 8));
+        gd.setColor(withAlpha(accent, 0.13f));
+        gd.setStroke(Math.round(dp(ctx, 1)), accent);
+        return gd;
+    }
+
+    /**
+     * 源站圆环（替代 bg_ring_on）：圆形实面 + 1.5dp 描边 + 方案主色。
+     *
+     * <p>保留原 drawable 的圆形涟漪按压反馈；引擎关闭时原样返回 bg_ring_on。
+     *
+     * @param faceColor 圆面底色（暗场用 ink800，保证图标可读）
+     * @param strokeDp  描边宽度（dp）
+     */
+    @NonNull
+    public static android.graphics.drawable.Drawable accentRingBg(@NonNull Context ctx,
+                                                                  @ColorInt int faceColor,
+                                                                  float strokeDp) {
+        if (!isEnabled(ctx)) {
+            android.graphics.drawable.Drawable d =
+                    ContextCompat.getDrawable(ctx, R.drawable.bg_ring_on);
+            return d != null ? d : new android.graphics.drawable.ColorDrawable(0xFFFF5A36);
+        }
+        int accent = accentOf(ctx);
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gd.setColor(faceColor);
+        gd.setStroke(Math.round(dp(ctx, strokeDp)), accent);
+        // 涟漪：圆形掩膜 + 主色 25% 按压色，与原 bg_ring_on 的橙色涟漪等价
+        android.graphics.drawable.GradientDrawable mask =
+                new android.graphics.drawable.GradientDrawable();
+        mask.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        mask.setColor(0xFFFFFFFF);
+        return new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(withAlpha(accent, 0.25f)),
+                gd, mask);
+    }
+
+    // ==================== 调色板工具（编辑器用） ====================
+
+    /** 常用色板（预设推荐 + 基础色） */
+    public static List<Integer> palette() {
+        List<Integer> p = new ArrayList<>();
+        int[] colors = {
+                0xFFFF5A36, 0xFFFE5A35, 0xFFE85D4A, 0xFFD64541,
+                0xFFFFA37C, 0xFFFFB26B, 0xFFF79256, 0xFFF5A623,
+                0xFFF5C243, 0xFFE8D44D, 0xFFCDDC39, 0xFF9CD71B,
+                0xFF71C88D, 0xFF4CAF7D, 0xFF49AAA0, 0xFF26A69A,
+                0xFF4FD8C4, 0xFF4DB6AC, 0xFF5570EA, 0xFF3F51B5,
+                0xFF1565C7, 0xFF4FA9EE, 0xFF29B6F6, 0xFF4DD0E1,
+                0xFF9B6BF3, 0xFFB493F5, 0xFF8E6BBF, 0xFFAB47BC,
+                0xFFFF6FA5, 0xFFEC407A, 0xFFE91E63, 0xFFD81B60,
+                0xFF795548, 0xFF8D6E63, 0xFF607D8B, 0xFF302B4F,
+                0xFF1B1412, 0xFF000000,
+        };
+        for (int c : colors) p.add(c);
+        return p;
+    }
+
+    /** 供适配器把「资源色」换成当前方案色（无 Activity 时的兜底取色） */
+    @ColorInt
+    public static int tint(@NonNull Context ctx, int role, boolean night) {
+        switch (role) {
+            case ROLE_PRIMARY: return get().resolve(night).primary;
+            case ROLE_SECONDARY: return get().resolve(night).secondary;
+            case ROLE_SURFACE: return get().resolve(night).surface;
+            case ROLE_TEXT_PRIMARY: return get().resolve(night).textPrimary;
+            case ROLE_TEXT_SECONDARY: return get().resolve(night).textSecondary;
+            case ROLE_BG: return get().resolve(night).bgStart;
+            default: return 0;
+        }
+    }
+
+    public static final int ROLE_PRIMARY = 0;
+    public static final int ROLE_SECONDARY = 1;
+    public static final int ROLE_SURFACE = 2;
+    public static final int ROLE_TEXT_PRIMARY = 3;
+    public static final int ROLE_TEXT_SECONDARY = 4;
+    public static final int ROLE_BG = 5;
+}

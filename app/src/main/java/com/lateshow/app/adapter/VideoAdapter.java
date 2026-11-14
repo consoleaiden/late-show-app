@@ -90,7 +90,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
         h.coverBox.setClipToOutline(true);
         // 静态图标：src 由布局指定（ic_delete / ic_heart），这里只统一着色
         com.lateshow.app.util.Icons.tint(h.imgDel, 0xCCFFFFFF);
-        com.lateshow.app.util.Icons.tint(h.imgBadgeFav, h.itemView.getResources().getColor(R.color.acc));
+        com.lateshow.app.util.Icons.tint(h.imgBadgeFav,
+                com.lateshow.app.adapter.ChipAdapter.tintAccent(h.itemView.getContext()));
         return h;
     }
 
@@ -116,7 +117,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             String played = TimeUtil.dur(it.playedSec);
             String total = TimeUtil.dur(it.totalSec);
             SpannableStringBuilder sb = new SpannableStringBuilder(played);
-            sb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(h.itemView.getContext(), R.color.acc)),
+            sb.setSpan(new ForegroundColorSpan(
+                            com.lateshow.app.adapter.ChipAdapter.tintAccent(h.itemView.getContext())),
                     0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             sb.append(" / ").append(total);
             h.tvMaskRight.setText(sb);

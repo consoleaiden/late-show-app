@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import com.lateshow.app.R;
 import com.lateshow.app.model.Models;
+import com.lateshow.app.store.PrefStore;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -93,7 +94,7 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
         float radius = dp(h.itemView, 999);
         h.bgSel = new GradientDrawable();
         h.bgSel.setCornerRadius(radius);
-        h.bgSel.setColor(ContextCompat.getColor(h.itemView.getContext(), R.color.acc));
+        h.bgSel.setColor(tintAccent(h.itemView.getContext()));
         h.bgOff = new GradientDrawable();
         h.bgOff.setCornerRadius(radius);
         h.bgOff.setColor(Color.TRANSPARENT);
@@ -101,12 +102,29 @@ public class ChipAdapter extends RecyclerView.Adapter<ChipAdapter.VH> {
         return h;
     }
 
+    /** 主题引擎开启时用当前方案主色，否则回退资源令牌（保证内置观感不变） */
+    static int tintAccent(android.content.Context ctx) {
+        if (ctx != null) {
+            try {
+                if (PrefStore.get().themeEngineOn()) {
+                    return com.lateshow.app.theme.ThemeEngine.accentOf(ctx);
+                }
+            } catch (IllegalStateException ignored) {
+                // PrefStore 未初始化：走资源令牌
+            }
+        }
+        return ContextCompat.getColor(ctx, R.color.acc);
+    }
+
     @Override
     public void onBindViewHolder(@NonNull VH h, int pos) {
         Models.Category c = items.get(pos);
         h.chip.setText(c == null ? "全部" : c.typeName);
         boolean sel = pos == selected;
-        int accInk = ContextCompat.getColor(h.itemView.getContext(), R.color.accInk);
+        // 选中芯片底色 = 方案主色，文字色随之自动对比（深方案给浅字，浅方案给深字）
+        int accInk = com.lateshow.app.theme.ThemeEngine.accentInkColor(
+                h.itemView.getContext(),
+                ContextCompat.getColor(h.itemView.getContext(), R.color.accInk));
         int t2 = ContextCompat.getColor(h.itemView.getContext(), R.color.t2);
 
         h.chip.setBackground(sel ? h.bgSel : h.bgOff);

@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Map;
 
 /** 首页：源站切换 + 搜索 + 分类筛选 + 3 列海报墙（无限加载） */
-public class HomeFragment extends Fragment {
+public class HomeFragment extends Fragment implements com.lateshow.app.MainActivity.ThemeAware {
 
     /** 列表缓存 TTL：10 分钟内切回首页不再重复请求 */
     private static final long TTL_LIST = 10 * 60 * 1000L;
@@ -377,8 +377,7 @@ public class HomeFragment extends Fragment {
             float d = getResources().getDisplayMetrics().density;
             topbar.setGlassCornerRadius(24f * d);
             topbar.setRefraction(18f * d, 42f * d);   // 折射带 / 折射量
-            topbar.setBlurSigma(36f * d);             // 磨砂 4 倍强度（tier1 据此把降采样加深到 1/40）
-            topbar.setFrost(1.04f);                   // 白雾（原 0.26 × 4，渲染端钳到 1）
+            applyGlassParams(topbar);
             topbar.setHighlight(0.30f);
             topbar.setDispersion(0.8f);
         }
@@ -474,8 +473,7 @@ public class HomeFragment extends Fragment {
 
         menuPanel.setGlassCornerRadius(14f * d);
         menuPanel.setRefraction(18f * d, 30f * d);
-        menuPanel.setBlurSigma(32f * d);   // 磨砂 4 倍强度
-        menuPanel.setFrost(1.36f);         // 白雾（原 0.34 × 4，渲染端钳到 1）
+        applyGlassParams(menuPanel);
         menuPanel.setHighlight(0.28f);
         menuPanel.setDispersion(0.6f);
         menuPanel.setBackdropSource(grid);
@@ -942,6 +940,8 @@ public class HomeFragment extends Fragment {
     private static final int RING_FAIL = 0;
     private static final int RING_OK = 1;
     private static final int RING_TESTING = 2;
+    /** 最近一次源站环状态：主题变化时用它恢复（呼吸动画会因重建丢失） */
+    private int lastRingState = 0;
 
     private android.animation.ValueAnimator ringAnim;
     private com.lateshow.app.util.RingBreathDrawable ringBg;
@@ -993,11 +993,12 @@ public class HomeFragment extends Fragment {
 
     /** 源站按钮圆环：橙色=畅通，灰色=不通，橙↔灰呼吸=连接测试中（纯渲染，状态迁移走 begin/report） */
     private void renderSourceState(int state) {
+        lastRingState = state;
         if (btnSource == null || btnSourceIcon == null) return;
         stopRingAnim();
         if (state == RING_TESTING) {
             // 呼吸态用程序化 Drawable：描边色 + 环内径向渐变可被动画平滑驱动（xml ripple 底做不到颜色动画）
-            final int orange = getResources().getColor(R.color.acc, null);
+            final int orange = ringAccent();
             final int gray = getResources().getColor(R.color.t3, null);
             ringBg = new com.lateshow.app.util.RingBreathDrawable(
                     dp(1.5f), getResources().getColor(R.color.ink800, null));
@@ -1019,9 +1020,17 @@ public class HomeFragment extends Fragment {
             ringAnim.start();
         } else {
             boolean ok = state == RING_OK;
-            btnSource.setBackgroundResource(ok ? R.drawable.bg_ring_on : R.drawable.bg_ring_off);
+            if (ok) {
+                // bg_ring_on 把 @color/acc 写死在 XML 里，这里按同一形状（圆面 + 1.5dp 描边）
+                // 用方案主色程序化绘制，保留圆形涟漪按压反馈
+                btnSource.setBackground(com.lateshow.app.theme.ThemeEngine.accentRingBg(
+                        requireContext(),
+                        getResources().getColor(R.color.ink800, null), 1.5f));
+            } else {
+                btnSource.setBackgroundResource(R.drawable.bg_ring_off);
+            }
             com.lateshow.app.util.Icons.tint(btnSourceIcon,
-                    getResources().getColor(ok ? R.color.acc : R.color.t3, null));
+                    ok ? ringAccent() : getResources().getColor(R.color.t3, null));
         }
     }
 
@@ -1361,7 +1370,9 @@ public class HomeFragment extends Fragment {
         View row = LayoutInflater.from(getContext()).inflate(R.layout.item_source_menu, box, false);
         ((TextView) row.findViewById(R.id.name)).setText(name);
         ((TextView) row.findViewById(R.id.count)).setText("");
-        row.findViewById(R.id.dot).setVisibility(sel ? View.VISIBLE : View.INVISIBLE);
+        View dot = row.findViewById(R.id.dot);
+        dot.setBackground(com.lateshow.app.theme.ThemeEngine.accentDotBg(getContext()));
+        dot.setVisibility(sel ? View.VISIBLE : View.INVISIBLE);
         row.setOnClickListener(v -> {
             dismissMenuOverlay();
             if (chipAdapter != null) chipAdapter.selectAt(index);
@@ -1374,7 +1385,9 @@ public class HomeFragment extends Fragment {
         ((TextView) row.findViewById(R.id.name)).setText(name);
         TextView cnt = row.findViewById(R.id.count);
         cnt.setText(count);
-        row.findViewById(R.id.dot).setVisibility(sel ? View.VISIBLE : View.INVISIBLE);
+        View dot = row.findViewById(R.id.dot);
+        dot.setBackground(com.lateshow.app.theme.ThemeEngine.accentDotBg(getContext()));
+        dot.setVisibility(sel ? View.VISIBLE : View.INVISIBLE);
         row.setOnClickListener(v -> {
             dismissMenuOverlay();
             if (slug == null) {
@@ -1653,5 +1666,56 @@ public class HomeFragment extends Fragment {
         Map<String, String> m = new HashMap<>();
         for (int i = 0; i + 1 < kv.length; i += 2) m.put(kv[i], kv[i + 1]);
         return m;
+    }
+
+    // ---------- 自定义主题 ----------
+
+    /** 按当前方案刷新顶栏/弹层玻璃参数（模糊/白雾），并让分类芯片与源站环用新主色重绘 */
+    @Override
+    public void onThemeChanged() {
+        if (!isAdded() || getView() == null) return;
+        if (topbar != null) applyGlassParams(topbar);
+        if (menuPanel != null) applyGlassParams(menuPanel);
+        if (chipAdapter != null) chipAdapter.notifyDataSetChanged();
+        if (lastRingState == RING_TESTING || lastRingState == RING_OK) renderSourceState(lastRingState);
+        getView().invalidate();
+    }
+
+    /** 源站环强调色：主题引擎开启时用当前方案主色，否则回退内置橙 */
+    private int ringAccent() {
+        if (PrefStore.get().themeEngineOn()) {
+            return com.lateshow.app.theme.ThemeEngine.accentOf(requireContext());
+        }
+        return getResources().getColor(R.color.acc, null);
+    }
+
+    /** 玻璃栏参数：模糊强度 / 白雾来自当前绑定方案（开关关闭时保持原默认） */
+    private void applyGlassParams(com.lateshow.app.ui.widget.LiquidGlassBar bar) {
+        float d = getResources().getDisplayMetrics().density;
+        if (PrefStore.get().themeEngineOn()) {
+            com.lateshow.app.theme.ThemeEngine.Resolved r =
+                    com.lateshow.app.theme.ThemeEngine.get()
+                            .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()));
+            bar.setBlurSigma(Math.max(4f, r.barBlur / 100f * 44f) * d);
+            bar.setFrost(r.barFrost / 100f * 1.4f);
+        } else {
+            bar.setBlurSigma(36f * d);
+            bar.setFrost(1.04f);
+        }
+    }
+
+    /** 同上，弹层面板 */
+    private void applyGlassParams(com.lateshow.app.ui.widget.LiquidGlassPanel panel) {
+        float d = getResources().getDisplayMetrics().density;
+        if (PrefStore.get().themeEngineOn()) {
+            com.lateshow.app.theme.ThemeEngine.Resolved r =
+                    com.lateshow.app.theme.ThemeEngine.get()
+                            .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()));
+            panel.setBlurSigma(Math.max(4f, r.barBlur / 100f * 44f) * d);
+            panel.setFrost(r.barFrost / 100f * 1.6f);
+        } else {
+            panel.setBlurSigma(32f * d);
+            panel.setFrost(1.36f);
+        }
     }
 }

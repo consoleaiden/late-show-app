@@ -168,13 +168,14 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
         // running > paused > queued > 断点 > 从未同步 > 已完成
         Context ctx = h.itemView.getContext();
         String pill;
-        int dotRes, colorRes;
+        int dotRes = 0, colorRes = 0;
+        boolean accent = false;   // 「同步中 / 排队中」：主色语义，运行时按方案取色
         int lp = s.lastPage == null ? 0 : (int) Math.round(s.lastPage);
         int tp = s.totalPages == null ? 0 : (int) Math.round(s.totalPages);
         if (s.running) {
             pill = s.paused ? "已暂停" : ("正在同步 · " + ("full".equals(s.runningMode) ? "全量" : "增量"));
-            dotRes = s.paused ? R.drawable.dot_warn : R.drawable.dot_acc;
-            colorRes = s.paused ? R.color.warn : R.color.acc;
+            if (s.paused) { dotRes = R.drawable.dot_warn; colorRes = R.color.warn; }
+            else accent = true;
         } else if (s.paused) {
             pill = "本站暂停";
             dotRes = R.drawable.dot_warn;
@@ -182,8 +183,7 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
         } else if (s.queued) {
             // v1.4.1 并发闸门：已受理但排队等待（不占数据库连接）
             pill = "排队中";
-            dotRes = R.drawable.dot_acc;
-            colorRes = R.color.acc;
+            accent = true;
         } else if (tp > 0 && lp < tp) {
             pill = "断点 " + lp + "/" + tp + " 页";
             dotRes = R.drawable.dot_warn;
@@ -198,9 +198,15 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
             dotRes = R.drawable.dot_ok;
             colorRes = R.color.ok;
         }
+        boolean themed = accent && com.lateshow.app.theme.ThemeEngine.isEnabled(ctx);
         h.pill.setText(pill);
-        h.pill.setTextColor(ContextCompat.getColor(ctx, colorRes));
-        h.pill.setCompoundDrawablesWithIntrinsicBounds(ContextCompat.getDrawable(ctx, dotRes), null, null, null);
+        h.pill.setTextColor(themed
+                ? com.lateshow.app.theme.ThemeEngine.accentOf(ctx)
+                : ContextCompat.getColor(ctx, colorRes));
+        h.pill.setCompoundDrawablesWithIntrinsicBounds(
+                themed ? com.lateshow.app.theme.ThemeEngine.accentDotBg(ctx)
+                       : ContextCompat.getDrawable(ctx, dotRes),
+                null, null, null);
         h.pill.setCompoundDrawablePadding((int) (4 * ctx.getResources().getDisplayMetrics().density));
 
         // v1.8.0：来源徽标（自定义源站附「自定义」标记）
@@ -211,9 +217,15 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
         h.meta.setText(meta);
 
         int pct = (int) Math.max(0, Math.min(100, s.progress));
+        h.pbar.setProgressDrawable(com.lateshow.app.theme.ThemeEngine.accentProgressBg(ctx));
         h.pbar.setProgress(pct);
         String info = pct + "%" + (s.running && tp > 0 ? " · " + lp + "/" + tp : "");
         h.pct.setText(info);
+
+        // 「同步 / 编辑」强调文字色跟随当前方案（XML 里写死 @color/accText）
+        int accentText = com.lateshow.app.theme.ThemeEngine.accentTextColor(ctx);
+        h.btnSync.setTextColor(accentText);
+        h.btnEdit.setTextColor(accentText);
 
         h.btnSync.setOnClickListener(v -> {
             if (s.running && !s.paused) {

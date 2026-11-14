@@ -267,6 +267,15 @@ public class SyncConsoleActivity extends AppCompatActivity {
     }
 
     private void bindActions() {
+        // 主按钮底（全站增量同步 / 保存新密码）：跟随当前方案主色，引擎关闭时回退内置 bg_btn_main
+        android.graphics.drawable.Drawable accentBtn =
+                com.lateshow.app.theme.ThemeEngine.accentButtonBg(this);
+        findViewById(R.id.btnSyncAll).setBackground(accentBtn);
+        findViewById(R.id.btnChangePw).setBackground(accentBtn);
+        // 「+ 添加自定义源站」强调文字色
+        ((android.widget.TextView) findViewById(R.id.btnAddCustom)).setTextColor(
+                com.lateshow.app.theme.ThemeEngine.accentTextColor(this));
+
         // ② 同步操作
         findViewById(R.id.btnSyncAll).setOnClickListener(v -> post(com.lateshow.app.util.ApiPaths.SYNC_ALL_AUTO, "全站增量同步已受理"));
         findViewById(R.id.btnRefresh).setOnClickListener(v -> post(com.lateshow.app.util.ApiPaths.SOURCES_REFRESH, "源站列表刷新已受理"));
@@ -565,7 +574,8 @@ public class SyncConsoleActivity extends AppCompatActivity {
         int total = srcAdapter.getItemCount();
         autoCount.setText("自动同步 " + auto + "/" + total);
         selCount.setText(picked == 0 ? "未选择源站" : "已选 " + picked + " 个源站");
-        selCount.setTextColor(getColor(picked == 0 ? R.color.t3 : R.color.accText));
+        selCount.setTextColor(picked == 0 ? getColor(R.color.t3)
+                : com.lateshow.app.theme.ThemeEngine.accentTextColor(this));
         if (total > 0) {
             chkAll.setOnCheckedChangeListener(null);
             chkAll.setChecked(picked == total);

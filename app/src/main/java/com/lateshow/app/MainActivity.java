@@ -74,6 +74,8 @@ public class MainActivity extends AppCompatActivity {
         PrefStore.init(this);
         com.lateshow.app.util.ApiCache.init(this);
         com.lateshow.app.util.OfflineMedia.init(this);
+        // 自定义主题引擎必须先于 setContentView：窗口背景/系统栏颜色由它决定
+        com.lateshow.app.theme.ThemeEngine.init(this);
         applyTheme();
         super.onCreate(savedInstanceState);
         // edge-to-edge：内容画到系统栏下面，详情页海报才能真正盖住状态栏
@@ -81,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         setContentView(R.layout.activity_main);
+        applyRuntimeTheme();
         applySystemBarInsets();
         setupGlassTabbar();
 
@@ -165,10 +168,34 @@ public class MainActivity extends AppCompatActivity {
         float d = getResources().getDisplayMetrics().density;
         bar.setGlassCornerRadius(24f * d);
         bar.setRefraction(18f * d, 42f * d);   // 折射带宽 / 折射量（边缘透镜放大）
-        bar.setBlurSigma(32f * d);             // 磨砂（4 倍强度；tier1 据此把降采样加深到 1/40）
-        bar.setFrost(0.88f);                   // 中心白雾（原 0.22 × 4）
+        applyGlassParams(bar);
         bar.setHighlight(0.30f);               // 边缘高光
         bar.setDispersion(0.8f);               // 色散（彩虹边）
+    }
+
+    /** 底部导航指示条底色：2dp 圆角长条，颜色由调用方给（选中=方案主色 / 未选中=灰） */
+    private android.graphics.drawable.Drawable indicatorBg(int color) {
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(getResources().getDisplayMetrics().density * 2f);
+        gd.setColor(color);
+        return gd;
+    }
+
+    /** 玻璃栏模糊/白雾强度来自当前绑定方案（引擎关闭时保持原默认参数） */
+    private void applyGlassParams(com.lateshow.app.ui.widget.LiquidGlassBar bar) {
+        float d = getResources().getDisplayMetrics().density;
+        if (isThemeEngineOn()) {
+            com.lateshow.app.theme.ThemeEngine.Resolved r =
+                    com.lateshow.app.theme.ThemeEngine.get()
+                            .resolve(com.lateshow.app.util.ThemeManager.actualNight(this));
+            bar.setBlurSigma(Math.max(4f, r.barBlur / 100f * 44f) * d);
+            bar.setFrost(r.barFrost / 100f * 1.4f);
+        } else {
+            bar.setBlurSigma(32f * d);
+            bar.setFrost(0.88f);
+        }
     }
 
     /**
@@ -372,10 +399,83 @@ public class MainActivity extends AppCompatActivity {
         com.lateshow.app.util.ThemeManager.apply(this);
     }
 
+    /** 自定义主题是否生效中（未开启时一切走原内置明暗配色） */
+    public boolean isThemeEngineOn() {
+        return PrefStore.get().themeEngineOn();
+    }
+
+    /**
+     * 把当前绑定方案的解析色应用到窗口 / 内容容器 / 玻璃栏（实时生效，不重建）。
+     * 引擎关闭时反向还原到布局自带底色与原玻璃参数（用户点「恢复内置」后走这里）。
+     */
+    public void applyRuntimeTheme() {
+        float d = getResources().getDisplayMetrics().density;
+        View content = findViewById(R.id.mainContent);
+        if (!isThemeEngineOn()) {
+            if (content != null) content.setBackgroundResource(R.color.ink900);
+            getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+            getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+            if (tabbar != null) {
+                tabbar.setBlurSigma(32f * d);
+                tabbar.setFrost(0.88f);
+            }
+            if (curTab >= 0) renderTabs(curTab, false);   // 还原内置橙
+            return;
+        }
+        com.lateshow.app.theme.ThemeEngine engine = com.lateshow.app.theme.ThemeEngine.get();
+        boolean night = com.lateshow.app.util.ThemeManager.actualNight(this);
+        com.lateshow.app.theme.ThemeEngine.Resolved r = engine.resolve(night);
+        if (content != null) content.setBackground(engine.backgroundDrawable(r));
+        getWindow().setStatusBarColor(r.bgStart);
+        getWindow().setNavigationBarColor(
+                com.lateshow.app.theme.ThemeEngine.withAlpha(r.bgStart, r.navAlpha));
+        // 玻璃栏参数：模糊强度 + 白雾 + 底色透明度
+        if (tabbar != null) {
+            tabbar.setBlurSigma(Math.max(4f, r.barBlur / 100f * 44f) * d);
+            tabbar.setFrost(r.barFrost / 100f * 1.4f);
+        }
+        // 导航选中态（图标 / 指示条）也跟随新方案
+        if (curTab >= 0) renderTabs(curTab, false);
+    }
+
+    /** 主题方案变更后调用：应用新背景 + 通知可见 Fragment 重绘（引擎关闭同样要还原） */
+    public void onThemeSchemeChanged() {
+        applyRuntimeTheme();
+        for (Fragment f : getSupportFragmentManager().getFragments()) {
+            if (f instanceof ThemeAware) ((ThemeAware) f).onThemeChanged();
+        }
+    }
+
+    /**
+     * 由主题页返回时调用（onResume/onNewIntent）：应用新方案 + 通知各页重绘。
+     * 比 onThemeSchemeChanged 多一步 resetChrome：页面级元素（FAB、骨架屏等）一并刷新。
+     */
+    public void onThemeAppliedFromGallery() {
+        applyRuntimeTheme();
+        for (Fragment f : getSupportFragmentManager().getFragments()) {
+            if (f instanceof ThemeAware) ((ThemeAware) f).onThemeChanged();
+        }
+        if (homeFragment != null && isThemeEngineOn()) homeFragment.resetChrome();
+    }
+
+    /** Fragment 实现此接口即可在主题变化时收到重绘回调 */
+    public interface ThemeAware {
+        void onThemeChanged();
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
         healNightMode();
+        // 自定义主题可能在独立页面改过（含「恢复内置」关闭引擎）：回到前台时对齐一次
+        onThemeAppliedFromGallery();
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        onThemeAppliedFromGallery();
     }
 
     /** 主题自检：资源解析到的日夜与偏好不符（重启后偶发的混色）时，重新断言并重建 */
@@ -416,8 +516,13 @@ public class MainActivity extends AppCompatActivity {
 
     /** 渲染导航选中态：颜色渐变 + 图标弹跳 + 光斑/指示条展开（无文字标签） */
     private void renderTabs(int tab, boolean animate) {
-        int acc = getColor(R.color.acc);
+        int acc = isThemeEngineOn()
+                ? com.lateshow.app.theme.ThemeEngine.accentOf(this)
+                : getColor(R.color.acc);
         int off = getColor(R.color.t3);
+        // 光斑渐变也写死了 @color/accSoft（bg_nav_glow），按当前方案主色重画一份
+        android.graphics.drawable.Drawable glowBg =
+                com.lateshow.app.theme.ThemeEngine.accentGlowBg(this);
         for (int i = 0; i < TAB_COUNT; i++) {
             final boolean sel = i == tab;
             final ImageView icon = icons[i];
@@ -438,6 +543,9 @@ public class MainActivity extends AppCompatActivity {
                 ind.setAlpha(sel ? 1f : 0f);
                 ind.setScaleX(sel ? 1f : 0.2f);
             }
+            // 指示条颜色同样跟随当前方案主色（bg_nav_ind 把 @color/acc 写死在 XML 里）
+            ind.setBackground(indicatorBg(target));
+            glow.setBackground(glowBg);
 
             if (sel && animate) {
                 bounce(icon);   // 点选：弹跳一次（静态图标无逐帧动画）

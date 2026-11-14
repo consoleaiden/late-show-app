@@ -67,7 +67,8 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.VH> {
         Models.SyncLog l = items.get(pos);
         Context ctx = h.itemView.getContext();
 
-        int dot, color;
+        int dot = 0, color = 0;
+        boolean accent = false;   // 「同步中」：主色语义，运行时按方案取色
         String label;
         switch (l.status == null ? "" : l.status) {
             case "success": dot = R.drawable.dot_ok; color = R.color.ok; label = "完成"; break;
@@ -77,14 +78,19 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.VH> {
             case "incomplete": dot = R.drawable.dot_warn; color = R.color.warn; label = "部分完成"; break;
             // v1.6.0：服务重启时中断的任务
             case "interrupted": dot = R.drawable.dot_bad; color = R.color.bad; label = "中断"; break;
-            default: dot = R.drawable.dot_acc; color = R.color.acc; label = "同步中";
+            default: accent = true; label = "同步中";
         }
-        h.dot.setBackgroundResource(dot);
+        boolean themed = accent && com.lateshow.app.theme.ThemeEngine.isEnabled(ctx);
+        h.dot.setBackground(themed
+                ? com.lateshow.app.theme.ThemeEngine.accentDotBg(ctx)
+                : androidx.core.content.ContextCompat.getDrawable(ctx, dot));
         h.title.setText(modeName(l.mode) + "同步" + label + " · " + slugOf(l.slug));
         h.sub.setText("抓取 " + l.fetched + " · 新增 " + l.inserted + " · 更新 " + l.updated
                 + (l.error != null && !l.error.isEmpty() ? " · " + l.error : ""));
         h.time.setText(TimeUtil.stampOrEmpty(l.startedAt));
-        h.title.setTextColor(ContextCompat.getColor(ctx, color));
+        h.title.setTextColor(themed
+                ? com.lateshow.app.theme.ThemeEngine.accentOf(ctx)
+                : ContextCompat.getColor(ctx, color));
     }
 
     private static String modeName(String m) {

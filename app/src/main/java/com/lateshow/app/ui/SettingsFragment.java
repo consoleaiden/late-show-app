@@ -33,10 +33,12 @@ import java.util.List;
  * 「同步控制台」已迁为独立页面 {@link SyncConsoleActivity}；本页只保留入口，
  * 入口显隐与标题延迟由「播放源连接测试」结果驱动（3 秒超时，见 {@link #probeSource()}）。
  */
-public class SettingsFragment extends Fragment {
+public class SettingsFragment extends Fragment
+        implements com.lateshow.app.MainActivity.ThemeAware {
 
     private EditText inputBaseUrl, inputToken;
     private TextView srcStatus, btnSave, btnTest, tvVersion, btnCheckUpdate, tvCacheInfo;
+    private android.widget.ImageView ivBrandMark;
     private TextView segModeSync, segModeStatic, tvModeState;
     private TextView tvSavedCount, tvSavedEmpty, tvSourceLatency;
     private View consoleEntry;
@@ -287,6 +289,10 @@ public class SettingsFragment extends Fragment {
             } catch (Exception ignored) { }
         });
 
+        // 品牌页脚字标：三角跟随当前方案主色（方框仍随明/暗主题翻转，见 brandMarkStroke）
+        ivBrandMark = v.findViewById(R.id.brandMark);
+        applyThemeAccents();
+
         // 播放源 + API Token：保存 / 测试连接（先探 auth/state，再用受保护接口验证 Token）
         btnSave.setOnClickListener(vv -> verifySource(true));
         btnTest.setOnClickListener(vv -> verifySource(false));
@@ -311,6 +317,16 @@ public class SettingsFragment extends Fragment {
                 if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).applyTheme();
             }, 700);
         });
+
+        // 自定义主题入口（跳转独立管理页）
+        View entryCustomTheme = v.findViewById(R.id.entryCustomTheme);
+        if (entryCustomTheme != null) {
+            entryCustomTheme.setOnClickListener(vv -> {
+                if (getContext() == null) return;
+                startActivity(new Intent(getContext(),
+                        com.lateshow.app.theme.ThemeGalleryActivity.class));
+            });
+        }
     }
 
     // ==================== 播放源连接测试：标题延迟 + 模块有效状态 ====================
@@ -473,7 +489,7 @@ public class SettingsFragment extends Fragment {
         if (!isAdded()) return;
         btnSave.setText("保存");
         btnTest.setText("测试连接");
-        btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_main));
+        btnSave.setBackground(com.lateshow.app.theme.ThemeEngine.accentButtonBg(requireContext()));
     }
 
     /** 输入框右侧清空按钮：有内容才显示，点击一键清空并保持输入焦点 */
@@ -497,7 +513,7 @@ public class SettingsFragment extends Fragment {
         handler.postDelayed(() -> {
             if (btnSave != null && isAdded()) {
                 btnSave.setText("保存");
-                btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_main));
+                btnSave.setBackground(com.lateshow.app.theme.ThemeEngine.accentButtonBg(requireContext()));
             }
         }, 1800);
     }
@@ -519,6 +535,8 @@ public class SettingsFragment extends Fragment {
             boolean isActive = it.url != null && it.url.equals(active);
             row.findViewById(R.id.sActive).setVisibility(isActive ? View.VISIBLE : View.GONE);
             row.findViewById(R.id.btnUse).setOnClickListener(v -> applySavedSource(it));
+            ((TextView) row.findViewById(R.id.btnUse)).setTextColor(
+                    com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext()));
             row.findViewById(R.id.btnEditSource).setOnClickListener(v -> showSavedSourceEditDialog(it));
             row.findViewById(R.id.btnDelSource).setOnClickListener(v -> confirmDeleteSavedSource(it));
             savedList.addView(row);
@@ -632,6 +650,8 @@ public class SettingsFragment extends Fragment {
         for (int i = 0; i < list.size(); i++) {
             final int idx = i;
             View row = getLayoutInflater().inflate(R.layout.item_proxy, proxyList, false);
+            row.findViewById(R.id.proxyDot).setBackground(
+                    com.lateshow.app.theme.ThemeEngine.accentDotBg(requireContext()));
             ((TextView) row.findViewById(R.id.pUrl)).setText(list.get(i));
             row.findViewById(R.id.btnEditProxy).setOnClickListener(v -> showProxyDialog(idx));
             row.findViewById(R.id.btnDelProxy).setOnClickListener(v -> confirmDeleteProxy(idx));
@@ -688,15 +708,74 @@ public class SettingsFragment extends Fragment {
 
     // ==================== 数据源模式 / 其它 ====================
 
+    /** 分段控件选中底：主题引擎开启时取当前方案主色，否则回退资源令牌（保证内置观感不变） */
+    private android.graphics.drawable.Drawable onSegBg() {
+        int color = PrefStore.get().themeEngineOn()
+                ? com.lateshow.app.theme.ThemeEngine.accentOf(requireContext())
+                : getColor(R.color.acc);
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setCornerRadius(999f * getResources().getDisplayMetrics().density);
+        gd.setColor(color);
+        return gd;
+    }
+
+    private android.graphics.drawable.Drawable offSegBg() {
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setCornerRadius(999f * getResources().getDisplayMetrics().density);
+        gd.setColor(0x22FFFFFF);
+        return gd;
+    }
+
+    /**
+     * 主题感知的强调色部件：主按钮底（保存 / 检查更新）+ 品牌字标三角。
+     * 引擎关闭时回退内置资源，保证原有观感完全不变。
+     */
+    private void applyThemeAccents() {
+        if (!isAdded() || getView() == null) return;
+        android.graphics.drawable.Drawable btnBg =
+                com.lateshow.app.theme.ThemeEngine.accentButtonBg(requireContext());
+        if (btnSave != null) btnSave.setBackground(btnBg);
+        if (btnCheckUpdate != null) btnCheckUpdate.setBackground(btnBg);
+        if (ivBrandMark != null) {
+            int tri = PrefStore.get().themeEngineOn()
+                    ? com.lateshow.app.theme.ThemeEngine.accentOf(requireContext())
+                    : getColor(R.color.brandTri);
+            com.lateshow.app.util.FangcunMarkDrawable d =
+                    new com.lateshow.app.util.FangcunMarkDrawable(
+                            getColor(R.color.brandMarkStroke), tri);
+            d.setProgress(1f);
+            ivBrandMark.setImageDrawable(d);
+        }
+        // 「打开同步控制台」/「+ 新增代理」强调文字色
+        int accentText = com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext());
+        View openConsole = getView().findViewById(R.id.btnOpenConsole);
+        if (openConsole instanceof TextView) ((TextView) openConsole).setTextColor(accentText);
+        View addProxy = getView().findViewById(R.id.btnAddProxy);
+        if (addProxy instanceof TextView) ((TextView) addProxy).setTextColor(accentText);
+    }
+
+    /** 主题方案变化：重绘分段控件选中态 + 主按钮 + 品牌字标（颜色来自新方案主色） */
+    @Override
+    public void onThemeChanged() {
+        if (!isAdded() || getView() == null) return;
+        renderModeSwitch();
+        applyThemeAccents();
+    }
+
     /** 渲染模式选中态；直连模式显示代理管理、隐藏 NAS 专属的「播放源与鉴权」模块 */
     private void renderModeSwitch() {
         View root = getView();
         if (root == null || segModeSync == null || !isAdded()) return;
         boolean st = com.lateshow.app.api.Catalogs.isStatic();
-        segModeSync.setBackgroundResource(st ? R.drawable.bg_seg_off : R.drawable.bg_seg_on);
-        segModeStatic.setBackgroundResource(st ? R.drawable.bg_seg_on : R.drawable.bg_seg_off);
-        segModeSync.setTextColor(getColor(st ? R.color.t2 : R.color.accInk));
-        segModeStatic.setTextColor(getColor(st ? R.color.accInk : R.color.t2));
+        segModeSync.setBackground(st ? offSegBg() : onSegBg());
+        segModeStatic.setBackground(st ? onSegBg() : offSegBg());
+        // 分段底色随方案主色变，文字色随之自动对比（引擎关闭回退 accInk）
+        int segInk = com.lateshow.app.theme.ThemeEngine.accentInkColor(
+                requireContext(), getColor(R.color.accInk));
+        segModeSync.setTextColor(st ? getColor(R.color.t2) : segInk);
+        segModeStatic.setTextColor(st ? segInk : getColor(R.color.t2));
         if (tvModeState != null) tvModeState.setText(st ? "直连 · 免 NAS" : "NAS · 需在线");
         android.widget.ImageView icMode = root.findViewById(R.id.icModeHeader);
         if (icMode != null) icMode.setImageResource(st ? R.drawable.ic_set_static : R.drawable.ic_set_mode);

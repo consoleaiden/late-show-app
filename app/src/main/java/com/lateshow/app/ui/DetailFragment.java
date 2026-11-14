@@ -30,6 +30,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.constraintlayout.motion.widget.MotionLayout;
 import androidx.constraintlayout.widget.ConstraintSet;
 import androidx.core.view.ViewCompat;
@@ -86,7 +87,8 @@ import java.util.Set;
  * 固定用偏深底色 {@code heroBand}，海报底部的渐变才有落点；信息带以下（简介 / 选集 / 推荐）
  * 用主题页底 {@code ink900}（与设置页同色）和主题文字色，随明暗主题切换。
  */
-public class DetailFragment extends Fragment {
+public class DetailFragment extends Fragment
+        implements com.lateshow.app.MainActivity.ThemeAware {
 
     public static final String TAG = "detail";
 
@@ -196,6 +198,8 @@ public class DetailFragment extends Fragment {
     private float radiusPx = 0f;
     /** 顶部遮罩的两段基础 alpha（由滚动位置决定，0~1）；收起时再乘整体透明度 */
     private float scrimTopBase = 1f, scrimStatusBase = 0f, lastBgAlpha = 1f;
+    /** 内容区强制重排的去抖任务（见 scheduleContentTraversal） */
+    private Runnable contentTraversalTask;
 
     private TextView tvTitle, tvMeta, tvDesc, btnToggleDesc, btnPlay, epCount,
             chipSource, chipUpdate, tvActor;
@@ -326,11 +330,15 @@ public class DetailFragment extends Fragment {
         // 隐藏时 pause（离屏不空转）
         if (loadingSpinner instanceof ImageView) {
             brandLoading = new com.lateshow.app.util.FangcunLoadingDrawable(requireContext());
+            if (PrefStore.get().themeEngineOn()) {
+                brandLoading.setAccentColor(com.lateshow.app.theme.ThemeEngine.accentOf(requireContext()));
+            }
             ((ImageView) loadingSpinner).setImageDrawable(brandLoading);
         }
         loadingText = v.findViewById(R.id.loadingText);
         loadingSkeleton = v.findViewById(R.id.loadingSkeleton);
         btnRetry = v.findViewById(R.id.btnRetry);
+        btnRetry.setBackground(accentBtnBg());
         btnRetry.setOnClickListener(x -> retryLoadDetail());
         epPagerScroll = v.findViewById(R.id.epPagerScroll);
         epPagerRow = v.findViewById(R.id.epPagerRow);
@@ -339,10 +347,16 @@ public class DetailFragment extends Fragment {
         tvMeta = v.findViewById(R.id.tvMeta);
         tvDesc = v.findViewById(R.id.tvDesc);
         btnToggleDesc = v.findViewById(R.id.btnToggleDesc);
+        btnToggleDesc.setTextColor(com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext()));
         btnPlay = v.findViewById(R.id.btnPlay);
+        btnPlay.setBackground(accentBtnBg());
         btnFav = v.findViewById(R.id.btnFav);
         epCount = v.findViewById(R.id.epCount);
         chipSource = v.findViewById(R.id.chipSource);
+        // 「源站」胶囊行首圆点：XML 里写死 dot_acc（@color/acc），运行时按方案主色重画
+        chipSource.setCompoundDrawablesWithIntrinsicBounds(
+                com.lateshow.app.theme.ThemeEngine.accentDotBg(requireContext()),
+                null, null, null);
         chipUpdate = v.findViewById(R.id.chipUpdate);
         tvActor = v.findViewById(R.id.tvActor);
         rowActor = v.findViewById(R.id.rowActor);
@@ -415,7 +429,11 @@ public class DetailFragment extends Fragment {
         chipSource.setBackground(chipBgSource);
         chipUpdate.setBackground(chipBgUpdate);
         applyBandTint(0f);
-        pageBg = new ColorDrawable(getColor(R.color.ink900));
+        pageBg = new ColorDrawable(PrefStore.get().themeEngineOn()
+                ? com.lateshow.app.theme.ThemeEngine.get()
+                        .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()))
+                        .bgStart
+                : getColor(R.color.ink900));
         playRoot.setBackground(pageBg);
 
         // 海报区：横向满屏、纵向半屏（屏幕高度的一半）
@@ -841,7 +859,7 @@ public class DetailFragment extends Fragment {
         boolean fav = PrefStore.get().isFav(slug, vodId);
         if (btnFav == null) return;
         btnFav.setImageResource(fav ? R.drawable.ic_heart : R.drawable.ic_heart_line);
-        com.lateshow.app.util.Icons.tint(btnFav, getColor(fav ? R.color.acc : R.color.t2));
+        com.lateshow.app.util.Icons.tint(btnFav, fav ? accent() : getColor(R.color.t2));
         if (animate) {
             btnFav.animate().cancel();
             btnFav.setScaleX(0.82f);
@@ -1141,7 +1159,8 @@ public class DetailFragment extends Fragment {
     private void applyTagChipTint(float t) {
         int solid = colorLerp(t, R.color.heroSurface, R.color.chipSurfaceOnInk);
         int stroke = colorLerp(t, R.color.heroLine, R.color.chipLineOnInk);
-        int ink = colorLerp(t, R.color.heroT2, R.color.accText);
+        int ink = colorLerpTo(t, R.color.heroT2,
+                com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext()));
         for (GradientDrawable g : tagChipBg) {
             g.setColor(solid);
             g.setStroke(dp(1), stroke);
@@ -1310,8 +1329,10 @@ public class DetailFragment extends Fragment {
                 boolean sel = pos == curLine;
                 tv.setEnabled(playable);
                 tv.setAlpha(playable ? 1f : 0.42f);
-                tv.setBackgroundResource(sel ? R.drawable.bg_episode_current : R.drawable.bg_episode);
-                tv.setTextColor(getColor(sel ? R.color.accText : (playable ? R.color.t2 : R.color.t3)));
+                tv.setBackground(episodeBg(sel));
+                tv.setTextColor(sel
+                        ? com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext())
+                        : getColor(playable ? R.color.t2 : R.color.t3));
                 tv.setOnClickListener(v -> {
                     if (!playable) { toast("该线路暂不可播"); return; }
                     if (curLine == pos) return;
@@ -1396,9 +1417,10 @@ public class DetailFragment extends Fragment {
                 boolean watched = historyEp > 0 && idx < historyEp;
                 tv.setEnabled(playable);
                 tv.setAlpha(playable ? 1f : 0.42f);
-                tv.setBackgroundResource(cur ? R.drawable.bg_episode_current : R.drawable.bg_episode);
-                tv.setTextColor(getColor(cur ? R.color.accText
-                        : ((!playable || watched) ? R.color.t3 : R.color.t2)));
+                tv.setBackground(episodeBg(cur));
+                tv.setTextColor(cur
+                        ? com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext())
+                        : getColor((!playable || watched) ? R.color.t3 : R.color.t2));
                 tv.setOnClickListener(v -> {
                     if (!playable) { toast("该集暂不可播"); return; }
                     curEp = idx;
@@ -1411,7 +1433,38 @@ public class DetailFragment extends Fragment {
             epGrid.addView(row, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
+        // 关键：动态铺完行后强制一次真正的布局遍历。
+        // MotionLayout 会吞掉页面稳定后的 requestLayout（项目已知坑，见 forceTraversal 注释）：
+        // 真机 2026-11-14 实测，addView 之后 epGrid 高度恒为 0，行与格子全部停在初始的
+        // 0×0/INVISIBLE，contentCol 也停留在「选集还没铺开」时的旧高度 —— 选集与下方推荐
+        // 整整一块都不显示。这里绕开所有中间父容器直接对 DecorView 发请求，确保子树被重测。
+        scheduleContentTraversal();
         updatePlayLabel();
+    }
+
+    /**
+     * 内容区动态填充后的强制重排入口（去抖）。
+     *
+     * <p>{@link #renderEpisodes()}、{@link #renderRelated()} 都在运行时往 contentCol 里加
+     * View / 改可见性，而本页根是 MotionLayout：数据回来时页面早已稳定，中途任何
+     * requestLayout 都会被吞掉（见 {@link #forceTraversal()} 的真机取证）。加一次去抖的
+     * post，把多次连续渲染合并成一次遍历；仍不够时再由 120ms 后的复查补一刀。
+     */
+    private void scheduleContentTraversal() {
+        if (contentTraversalTask != null) return;
+        contentTraversalTask = this::kickTraversal;
+        View root = getView();
+        if (root == null) return;
+        root.post(contentTraversalTask);              // 立即排一次
+        root.postDelayed(() -> {                     // 首帧不够时（仍在转场中）再补一刀
+            if (contentTraversalTask != null) contentTraversalTask.run();
+        }, 120);
+    }
+
+    private void kickTraversal() {
+        contentTraversalTask = null;
+        if (!isAdded() || getView() == null) return;
+        forceTraversal();
     }
 
     /** 长剧分页条：每页一个胶囊「1-40 / 41-80 …」，只有一页时整条隐藏 */
@@ -1433,8 +1486,10 @@ public class DetailFragment extends Fragment {
             tv.setGravity(android.view.Gravity.CENTER);
             tv.setPadding(dp(10), dp(5), dp(10), dp(5));
             boolean sel = i == epPage;
-            tv.setBackgroundResource(sel ? R.drawable.bg_episode_current : R.drawable.bg_episode);
-            tv.setTextColor(getColor(sel ? R.color.accText : R.color.t2));
+            tv.setBackground(episodeBg(sel));
+            tv.setTextColor(sel
+                    ? com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext())
+                    : getColor(R.color.t2));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             lp.rightMargin = dp(6);
@@ -1541,6 +1596,9 @@ public class DetailFragment extends Fragment {
             }
             @Override public int getItemCount() { return list.size(); }
         });
+        // 推荐区从 GONE 变 VISIBLE + 新装 adapter，同样会被 MotionLayout 吞掉布局请求，
+        // 必须显式补一次强制遍历，否则这一整块停在 0×0（真机 2026-11-14）
+        scheduleContentTraversal();
     }
 
     /** 相同演员作品：NAS 模式调 /api/v1/star/related（走 star_map 索引，毫秒级）。
@@ -1624,7 +1682,9 @@ public class DetailFragment extends Fragment {
                 TextView tv = vh.itemView.findViewById(R.id.tabText);
                 boolean sel = t == null ? curStarTab == null : t.equals(curStarTab);
                 tv.setText(t == null ? "全部" : tabLabel(t));
-                tv.setBackgroundResource(sel ? R.drawable.bg_seg_on : R.drawable.bg_seg_off);
+                tv.setBackground(sel
+                        ? com.lateshow.app.theme.ThemeEngine.accentPillBg(requireContext())
+                        : ContextCompat.getDrawable(requireContext(), R.drawable.bg_seg_off));
                 tv.setTextColor(getColor(sel ? R.color.maskText : R.color.t2));
                 vh.itemView.setOnClickListener(x -> {
                     boolean same = t == null ? curStarTab == null : t.equals(curStarTab);
@@ -1963,7 +2023,12 @@ public class DetailFragment extends Fragment {
     private void applyBandTint(float t) {
         t = Math.max(0f, Math.min(1f, t));
         bandTint = t;
-        if (infoBg != null) infoBg.setColor(colorLerp(t, R.color.heroBand, R.color.ink900));
+        int pageColor = PrefStore.get().themeEngineOn()
+                ? com.lateshow.app.theme.ThemeEngine.get()
+                        .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()))
+                        .bgStart
+                : getColor(R.color.ink900);
+        if (infoBg != null) infoBg.setColor(colorLerpTo(t, R.color.heroBand, pageColor));
         if (tvTitle != null) tvTitle.setTextColor(colorLerp(t, R.color.heroT1, R.color.t1));
         if (tvMeta != null) tvMeta.setTextColor(colorLerp(t, R.color.heroT3, R.color.t3));
         if (tvActor != null) tvActor.setTextColor(colorLerp(t, R.color.heroT2, R.color.t2));
@@ -1981,7 +2046,8 @@ public class DetailFragment extends Fragment {
             chipBgUpdate.setColor(solid);   chipBgUpdate.setStroke(dp(1), stroke);
         }
         if (chipSource != null) chipSource.setTextColor(colorLerp(t, R.color.heroT1, R.color.t1));
-        if (chipUpdate != null) chipUpdate.setTextColor(colorLerp(t, R.color.heroAccText, R.color.accText));
+        if (chipUpdate != null) chipUpdate.setTextColor(colorLerpTo(t, R.color.heroAccText,
+                com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext())));
     }
 
     private void setFirstChildTextColor(View row, int color) {
@@ -1994,6 +2060,17 @@ public class DetailFragment extends Fragment {
 
     private int colorLerp(float t, int fromRes, int toRes) {
         return (int) argb.evaluate(t, getColor(fromRes), getColor(toRes));
+    }
+
+    /**
+     * 同上，但 to 直接给运行时算出的 ARGB 颜色值。
+     *
+     * <p>主题引擎的方案色（Resolved.bgStart 等）是代码里算出来的 int，不是资源 ID；
+     * 直接喂给 {@link #colorLerp} 会被 getColor() 当成资源 ID 解析，抛
+     * Resources$NotFoundException（表现为进详情页即崩）。
+     */
+    private int colorLerpTo(float t, int fromRes, int toColor) {
+        return (int) argb.evaluate(t, getColor(fromRes), toColor);
     }
 
     /** 播放态切换：底色/文字色过渡（与内容上弹的 240ms 减速曲线保持一致） */
@@ -2472,11 +2549,46 @@ public class DetailFragment extends Fragment {
     private void forceTraversal() {
         View root = getView();
         if (root == null) return;
+        // 关键（真机 2026-11-14 定位）：光靠 requestLayout 不够，MotionLayout 会吞掉它。
+        //   · MotionLayout.requestLayout()：处于转场态（mCurrentState==UNSET）且
+        //     layoutDuringTransition=honorRequest 时，只对直接子 View 做插值，不向父级传递；
+        //   · 即便真的跑起来，MotionLayout.onMeasure() 在「测量规格没变」时也不会调
+        //     ConstraintLayout.onMeasure()，只按缓存尺寸 setMeasuredDimension —— 运行时新加的
+        //     子 View（选集行、推荐卡）永远拿不到测量，表现就是整块停在初始 0×0/INVISIBLE。
+        //   用户实测佐证：竖屏进详情不显示，切横屏显示；横屏进详情不显示，切竖屏显示 ——
+        //   任何改变测量规格的遍历都会让内容出现，正是这条分支被复用了。
+        //
+        // 做法：先让整棵子树带上脏标记（markHierarchyDirty 会连带清掉缓存的测量结果），
+        // 再从 DecorView 发起一次强制遍历，绕开所有中间父容器的拦截。
+        markTreeDirty(root);
         root.requestLayout();
+        root.forceLayout();
         View decor = root.getRootView();
         if (decor != null && decor != root) {
             decor.requestLayout();
+            decor.forceLayout();
             decor.invalidate();
+        }
+    }
+
+    /**
+     * 给子树所有 View 打上 forceLayout 标记（等价于逐个调用 {@link View#forceLayout()}）。
+     *
+     * <p>ConstraintLayout/ MotionLayout 只认自己 {@code mDirtyHierarchy} 与缓存的
+     * {@code mLastMeasureWidth/Height}：只要缓存还在、又判断「规格没变」，就会直接复用旧尺寸。
+     * {@code View.forceLayout()} 会把 mPrivateFlags 的 PFLAG_FORCE_LAYOUT 置上，父容器在
+     * 收集脏标记时一定会把它算作需要重新测量，从而逼出真正的 {@code onMeasure}。
+     */
+    private void markTreeDirty(View v) {
+        if (v == null) return;
+        try {
+            v.forceLayout();
+        } catch (Exception ignore) {
+            // 极端情况下（View 已 detach）忽略即可
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) markTreeDirty(g.getChildAt(i));
         }
     }
 
@@ -2887,6 +2999,79 @@ public class DetailFragment extends Fragment {
 
     private int getColor(int id) {
         return requireContext().getColor(id);
+    }
+
+    /** 强调色：主题引擎开启时取当前方案主色，否则回退内置橙 */
+    private int accent() {
+        if (PrefStore.get().themeEngineOn()) {
+            return com.lateshow.app.theme.ThemeEngine.accentOf(requireContext());
+        }
+        return getColor(R.color.acc);
+    }
+
+    /** 选集/线路底：选中态用方案主色（引擎关闭回退内置 bg_episode_current） */
+    private android.graphics.drawable.Drawable episodeBg(boolean sel) {
+        return sel
+                ? com.lateshow.app.theme.ThemeEngine.accentEpisodeBg(requireContext())
+                : ContextCompat.getDrawable(requireContext(), R.drawable.bg_episode);
+    }
+
+    /** 主按钮底（播放 / 重新加载）：主题引擎开启时用方案主色，否则回退 bg_btn_main */
+    private android.graphics.drawable.Drawable accentBtnBg() {
+        return com.lateshow.app.theme.ThemeEngine.accentButtonBg(requireContext());
+    }
+
+    // ---------- 自定义主题 ----------
+
+    @Override
+    public void onThemeChanged() {
+        if (!isAdded() || getContext() == null) return;
+        boolean on = PrefStore.get().themeEngineOn();
+        // 页面底色 + 收藏色随新方案刷新
+        if (pageBg != null) {
+            pageBg.setColor(on
+                    ? com.lateshow.app.theme.ThemeEngine.get()
+                            .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()))
+                            .bgStart
+                    : getColor(R.color.ink900));
+        }
+        // 品牌 loading 的三角跟随方案主色
+        if (brandLoading != null) {
+            brandLoading.setAccentColor(on
+                    ? com.lateshow.app.theme.ThemeEngine.accentOf(requireContext())
+                    : getColor(R.color.brandTri));
+        }
+        // 信息带立即跟上新底色（不必等下一次播放态迁移）
+        if (infoBg != null) applyBandTint(bandTint);
+        // 选集 / 线路 / 明星 Tab 的选中底、源站胶囊圆点、主按钮随新方案重绘
+        if (epGrid != null) renderEpisodes();
+        if (lines != null && lines.getAdapter() != null) lines.getAdapter().notifyDataSetChanged();
+        if (castTabs != null && castTabs.getAdapter() != null) castTabs.getAdapter().notifyDataSetChanged();
+        if (chipSource != null) {
+            chipSource.setCompoundDrawablesWithIntrinsicBounds(
+                    com.lateshow.app.theme.ThemeEngine.accentDotBg(requireContext()),
+                    null, null, null);
+        }
+        if (btnPlay != null) {
+            btnPlay.setBackground(accentBtnBg());
+            // 按钮底随方案主色变，文字色随之自动对比（深主色给浅字，浅主色给深字）
+            btnPlay.setTextColor(com.lateshow.app.theme.ThemeEngine.accentInkColor(
+                    requireContext(), getColor(R.color.btnPlayInk)));
+        }
+        if (btnRetry != null) {
+            btnRetry.setBackground(accentBtnBg());
+            // btnRetry 字段声明为 View（XML 里是 TextView），同样跟随方案主色取对比文字色
+            if (btnRetry instanceof TextView) {
+                ((TextView) btnRetry).setTextColor(
+                        com.lateshow.app.theme.ThemeEngine.accentInkColor(
+                                requireContext(), getColor(R.color.btnPlayInk)));
+            }
+        }
+        if (btnToggleDesc != null) {
+            btnToggleDesc.setTextColor(
+                    com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext()));
+        }
+        syncFavState(false);
     }
 
     private int dp(int v) {

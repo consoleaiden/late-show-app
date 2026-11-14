@@ -28,7 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** 收藏页：胶囊 Tab「收藏 / 播放历史」 */
-public class FavFragment extends Fragment {
+public class FavFragment extends Fragment implements com.lateshow.app.MainActivity.ThemeAware {
 
     private TextView metaInfo, btnClear, emptyView, segFav, segHist;
     private RecyclerView grid;
@@ -111,6 +111,9 @@ public class FavFragment extends Fragment {
 
         segFav.setOnClickListener(vv -> switchSeg(false));
         segHist.setOnClickListener(vv -> switchSeg(true));
+        // 初始就按当前方案刷一次胶囊：XML 里 segFav 的默认底是写死 @color/acc 的 bg_seg_on，
+        // 若不等用户点一下就一直显示内置橙（switchSeg 有「同态直接返回」的短路，不能用它做初始化）
+        switchSegSilent(showHist);
         btnClear.setOnClickListener(vv -> {
             PrefStore.get().clearHist();
             render();
@@ -153,13 +156,26 @@ public class FavFragment extends Fragment {
         android.widget.Toast.makeText(getContext(), s, android.widget.Toast.LENGTH_SHORT).show();
     }
 
+    /** 分段选中底：主题引擎开启时取方案主色，否则回退内置 bg_seg_on（保持原观感） */
+    private android.graphics.drawable.Drawable segBg(boolean on) {
+        return on ? com.lateshow.app.theme.ThemeEngine.accentPillBg(requireContext())
+                : androidx.core.content.ContextCompat.getDrawable(
+                        requireContext(), R.drawable.bg_seg_off);
+    }
+
+    /** 选中态文字色：胶囊底色随方案主色变，文字随之自动对比（引擎关闭回退 accInk） */
+    private int segInk() {
+        return com.lateshow.app.theme.ThemeEngine.accentInkColor(
+                requireContext(), getColor(R.color.accInk));
+    }
+
     private void switchSeg(boolean hist) {
         if (showHist == hist) return;
         showHist = hist;
-        segFav.setBackgroundResource(showHist ? R.drawable.bg_seg_off : R.drawable.bg_seg_on);
-        segHist.setBackgroundResource(showHist ? R.drawable.bg_seg_on : R.drawable.bg_seg_off);
-        segFav.setTextColor(getColor(showHist ? R.color.t2 : R.color.accInk));
-        segHist.setTextColor(getColor(showHist ? R.color.accInk : R.color.t2));
+        segFav.setBackground(segBg(!showHist));
+        segHist.setBackground(segBg(showHist));
+        segFav.setTextColor(showHist ? getColor(R.color.t2) : segInk());
+        segHist.setTextColor(showHist ? segInk() : getColor(R.color.t2));
         render();
         com.lateshow.app.util.UiAnim.fadeUp(grid, 8);   // 收藏 ↔ 历史：整块内容换掉，淡入一次
     }
@@ -315,5 +331,24 @@ public class FavFragment extends Fragment {
         return String.format("%02d.%02d %02d:%02d",
                 c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH),
                 c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE));
+    }
+
+    // ---------- 自定义主题 ----------
+
+    @Override
+    public void onThemeChanged() {
+        if (!isAdded() || getView() == null) return;
+        // 胶囊选中态颜色与卡片角标由适配器在 bind 时重读，直接刷新列表即可
+        switchSegSilent(showHist);
+        if (adapter != null) adapter.notifyDataSetChanged();
+        getView().invalidate();
+    }
+
+    /** 仅重绘胶囊选中态（不触发数据重载） */
+    private void switchSegSilent(boolean hist) {
+        segFav.setBackground(segBg(!hist));
+        segHist.setBackground(segBg(hist));
+        segFav.setTextColor(hist ? getColor(R.color.t2) : segInk());
+        segHist.setTextColor(hist ? segInk() : getColor(R.color.t2));
     }
 }
