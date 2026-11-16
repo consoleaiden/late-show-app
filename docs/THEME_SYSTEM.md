@@ -114,3 +114,6 @@
   （切回首页 / 详情页收起）会立即回位，不会卡在隐藏态。
 - **控件位置**：`res/layout/fragment_settings.xml`
   （`swAnimTabbar` / `swAnimTopbar` / `swAnimChip`），绑定在 `SettingsFragment.bindAnimSwitch()`。
+- **踩坑**：开关监听里判断「是否程序化回填」必须读**当前存储值**（`getter.getAsBoolean()`），
+  不能拿绑定时的旧值比较 —— 否则第二次点击会被误吞：开关画面已切换、存储没改、也没有提示，
+  用户看到「关」但动画仍在（或反之），提示时有时无。
