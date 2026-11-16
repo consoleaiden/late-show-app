@@ -116,10 +116,6 @@ public class ThemeGalleryActivity extends AppCompatActivity {
             sampleRow.addView(sw);
             previewSwatches[i] = sw;
         }
-        previewText = new TextView(this);
-        previewText.setText("方寸之间 · 万象银幕");
-        previewText.setTextSize(12);
-        previewCard.addView(previewText);
 
         // 模式切换（一行）：切换预览的亮/暗模式
         LinearLayout modeRow = new LinearLayout(this);
@@ -226,7 +222,6 @@ public class ThemeGalleryActivity extends AppCompatActivity {
     }
 
     private View[] previewSwatches;
-    private TextView previewText;
 
     // ==================== 交互 ====================
 
@@ -306,8 +301,6 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         for (int i = 0; i < previewSwatches.length; i++) {
             setSwatchColor(previewSwatches[i], sw[i]);
         }
-        previewText.setTextColor(r.textPrimary);
-        previewText.setBackgroundColor(ThemeEngine.withAlpha(r.surface, 0.6f));
         previewCard.setBackground(ThemeEngine.get().backgroundDrawable(r));
         tvPreviewTitle.setTextColor(r.textPrimary);
         tvLightBind.setTextColor(previewNight ? color(R.color.t2) : r.onPrimary);

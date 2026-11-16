@@ -48,6 +48,8 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
     private RecyclerView chips, grid;
     // 顶栏搜索展开/收起（搜索输入默认隐藏，点搜索按钮从右向左滑出）
     private View searchBox, btnSearch, btnSearchClose;
+    /** 放大镜把手：单独一层，随自定义主题主色着色（圆环那层仍用 t1） */
+    private View imgSearchHandle;
     private boolean searchExpanded = false;
     private ChipAdapter chipAdapter;
     private VideoAdapter videoAdapter;
@@ -395,6 +397,8 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
         searchBox = v.findViewById(R.id.searchBox);
         btnSearch = v.findViewById(R.id.btnSearch);
         btnSearchClose = v.findViewById(R.id.btnSearchClose);
+        imgSearchHandle = v.findViewById(R.id.imgSearchHandle);
+        applySearchIconTint();
         if (btnSearch != null) {
             btnSearch.setOnClickListener(vv -> {
                 if (searchExpanded) submitSearch(inputSearch.getText().toString());
@@ -1693,7 +1697,14 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
         if (menuPanel != null) applyGlassParams(menuPanel);
         if (chipAdapter != null) chipAdapter.notifyDataSetChanged();
         if (lastRingState == RING_TESTING || lastRingState == RING_OK) renderSourceState(lastRingState);
+        applySearchIconTint();
         getView().invalidate();
+    }
+
+    /** 放大镜把手着色：主题引擎开启时用当前方案主色，否则回退内置橙（与源站环一致） */
+    private void applySearchIconTint() {
+        if (imgSearchHandle == null) return;
+        com.lateshow.app.util.Icons.tint(imgSearchHandle, ringAccent());
     }
 
     /** 源站环强调色：主题引擎开启时用当前方案主色，否则回退内置橙 */

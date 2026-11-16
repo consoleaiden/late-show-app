@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 放大镜把手：矢量自身白色，运行时由 Icons.tint 着成当前主题主色（随自定义主题切换） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.839"
+        android:pathData="M16.79,16.73L19.39,19.33" />
+</vector>

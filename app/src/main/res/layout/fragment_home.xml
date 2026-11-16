@@ -270,12 +270,20 @@
                 android:layout_marginRight="5dp"
                 android:contentDescription="搜索">
 
+                <!-- 圆环随系统亮暗；把手拆层由代码按主题主色着色（见 HomeFragment#applySearchIconTint） -->
                 <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/imgSearch"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:layout_gravity="center"
-                    android:src="@drawable/ic_search" />
+                    android:src="@drawable/ic_search_ring" />
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/imgSearchHandle"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_search_handle" />
             </FrameLayout>
         </FrameLayout>
     </com.lateshow.app.ui.widget.FrostedGlassBar>
