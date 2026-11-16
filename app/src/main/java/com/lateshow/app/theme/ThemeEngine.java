@@ -151,120 +151,136 @@ public final class ThemeEngine {
         }
     }
 
-    // ==================== 预设包 ====================
+    // ==================== 预设包（Ant Design 色板派生） ====================
 
     /**
-     * 预设主题（参考图配色提取）。
-     * primary 用于选中/强调；secondaryAuto=true 时辅助色由主色偏移生成。
+     * Ant Design 九种基本色（规范 spec/colors「ANTD Color」）。
+     *
+     * <p>规范页 Magenta 一项原文写作 {@code #E9259}（只有 5 位十六进制，为该页笔误），
+     * 这里取 Ant Design 标准玫红 {@code #EB2F96}。
+     */
+    public static final int AD_GREY    = 0xFFCCCCCC;
+    public static final int AD_RED     = 0xFFE01515;
+    public static final int AD_GREEN   = 0xFF60BE29;
+    public static final int AD_BLUE    = 0xFF00A0E8;
+    public static final int AD_MAGENTA = 0xFFEB2F96;
+    public static final int AD_ORANGE  = 0xFFFF6100;
+    public static final int AD_PURPLE  = 0xFF5E30B5;
+    public static final int AD_YELLOW  = 0xFFFAC450;
+    public static final int AD_CYAN    = 0xFF01BAD2;
+
+    /** 中性灰阶基色（规范 Grey）：文字与中性底都从它派生 */
+    private static final int AD_NEUTRAL = AD_GREY;
+    /** 暗底主 / 次文字（中性，不随方案色相走，保证深色底上的稳定对比） */
+    private static final int INK_DARK_HI = 0xFFECEDEF;
+    private static final int INK_DARK_MD = 0xFF98A0AA;
+    /** 亮底表面 */
+    private static final int SURFACE_LIGHT = 0xFFFFFFFF;
+
+    /** 派生色调：0 = 亮色（浅底白面），1 = 亮色·浓（底再深一档），2 = 暗色（深底反白字） */
+    private static final int TONE_LIGHT = 0;
+    private static final int TONE_LIGHT_DEEP = 1;
+    private static final int TONE_DARK = 2;
+
+    /**
+     * 按规范「叠白 / 叠黑」规则生成 10 档色阶：0 档最浅（做底色），4 档为基色，9 档最深。
+     *
+     * <p>规范给的是「n+5% 递进」的精神；这里把叠加比例拉开到可用区间，
+     * 否则 5% 一步既得不到足够浅的底、也得不到足够深的面。
+     */
+    public static int[] scale10(int base) {
+        int[] c = new int[10];
+        c[4] = base;
+        float[] tint = {0.85f, 0.65f, 0.45f, 0.25f};   // 3~0 档：叠白提浅
+        for (int i = 0; i < 4; i++) c[3 - i] = mix(base, 0xFFFFFFFF, tint[i]);
+        float[] shade = {0.20f, 0.35f, 0.50f, 0.65f, 0.80f};   // 5~9 档：叠黑压暗
+        for (int i = 0; i < 5; i++) c[5 + i] = mix(base, 0xFF000000, shade[i]);
+        return c;
+    }
+
+    /** 两色按 p 比例混合（p 为 to 的占比） */
+    public static int mix(int from, int to, float p) {
+        return Color.argb(Color.alpha(from),
+                Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * p),
+                Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * p),
+                Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * p));
+    }
+
+    /**
+     * 预设主题：全部由 Ant Design 九种基本色派生。
+     *
+     * <p>保留原有 id 与命名（用户已保存 / 已绑定的方案不受影响），但每个方案的整套色板
+     * 改为从 Ant Design 基色的 10 档色阶里取：亮色方案取叠白端做底 + 白表面 + 灰阶文字，
+     * 暗色方案取叠黑端做底与面 + 反白文字。命名沿用产品既有意象，基色按意象色相对应到
+     * 最近的 Ant Design 基本色。
      */
     public static List<ThemeScheme> presets() {
         List<ThemeScheme> list = new ArrayList<>();
-        // ① 方寸（内置品牌配色）
+        // ① 方寸（内置品牌配色，始终以代码为准、置于首位）
         list.add(scheme(ID_FANG_CUN, "方寸",
                 0xFFFF5A36, 0xFFFE5A35,
-                0xFFF2ECE6, 0xFF1B1412, 0xFFEDE5DD,
-                true));
-        // ② 薄荷气泡（参考图 1：青绿主调，浅薄荷底）
-        list.add(scheme("mint", "薄荷气泡",
-                0xFF49AAA0, 0xFF49AAA0,
-                0xFFDFF2EC, 0xFFFFFFFF, 0xFFF4FAF7,
-                false, 0xFF4FD8C4));
-        // ③ 暗夜霓虹（参考图 2：深紫夜场 + 粉橙点缀）
-        list.add(scheme("neon", "暗夜霓虹",
-                0xFFFF6FA5, 0xFF302B4F,
-                0xFF221F3A, 0xFF302B4F, 0xFF181527,
-                false, 0xFFFF9BC6));
-        // ④ 柠檬汽水（参考图 3：荧光绿 + 深空蓝）
-        list.add(scheme("lemon", "柠檬汽水",
-                0xFF9CD71B, 0xFF9CD71B,
-                0xFFEFF7D8, 0xFFFFFFFF, 0xFFF7FBE9,
-                false, 0xFFC9F26B));
-        // ⑤ 经典墨黑（参考图 4：纯黑极简 + 荧光绿按钮）
-        list.add(scheme("mono", "经典墨黑",
-                0xFFE8F53C, 0xFF111111,
-                0xFF17181A, 0xFF232426, 0xFF101112,
-                false, 0xFFD3F270));
-        // ⑥ 碧海蓝天（参考图 5：天空蓝渐变）
-        list.add(scheme("ocean", "碧海蓝天",
-                0xFF1565C7, 0xFF1565C7,
-                0xFFEAF4FC, 0xFFFFFFFF, 0xFFF6FBFF,
-                false, 0xFF4FA9EE));
-        // ⑦ 蓝莓软糖（参考图 6：蓝紫糖果）
-        list.add(scheme("berry", "蓝莓软糖",
-                0xFF5570EA, 0xFF5570EA,
-                0xFFEFF1FC, 0xFFFFFFFF, 0xFFF7F8FE,
-                false, 0xFF8DA3F5));
-        // ⑧ 奶油拿铁（参考图 7：米白 + 彩虹糖）
-        list.add(scheme("latte", "奶油拿铁",
-                0xFF5570EA, 0xFFF3E3C5,
-                0xFFFAF5EC, 0xFFF3E3C5, 0xFFEFE0C8,
-                false, 0xFF7C8CF0));
-        // ⑨ 灰调公寓（参考图 8：冷灰蓝 + 薄荷）
-        list.add(scheme("loft", "灰调公寓",
-                0xFF282831, 0xFF282831,
-                0xFFE8EDF2, 0xFFFFFFFF, 0xFFF4F7FA,
-                false, 0xFF5E7C93));
-        // ⑩ 蜜桃软糖（参考图 9：蜜桃粉彩）
-        list.add(scheme("peach", "蜜桃软糖",
-                0xFFCCF4E6, 0xFFCCF4E6,
-                0xFFF3FBF7, 0xFFFFFFFF, 0xFFF9FDFB,
-                false, 0xFF7FE0B8));
-        // ⑪ 珊瑚日落（参考图 10：橙红暖阳）
-        list.add(scheme("sunset", "珊瑚日落",
-                0xFFFFA37C, 0xFFFFA37C,
-                0xFFFDF3EC, 0xFFFFFFFF, 0xFFFEF8F3,
-                false, 0xFFFC8E5C));
-        // ⑫ 雨林光影（参考图 11：深绿自然）
-        list.add(scheme("forest", "雨林光影",
-                0xFF71C88D, 0xFF1A2E24,
-                0xFF1B2620, 0xFF24352B, 0xFF121B16,
-                false, 0xFF4FA36E));
-        // ⑬ 晴空万里（参考图 12：天蓝清爽）
-        list.add(scheme("sky", "晴空万里",
-                0xFF49AAA0, 0xFFD2EEFC,
-                0xFFE4F6FB, 0xFFD2EEFC, 0xFFC2E4F6,
-                false, 0xFF7AC7E8));
-        // ⑭ 薰衣草紫（参考图 13：淡紫柔光）
-        list.add(scheme("lavender", "薰衣草紫",
-                0xFFD2EEFC, 0xFFF0EBFA,
-                0xFFEFF5FC, 0xFFF0EBFA, 0xFFF6F2FD,
-                false, 0xFFBBA6EC));
-        // ⑮ 深海蓝调（参考图 14：蓝紫商务）
-        list.add(scheme("deepsea", "深海蓝调",
-                0xFF5570EA, 0xFFE6ECFD,
-                0xFFEDF1FC, 0xFFE6ECFD, 0xFFDDE5FA,
-                false, 0xFF839BF2));
-        // ⑯ 紫芋奶盖（参考图 15：香芋紫）
-        list.add(scheme("taro", "紫芋奶盖",
-                0xFFB493F5, 0xFFF3E9FD,
-                0xFFF5EEFD, 0xFFF3E9FD, 0xFFEDE1FB,
-                false, 0xFFC9AFF7));
-        // ⑰ 抹茶牛乳（参考图 16：低饱和抹茶）
-        list.add(scheme("matcha", "抹茶牛乳",
-                0xFF5570EA, 0xFFEFF6E8,
-                0xFFF4F2E7, 0xFFEFF6E8, 0xFFE9F1DE,
-                false, 0xFF7C8CF0));
-        // ⑱ 薄荷汽水（参考图 17：清新薄荷）
-        list.add(scheme("soda", "薄荷汽水",
-                0xFF5570EA, 0xFFE4F1F6,
-                0xFFF2F7FA, 0xFFE4F1F6, 0xFFDBECF3,
-                false, 0xFF7C8CF0));
-        // ⑲ 葡萄冰茶（参考图 18：葡萄紫）
-        list.add(scheme("grape", "葡萄冰茶",
-                0xFF9B6BF3, 0xFFF0E9FD,
-                0xFFF6F0FD, 0xFFF0E9FD, 0xFFEADFFB,
-                false, 0xFFB48EF6));
-        // ⑳ 活力橙（参考图 19：活力橙）
-        list.add(scheme("orange", "活力橙",
-                0xFF5570EA, 0xFFFCF0EA,
-                0xFFFDF3EC, 0xFFFCF0EA, 0xFFFAE6DB,
-                false, 0xFF7C8CF0));
-        // ㉑ 静谧蓝（参考图 20：静谧蓝）
-        list.add(scheme("calm", "静谧蓝",
-                0xFF4A6FA5, 0xFFEAF1F8,
-                0xFFF2F6FA, 0xFFEAF1F8, 0xFFE1EAF4,
-                false, 0xFF6E92C0));
+                0xFFF2ECE6, 0xFF1B1412, 0xFFEDE5DD, true));
+        // ② 以下 20 个：Ant Design 基本色 × 三种色调
+        list.add(adPreset("mint", "薄荷气泡", AD_CYAN, TONE_LIGHT));
+        list.add(adPreset("neon", "暗夜霓虹", AD_PURPLE, TONE_DARK));
+        list.add(adPreset("lemon", "柠檬汽水", AD_YELLOW, TONE_LIGHT_DEEP));
+        list.add(adPreset("mono", "经典墨黑", AD_GREY, TONE_DARK));
+        list.add(adPreset("ocean", "碧海蓝天", AD_BLUE, TONE_LIGHT));
+        list.add(adPreset("berry", "蓝莓软糖", AD_MAGENTA, TONE_LIGHT));
+        list.add(adPreset("latte", "奶油拿铁", AD_YELLOW, TONE_LIGHT));
+        list.add(adPreset("loft", "灰调公寓", AD_GREY, TONE_LIGHT));
+        list.add(adPreset("peach", "蜜桃软糖", AD_RED, TONE_LIGHT));
+        list.add(adPreset("sunset", "珊瑚日落", AD_ORANGE, TONE_LIGHT_DEEP));
+        list.add(adPreset("forest", "雨林光影", AD_GREEN, TONE_DARK));
+        list.add(adPreset("sky", "晴空万里", AD_CYAN, TONE_LIGHT_DEEP));
+        list.add(adPreset("lavender", "薰衣草紫", AD_PURPLE, TONE_LIGHT));
+        list.add(adPreset("deepsea", "深海蓝调", AD_BLUE, TONE_DARK));
+        list.add(adPreset("taro", "紫芋奶盖", AD_MAGENTA, TONE_LIGHT_DEEP));
+        list.add(adPreset("matcha", "抹茶牛乳", AD_GREEN, TONE_LIGHT));
+        list.add(adPreset("soda", "薄荷汽水", AD_CYAN, TONE_DARK));
+        list.add(adPreset("grape", "葡萄冰茶", AD_PURPLE, TONE_LIGHT_DEEP));
+        list.add(adPreset("orange", "活力橙", AD_ORANGE, TONE_LIGHT));
+        list.add(adPreset("calm", "静谧蓝", AD_BLUE, TONE_LIGHT_DEEP));
         return list;
+    }
+
+    /** 由 Ant Design 基色派生一整套方案（主色 / 辅助色 / 底 / 面 / 文字全部来自同一色阶） */
+    private static ThemeScheme adPreset(String id, String name, int base, int tone) {
+        int[] sc = scale10(base);
+        int[] g = scale10(AD_NEUTRAL);
+        ThemeScheme s = new ThemeScheme();
+        s.id = id;
+        s.name = name;
+        s.primary = base;
+        s.secondaryAuto = false;
+        s.bgMode = 0;
+        s.bgAngle = 135;
+        s.navAlpha = 88;
+        s.glassOn = DEF_GLASS_ON;
+        s.barBlur = DEF_GLASS_BLUR;
+        s.barFrost = DEF_GLASS_FROST;
+        s.barAlpha = DEF_GLASS_ALPHA;
+        if (tone == TONE_DARK) {
+            s.secondary = sc[2];
+            s.bgColor = s.bgFrom = sc[9];
+            s.bgTo = sc[8];
+            s.surface = sc[8];
+            s.textPrimary = INK_DARK_HI;
+            s.textSecondary = INK_DARK_MD;
+        } else {
+            s.secondary = sc[6];
+            s.surface = SURFACE_LIGHT;
+            s.textPrimary = g[9];
+            s.textSecondary = g[6];
+            if (tone == TONE_LIGHT_DEEP) {
+                s.bgColor = s.bgFrom = sc[1];
+                s.bgTo = sc[2];
+            } else {
+                s.bgColor = s.bgFrom = sc[0];
+                s.bgTo = sc[1];
+            }
+        }
+        return s;
     }
 
     private static ThemeScheme scheme(String id, String name, int primary, int surface,
