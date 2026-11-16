@@ -97,136 +97,6 @@
                 android:contentDescription="进入" />
         </LinearLayout>
 
-        <!-- ①-b 首页动效：滚动隐显 / 分类区退让（紧跟「自定义主题」入口，控制首页三项动画） -->
-        <LinearLayout
-            style="@style/SettingsCard"
-            android:layout_marginBottom="8dp"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/SectionTitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="首页动效" />
-
-            <!-- 底部导航栏：列表滚动时下滑让出空间 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="底部导航栏闪避"
-                        android:textSize="12.5sp"
-                        android:textColor="@color/t1" />
-
-                    <TextView
-                        style="@style/MetaLabel"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:lineSpacingMultiplier="1.5"
-                        android:textAllCaps="false"
-                        android:text="列表滚动时底部导航栏下滑让出空间，让更多内容可见；滚动结束自动回位" />
-                </LinearLayout>
-
-                <Switch
-                    android:id="@+id/swAnimTabbar"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginLeft="10dp"
-                    android:contentDescription="底部导航栏闪避" />
-            </LinearLayout>
-
-            <!-- 顶部功能区：列表滚动时上滑让出空间 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="顶部功能区闪避"
-                        android:textSize="12.5sp"
-                        android:textColor="@color/t1" />
-
-                    <TextView
-                        style="@style/MetaLabel"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:lineSpacingMultiplier="1.5"
-                        android:textAllCaps="false"
-                        android:text="列表滚动时顶部功能区上滑让出空间，让更多内容可见；滚动结束自动回位" />
-                </LinearLayout>
-
-                <Switch
-                    android:id="@+id/swAnimTopbar"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginLeft="10dp"
-                    android:contentDescription="顶部功能区闪避" />
-            </LinearLayout>
-
-            <!-- 分类区：横滑分类时两侧按钮退让 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="分类区两侧退让"
-                        android:textSize="12.5sp"
-                        android:textColor="@color/t1" />
-
-                    <TextView
-                        style="@style/MetaLabel"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:lineSpacingMultiplier="1.5"
-                        android:textAllCaps="false"
-                        android:text="横滑分类时，左右两侧的源站与搜索按钮向各自方向退让，便于显示更多分类" />
-                </LinearLayout>
-
-                <Switch
-                    android:id="@+id/swAnimChip"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginLeft="10dp"
-                    android:contentDescription="分类区两侧退让" />
-            </LinearLayout>
-        </LinearLayout>
-
         <!-- ② 数据源模式：NAS 同步库 / 资源站直连（手风琴面板，与其他模块一致） -->
         <LinearLayout
             style="@style/SettingsCard"
@@ -671,6 +541,138 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:visibility="gone">
+
+                <!-- 首页动效：滚动隐显 / 分类区退让（原独立卡片已并入「播放偏好」） -->
+                <TextView
+                    style="@style/SectionTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="首页动效" />
+
+                <!-- 底部导航栏：列表滚动时下滑让出空间 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="底部导航栏闪避"
+                            android:textSize="12.5sp"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            style="@style/MetaLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:lineSpacingMultiplier="1.5"
+                            android:textAllCaps="false"
+                            android:text="列表滚动时底部导航栏下滑让出空间，让更多内容可见；滚动结束自动回位" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/swAnimTabbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="10dp"
+                        android:contentDescription="底部导航栏闪避" />
+                </LinearLayout>
+
+                <!-- 顶部功能区：列表滚动时上滑让出空间 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="顶部功能区闪避"
+                            android:textSize="12.5sp"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            style="@style/MetaLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:lineSpacingMultiplier="1.5"
+                            android:textAllCaps="false"
+                            android:text="列表滚动时顶部功能区上滑让出空间，让更多内容可见；滚动结束自动回位" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/swAnimTopbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="10dp"
+                        android:contentDescription="顶部功能区闪避" />
+                </LinearLayout>
+
+                <!-- 分类区：横滑分类时两侧按钮退让 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="分类区两侧退让"
+                            android:textSize="12.5sp"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            style="@style/MetaLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:lineSpacingMultiplier="1.5"
+                            android:textAllCaps="false"
+                            android:text="横滑分类时，左右两侧的源站与搜索按钮向各自方向退让，便于显示更多分类" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/swAnimChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="10dp"
+                        android:contentDescription="分类区两侧退让" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/SectionTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:text="播放跳过" />
 
                 <TextView
                     android:layout_width="match_parent"

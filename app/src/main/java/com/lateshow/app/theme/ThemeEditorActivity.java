@@ -48,6 +48,12 @@ public class ThemeEditorActivity extends AppCompatActivity {
     // 配色实时预览区（「颜色」分区下方）
     private LinearLayout colorPreviewBox;
     private TextView cpBtn, cpPill, cpT1, cpT2;
+    // 毛玻璃实时预览（「毛玻璃」分区）：彩色背景 + 玻璃浮层卡片 + 玻璃底栏
+    private android.widget.FrameLayout glassStage;
+    private View glassBackdrop;
+    private com.lateshow.app.ui.widget.FrostedGlassPanel glassCard, glassBar;
+    private TextView[] glassBarLabels = new TextView[0];
+    private TextView glassCardTitle, glassCardSub;
     // 表单控件（编辑过程中实时联动）
     private EditText etName;
     private TextView swPrimary, swSecondary, swBgFrom, swBgTo, swSurface, swText1, swText2;
@@ -172,6 +178,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
         page.addView(section("毛玻璃"));
         page.addView(glassSwitchRow());
+        page.addView(buildGlassPreview());
         page.addView(sliderRow("模糊强度", SLIDER_BLUR));
         page.addView(sliderRow("白雾浓度", SLIDER_FROST));
         page.addView(sliderRow("玻璃不透明度", SLIDER_ALPHA));
@@ -324,6 +331,143 @@ public class ThemeEditorActivity extends AppCompatActivity {
         return card;
     }
 
+    /** 「毛玻璃」分区下方的实时预览：彩色背景上叠玻璃浮层卡片 + 玻璃底栏 */
+    private View buildGlassPreview() {
+        float dd = d();
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = Math.round(10 * dd);
+        card.setPadding(pad, pad, pad, pad);
+        card.setBackgroundResource(R.drawable.bg_card);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = Math.round(8 * dd);
+        card.setLayoutParams(lp);
+
+        TextView cap = new TextView(this);
+        cap.setText("毛玻璃预览（实时）");
+        cap.setTextSize(10.5f);
+        cap.setTextColor(color(R.color.t3));
+        cap.setPadding(0, 0, 0, Math.round(6 * dd));
+        card.addView(cap);
+
+        glassStage = new android.widget.FrameLayout(this);
+        glassStage.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.round(172 * dd)));
+
+        // 背景内容：随配色联动（渐变底 + 彩色圆），让模糊 / 白雾 / 透明度看得出层次
+        glassBackdrop = new View(this) {
+            @Override protected void onDraw(android.graphics.Canvas c) {
+                int w = getWidth(), h = getHeight();
+                if (w <= 0 || h <= 0) return;
+                ThemeScheme s = ThemeEditorActivity.this.scheme;
+                android.graphics.Paint p = new android.graphics.Paint();
+                android.graphics.Shader sh = new android.graphics.LinearGradient(
+                        0f, 0f, w, h,
+                        s.bgMode == 0 ? s.bgColor : s.bgFrom,
+                        s.bgMode == 0 ? s.bgColor : s.bgTo,
+                        android.graphics.Shader.TileMode.CLAMP);
+                p.setShader(sh);
+                c.drawRect(0f, 0f, w, h, p);
+                p.setShader(null);
+                int sec = s.secondaryAuto ? ThemeEngine.autoSecondary(s.primary) : s.secondary;
+                int[] dots = {s.primary, sec, 0xFFFFC24B, 0xFF5B7FFF, 0xFFE25C8A};
+                float r = w / 13f;
+                for (int i = 0; i < dots.length; i++) {
+                    p.setColor(dots[i]);
+                    float cx = w * (0.11f + 0.195f * i);
+                    float cy = h * ((i % 2 == 0) ? 0.28f : 0.66f);
+                    c.drawCircle(cx, cy, r, p);
+                }
+            }
+        };
+        glassStage.addView(glassBackdrop, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // 玻璃浮层卡片（模拟源站 / 分类弹层）
+        glassCard = new com.lateshow.app.ui.widget.FrostedGlassPanel(this);
+        int cardH = Math.round(78 * dd);
+        android.widget.FrameLayout.LayoutParams clp =
+                new android.widget.FrameLayout.LayoutParams(Math.round(236 * dd), cardH);
+        clp.topMargin = Math.round(16 * dd);
+        clp.leftMargin = Math.round(14 * dd);
+        glassStage.addView(glassCard, clp);
+
+        LinearLayout cardBox = new LinearLayout(this);
+        cardBox.setOrientation(LinearLayout.VERTICAL);
+        cardBox.setPadding(Math.round(10 * dd), Math.round(9 * dd),
+                Math.round(10 * dd), Math.round(9 * dd));
+        glassCard.addView(cardBox);
+        glassCardTitle = new TextView(this);
+        glassCardTitle.setText("毛玻璃浮层");
+        glassCardTitle.setTextSize(13f);
+        glassCardTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        cardBox.addView(glassCardTitle);
+        glassCardSub = new TextView(this);
+        glassCardSub.setText("源站 · 分类 · 搜索");
+        glassCardSub.setTextSize(10.5f);
+        glassCardSub.setPadding(0, Math.round(3 * dd), 0, 0);
+        cardBox.addView(glassCardSub);
+
+        // 底部玻璃栏（模拟底部导航）
+        glassBar = new com.lateshow.app.ui.widget.FrostedGlassPanel(this);
+        int barH = Math.round(54 * dd);
+        android.widget.FrameLayout.LayoutParams blp =
+                new android.widget.FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, barH);
+        blp.gravity = Gravity.BOTTOM;
+        glassStage.addView(glassBar, blp);
+
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setGravity(Gravity.CENTER_VERTICAL);
+        glassBar.addView(tabs, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        glassBarLabels = new TextView[]{null, null, null, null};
+        String[] names = {"首页", "分类", "收藏", "设置"};
+        for (int i = 0; i < names.length; i++) {
+            TextView t = new TextView(this);
+            t.setText(names[i]);
+            t.setTextSize(10.5f);
+            t.setGravity(Gravity.CENTER);
+            tabs.addView(t, new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            glassBarLabels[i] = t;
+        }
+
+        card.addView(glassStage);
+        return card;
+    }
+
+    /** 把当前方案的毛玻璃参数映射到预览控件（口径与 GlassTheme.applyPanel 一致） */
+    private void applyGlassPreview() {
+        if (glassBar == null || glassCard == null) return;
+        float dd = d();
+        int tint = scheme.surface;
+        int ink = ThemeEngine.inkOn(tint);
+        applyGlassTo(glassBar, dd, tint);
+        applyGlassTo(glassCard, dd, tint);
+        glassBar.setGlassCornerRadius(Math.round(27 * dd));
+        glassCard.setGlassCornerRadius(Math.round(16 * dd));
+        if (glassBackdrop != null) glassBackdrop.invalidate();
+        for (TextView t : glassBarLabels) {
+            if (t != null) t.setTextColor(ink);
+        }
+        if (glassCardTitle != null) glassCardTitle.setTextColor(ink);
+        if (glassCardSub != null) {
+            glassCardSub.setTextColor(ThemeEngine.withAlpha(ink, 0.72f));
+        }
+    }
+
+    private void applyGlassTo(com.lateshow.app.ui.widget.FrostedGlassPanel g, float dd, int tint) {
+        g.setBackdropSource(glassBackdrop);
+        g.setGlassOn(scheme.glassOn);
+        g.setBlurSigma(com.lateshow.app.ui.widget.GlassTheme.sigma(scheme.barBlur, dd));
+        g.setFrost(Math.min(1f, scheme.barFrost / 100f * 1.35f));
+        g.setBaseAlpha(Math.min(1f, scheme.barAlpha / 100f * 1.05f));
+        g.setTintColor(tint);
+    }
+
     /** 圆角底色（预览按钮 / 胶囊） */
     private android.graphics.drawable.Drawable roundedBg(int c, float radiusDp) {
         android.graphics.drawable.GradientDrawable gd =
@@ -458,6 +602,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
                     case SLIDER_FROST: scheme.barFrost = p; break;
                     case SLIDER_ALPHA: scheme.barAlpha = p; break;
                 }
+                refreshPreview();   // 滑杆实时联动毛玻璃预览
             }
             @Override public void onStartTrackingTouch(android.widget.SeekBar s) { }
             @Override public void onStopTrackingTouch(android.widget.SeekBar s) { }
@@ -689,6 +834,9 @@ public class ThemeEditorActivity extends AppCompatActivity {
             cpT1.setTextColor(scheme.textPrimary);
             cpT2.setTextColor(scheme.textSecondary);
         }
+
+        // 毛玻璃预览实时跟随（开关 / 滑杆 / 表面色变化都会走到这里）
+        applyGlassPreview();
     }
 
     // ==================== 保存 ====================

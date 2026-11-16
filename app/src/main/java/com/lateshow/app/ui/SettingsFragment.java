@@ -328,7 +328,7 @@ public class SettingsFragment extends Fragment
             });
         }
 
-        // 首页动效三开关：滚动隐显 / 分类区退让（默认开启；立即生效，回首页即可见）
+        // 首页动效三开关（位于「播放偏好」面板内）：滚动隐显 / 分类区退让（默认开启；立即生效，回首页即可见）
         bindAnimSwitch(v, R.id.swAnimTabbar,
                 PrefStore.get()::animTabbarHide, PrefStore.get()::setAnimTabbarHide,
                 "底部导航栏滚动闪避", "列表滚动时底部导航栏不再下滑隐藏");
