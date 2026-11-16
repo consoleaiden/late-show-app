@@ -382,17 +382,34 @@ public class SettingsFragment extends Fragment
     }
 
     /**
-     * 测试结果统一落地：标题延迟文案、标题图标颜色、模块有效状态、同步控制台入口显隐。
-     * 成功 = 绿色延迟 ms；超时/失败 = 灰色「超时」且入口隐藏。
+     * 测试结果统一落地：标题延迟文案、标题图标与文字着色、模块有效状态、同步控制台入口显隐。
+     * 成功 = 方案主色的延迟 ms；超时/失败 = 灰色「超时」且入口隐藏。
      */
     private void setSourceState(boolean ok, Long ms) {
         sourceAvailable = ok;
         if (!isAdded() || getView() == null) return;
         tvSourceLatency.setText(ok ? (ms == null ? "已连接" : ms + "ms") : "超时");
-        tvSourceLatency.setTextColor(getColor(ok ? R.color.ok : R.color.t3));
-        android.widget.ImageView ic = getView().findViewById(R.id.icSourceHeader);
-        if (ic != null) ic.setColorFilter(getColor(ok ? R.color.ok : R.color.t3));
+        applySourceAccents();
         consoleEntry.setVisibility(ok ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * 「播放源与鉴权」标题图标 + 延迟文字的配色。
+     *
+     * <p>已连接时随当前方案主色走：图标用 {@code accentOf} 原色，文字用
+     * {@code accentTextColor}（按底亮度压暗/提亮的同色系变体，保证可读）。
+     * 「检测中 / 超时」保持中性 {@code t3}——那是「还没有服务」，不是「成功」，不该染主色。
+     */
+    private void applySourceAccents() {
+        if (getView() == null) return;
+        int accent = com.lateshow.app.theme.ThemeEngine.accentOf(requireContext());
+        android.widget.ImageView ic = getView().findViewById(R.id.icSourceHeader);
+        if (ic != null) ic.setColorFilter(sourceAvailable ? accent : getColor(R.color.t3));
+        if (tvSourceLatency != null) {
+            tvSourceLatency.setTextColor(sourceAvailable
+                    ? com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext())
+                    : getColor(R.color.t3));
+        }
     }
 
     /** 顶部状态条：显示服务端鉴权状态与 Token 配置情况（不再驱动图标颜色，避免与连接测试冲突） */
@@ -801,6 +818,8 @@ public class SettingsFragment extends Fragment
         if (openConsole instanceof TextView) ((TextView) openConsole).setTextColor(accentText);
         View addProxy = getView().findViewById(R.id.btnAddProxy);
         if (addProxy instanceof TextView) ((TextView) addProxy).setTextColor(accentText);
+        // 「播放源与鉴权」标题图标 + 延迟文字（已连接随方案主色，未连接保持中性）
+        applySourceAccents();
     }
 
     /** 主题方案变化：重绘分段控件选中态 + 主按钮 + 品牌字标（颜色来自新方案主色） */
