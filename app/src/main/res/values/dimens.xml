@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 同步控制台页头与内容区的左右边距：手机尽量用满宽度 -->
-    <dimen name="console_pad">10dp</dimen>
+    <!-- 控制台与全站统一 token：页边距 16 / 大卡 18 / 标准卡 12（与设置页 / 主题页一致） -->
+    <dimen name="console_pad">16dp</dimen>
+    <!-- 面板内说明文字与组标题的字号（原 10.5sp 与 MetaLabel 9.5sp 混用，统一到 11sp） -->
+    <dimen name="console_hint">11sp</dimen>
+    <!-- 运行概览统计卡列数：手机两列、宽屏三列 -->
+    <integer name="console_stat_span">2</integer>
 </resources>

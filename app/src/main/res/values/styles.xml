@@ -143,6 +143,15 @@
         <item name="android:orientation">vertical</item>
     </style>
 
+    <!-- 控制台面板内的说明文字：统一 11sp / t2（原 10.5sp 与 MetaLabel 9.5sp 混用） -->
+    <style name="ConsoleHint">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">@color/t2</item>
+        <item name="android:lineSpacingMultiplier">1.55</item>
+    </style>
+
     <style name="OpBtn">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_weight">1</item>

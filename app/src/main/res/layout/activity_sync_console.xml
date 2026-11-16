@@ -62,13 +62,14 @@
 
                 <TextView
                     android:id="@+id/tvConsoleStatus"
-                    style="@style/MetaLabel"
                     android:layout_width="0dp"
                     android:layout_weight="1"
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
                     android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/t1"
                     android:text="正在连接 VodSync…" />
 
                 <TextView
@@ -141,7 +142,7 @@
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
                         <TextView android:id="@+id/btnSyncAll" android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp"
                             android:gravity="center" android:background="@drawable/bg_btn_main" android:text="全站增量同步"
-                            android:textSize="12sp" android:textStyle="bold" android:textColor="@color/accInk" />
+                            android:textSize="12sp" android:textStyle="bold" />
                         <TextView android:id="@+id/btnRefresh" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="刷新源站列表" />
                     </LinearLayout>
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
@@ -154,7 +155,7 @@
                     </LinearLayout>
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                         android:text="全量同步仅建议数据异常时使用，耗时较长且会重跑全部页码。"
-                        android:textSize="10.5sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.6" />
+                        android:textSize="11sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.55" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -172,12 +173,12 @@
 
                 <LinearLayout android:id="@+id/panelPause" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:visibility="gone">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
-                        android:text="优雅停止：当前批次完成后保存断点再停，不丢数据；暂停状态重启后仍保留。"
-                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <TextView
+                        style="@style/ConsoleHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="优雅停止：当前批次完成后保存断点再停，不丢数据；暂停状态重启后仍保留。" />
                     <TextView android:id="@+id/pauseWarn" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="8dp" android:padding="10dp" android:background="@color/warnSoft"
-                        android:textSize="10.5sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.6" android:visibility="gone" />
+                        android:textSize="11sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.55" android:visibility="gone" />
                     <LinearLayout android:id="@+id/pauseRows" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="4dp" android:orientation="vertical" />
                 </LinearLayout>
@@ -197,9 +198,9 @@
 
                 <LinearLayout android:id="@+id/panelSearch" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:visibility="gone">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
-                        android:text="跨全部源站按名称搜索，结果按更新时间倒序。"
-                        android:textSize="10.5sp" android:textColor="@color/t2" />
+                    <TextView
+                        style="@style/ConsoleHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="跨全部源站按名称搜索，结果按更新时间倒序。" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                         android:orientation="horizontal" android:gravity="center_vertical">
                         <EditText android:id="@+id/etSearch" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp"
@@ -229,9 +230,9 @@
 
                 <LinearLayout android:id="@+id/panelTables" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:visibility="gone">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
-                        android:text="只读查看数据库内容；表行数为缓存值（点「条数校准」后更新）。"
-                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <TextView
+                        style="@style/ConsoleHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="只读查看数据库内容；表行数为缓存值（点「条数校准」后更新）。" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                         android:orientation="horizontal" android:gravity="center_vertical">
                         <Spinner android:id="@+id/spTable" android:layout_width="0dp" android:layout_weight="1" android:layout_height="42dp"
@@ -311,9 +312,9 @@
 
                 <LinearLayout android:id="@+id/panelLogs" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:visibility="gone">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
-                        android:text="最多显示 20 条；每次自动刷新同步更新。"
-                        android:textSize="10.5sp" android:textColor="@color/t2" />
+                    <TextView
+                        style="@style/ConsoleHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="最多显示 20 条；每次自动刷新同步更新。" />
                     <LinearLayout android:id="@+id/logList" android:layout_width="match_parent"
                         android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="6dp" />
                     <LinearLayout android:id="@+id/logSkeleton" android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -366,16 +367,15 @@
                         android:paddingLeft="12dp" android:paddingRight="12dp" android:background="@drawable/bg_field"
                         android:hint="确认新密码" android:textSize="12sp" android:textColor="@color/t1" android:textColorHint="@color/t3"
                         android:inputType="textPassword" android:maxLines="1" />
-                    <TextView android:id="@+id/btnChangePw" android:layout_width="match_parent" android:layout_height="40dp"
-                        android:layout_marginTop="8dp" android:gravity="center" android:background="@drawable/bg_btn_main"
-                        android:text="保存新密码" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/accInk" />
+                    <TextView android:id="@+id/btnChangePw" style="@style/OpBtn"
+                        android:layout_marginTop="8dp" android:text="保存新密码" />
 
                     <!-- 具名 Token（v1.14.0）：不动现有 Token，单独给 TV / 车机发只读 Token -->
                     <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content"
                         android:layout_marginTop="14dp" android:text="具名 Token" />
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp"
-                        android:text="不动当前 Token，另发一枚只读 Token 给电视 / 车机用；清单不回显明文，新 Token 只在签发时显示一次。"
-                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <TextView
+                        style="@style/ConsoleHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+                        android:text="不动当前 Token，另发一枚只读 Token 给电视 / 车机用；清单不回显明文，新 Token 只在签发时显示一次。" />
                     <TextView android:id="@+id/tvTokenListHint" style="@style/MetaLabel" android:layout_width="match_parent"
                         android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textAllCaps="false"
                         android:text="读取中…" />
@@ -403,9 +403,9 @@
 
                 <LinearLayout android:id="@+id/panelStars" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:visibility="gone">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
-                        android:text="词库主演名用于扫描缺失演员信息的标题与简介。支持 JSON 数组或逗号 / 顿号 / 竖线 / 换行分隔批量粘贴。"
-                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <TextView
+                        style="@style/ConsoleHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="词库主演名用于扫描缺失演员信息的标题与简介。支持 JSON 数组或逗号 / 顿号 / 竖线 / 换行分隔批量粘贴。" />
                     <EditText android:id="@+id/etStarTerms" android:layout_width="match_parent" android:layout_height="80dp"
                         android:layout_marginTop="8dp" android:padding="10dp" android:gravity="top|start" android:background="@drawable/bg_field"
                         android:hint="例如：张三，李四|王五" android:textSize="12sp" android:textColor="@color/t1"
@@ -443,13 +443,11 @@
                         <TextView android:id="@+id/btnRelatedRecompute" style="@style/OpBtn" android:text="重算相关推荐" />
                         <TextView android:id="@+id/btnStarTagsBackfill" style="@style/OpBtn" android:layout_marginLeft="8dp" android:text="回填明星标签" />
                     </LinearLayout>
-                    <TextView android:id="@+id/btnUntrackedStars" android:layout_width="match_parent" android:layout_height="40dp"
-                        android:layout_marginTop="8dp" android:gravity="center" android:background="@drawable/bg_smbtn"
-                        android:text="查看未跟踪明星" android:textSize="12sp" android:textColor="@color/t1" />
-                    <TextView android:id="@+id/tvMaintOutput" android:layout_width="match_parent" android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp" android:padding="10dp" android:background="@drawable/bg_field"
-                        android:textSize="10.5sp" android:fontFamily="monospace" android:textColor="@color/t2"
-                        android:lineSpacingMultiplier="1.5" android:text="点击上方按钮查看运行态或触发维护任务。" />
+                    <TextView android:id="@+id/btnUntrackedStars" style="@style/OpBtn"
+                        android:layout_marginTop="8dp" android:text="查看未跟踪明星" />
+                    <TextView
+                        style="@style/ConsoleHint" android:id="@+id/tvMaintOutput" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp" android:padding="10dp" android:background="@drawable/bg_field" android:fontFamily="monospace" android:text="点击上方按钮查看运行态或触发维护任务。" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -467,9 +465,9 @@
 
                 <LinearLayout android:id="@+id/panelLine" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:visibility="gone">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
-                        android:text="inherit 跟随全局；filter 剔除 /share/ 分享页线路；off 不过滤；whitelist 只保留 m3u8 / mp4 直链。"
-                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <TextView
+                        style="@style/ConsoleHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:text="inherit 跟随全局；filter 剔除 /share/ 分享页线路；off 不过滤；whitelist 只保留 m3u8 / mp4 直链。" />
                     <Spinner android:id="@+id/spLineSource" android:layout_width="match_parent" android:layout_height="42dp"
                         android:layout_marginTop="8dp" android:background="@drawable/bg_field" />
                     <Spinner android:id="@+id/spLinePolicy" android:layout_width="match_parent" android:layout_height="42dp"
@@ -503,9 +501,9 @@
                         android:text="读取中…" />
                     <TextView android:id="@+id/tvTagCapability" style="@style/MetaLabel" android:layout_width="match_parent"
                         android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textAllCaps="false" android:text="" />
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"
-                        android:text="标签索引覆盖不足时，首页点标签会搜不到片。App 已加兜底（自动改用全文检索），这里可以看覆盖率和手动重建。"
-                        android:textSize="10.5sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6" />
+                    <TextView
+                        style="@style/ConsoleHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"
+                        android:text="标签索引覆盖不足时，首页点标签会搜不到片。App 已加兜底（自动改用全文检索），这里可以看覆盖率和手动重建。" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                         android:orientation="horizontal">
                         <TextView android:id="@+id/btnTagIdxStatus" style="@style/OpBtn" android:text="刷新状态" />

@@ -238,6 +238,43 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 getResources().getStringArray(R.array.play_line_policy)));
         ((ArrayAdapter<String>) spLinePolicy.getAdapter())
                 .setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        applyAccentToForm();
+    }
+
+    /**
+     * 表单控件跟随当前方案主色（与设置页 / 主题页同一套强调色链路）。
+     * 引擎关闭时 ThemeEngine.accentOf 返回内置橙，观感与改造前一致。
+     */
+    private void applyAccentToForm() {
+        int accent = com.lateshow.app.theme.ThemeEngine.accentOf(this);
+        android.content.res.ColorStateList tint =
+                android.content.res.ColorStateList.valueOf(accent);
+        if (swAuthEnable != null) {
+            swAuthEnable.setThumbTintList(tint);
+            swAuthEnable.setTrackTintList(android.content.res.ColorStateList.valueOf(
+                    com.lateshow.app.theme.ThemeEngine.withAlpha(accent, 0.35f)));
+        }
+        if (chkAll != null) {
+            chkAll.setButtonTintList(tint);
+        }
+        for (Switch sw : pauseSwitches()) {
+            sw.setThumbTintList(tint);
+            sw.setTrackTintList(android.content.res.ColorStateList.valueOf(
+                    com.lateshow.app.theme.ThemeEngine.withAlpha(accent, 0.35f)));
+        }
+    }
+
+    /** 暂停控制卡里的三个开关是运行时 inflate 的，逐次刷新时重新着色 */
+    private List<Switch> pauseSwitches() {
+        List<Switch> out = new ArrayList<>();
+        if (pauseRows == null) return out;
+        for (int i = 0; i < pauseRows.getChildCount(); i++) {
+            View row = pauseRows.getChildAt(i);
+            View sw = row.findViewById(R.id.pSwitch);
+            if (sw instanceof Switch) out.add((Switch) sw);
+        }
+        return out;
     }
 
     private void setupSkeleton() {
@@ -438,11 +475,17 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 {s.sync_load.running + "/" + s.sync_load.limit,
                         "同步负载" + (s.sync_load.queued > 0 ? " · 排队 " + s.sync_load.queued : "")},
                 {String.valueOf(s.sourcesUnfinished), "有断点待续传"}} : null;
-        // 审计 A-25：5 秒轮询只复用并改文案，不再 removeAllViews + 重新 inflate
-        ensureStatRows(hasLoad ? 3 : 2);
-        bindStatRow(0, row1);
-        bindStatRow(1, row2);
-        if (hasLoad) bindStatRow(2, row3);
+        // 审计 A-25：5 秒轮询只复用并改文案，不再 removeAllViews + 重新 inflate。
+        // 「一逻辑项 = 一张卡」，卡内不再塞两列，宽屏只是把更多卡排进同一行。
+        String[][][] groups = {row1, row2, hasLoad ? row3 : null};
+        int want = 0;
+        for (String[][] g : groups) if (g != null) want += g.length;
+        ensureStatRows(want);
+        int slot = 0;
+        for (String[][] g : groups) {
+            if (g == null) continue;
+            for (String[] cell : g) { bindStatCard(slot++, cell); }
+        }
         StringBuilder sb = new StringBuilder();
         if (s.proxy != null && s.proxy.enabled) {
             sb.append("代理通道 · 已启用\n直连 ").append(s.proxy.directSuccess)
@@ -462,38 +505,50 @@ public class SyncConsoleActivity extends AppCompatActivity {
         tvRuntime.setVisibility(View.VISIBLE);
     }
 
-    /** 只在行数变化时增删，其余轮次复用已有卡片（A-25） */
+    /** 只在行数变化时增删，其余轮次复用已有卡片（A-25）。列数随屏宽变化：手机 2 列 / 宽屏 3 列 */
     private void ensureStatRows(int want) {
+        int perRow = Math.max(2, getResources().getInteger(R.integer.console_stat_span));
+        int rows = (want + perRow - 1) / perRow;
         int dp8 = (int) (8 * getResources().getDisplayMetrics().density);
-        while (statsGrid.getChildCount() > want) {
+        while (statsGrid.getChildCount() > rows) {
             statsGrid.removeViewAt(statsGrid.getChildCount() - 1);
         }
-        while (statsGrid.getChildCount() < want) {
+        while (statsGrid.getChildCount() < rows) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             rowLp.bottomMargin = dp8;
             row.setLayoutParams(rowLp);
-            for (int i = 0; i < 2; i++) {
+            statsGrid.addView(row);
+        }
+        // 列数变化时同步每行的子 View 数量（旋转屏幕 / 宽度切换）
+        for (int r = 0; r < statsGrid.getChildCount(); r++) {
+            LinearLayout row = (LinearLayout) statsGrid.getChildAt(r);
+            while (row.getChildCount() > perRow) row.removeViewAt(row.getChildCount() - 1);
+            while (row.getChildCount() < perRow) {
                 View card = getLayoutInflater().inflate(R.layout.item_stat, row, false);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-                if (i > 0) lp.leftMargin = dp8;
-                card.setLayoutParams(lp);
-                row.addView(card);
+                if (row.getChildCount() > 0) lp.leftMargin = dp8;
+                row.addView(card, lp);
             }
-            statsGrid.addView(row);
         }
     }
 
-    private void bindStatRow(int idx, String[][] cells) {
-        if (idx < 0 || idx >= statsGrid.getChildCount()) return;
-        LinearLayout row = (LinearLayout) statsGrid.getChildAt(idx);
-        for (int i = 0; i < cells.length && i < row.getChildCount(); i++) {
-            ((TextView) row.getChildAt(i).findViewById(R.id.statValue)).setText(cells[i][0]);
-            ((TextView) row.getChildAt(i).findViewById(R.id.statLabel)).setText(cells[i][1]);
-        }
+    /** 写入第 slot 张统计卡（按行优先顺序定位），数字用当前方案主色 */
+    private void bindStatCard(int slot, String[] cells) {
+        if (cells == null) return;
+        int perRow = Math.max(2, getResources().getInteger(R.integer.console_stat_span));
+        int r = slot / perRow, c = slot % perRow;
+        if (r >= statsGrid.getChildCount()) return;
+        LinearLayout row = (LinearLayout) statsGrid.getChildAt(r);
+        if (c >= row.getChildCount()) return;
+        View card = row.getChildAt(c);
+        ((TextView) card.findViewById(R.id.statValue)).setText(cells[0]);
+        ((TextView) card.findViewById(R.id.statLabel)).setText(cells[1]);
+        TextView value = card.findViewById(R.id.statValue);
+        value.setTextColor(com.lateshow.app.theme.ThemeEngine.accentTextColor(this));
     }
 
     private void buildPauseRows() {
@@ -523,6 +578,17 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 });
             });
             pauseRows.addView(row);
+        }
+        // 运行时 inflate 的开关同样跟随强调色
+        int accent = com.lateshow.app.theme.ThemeEngine.accentOf(this);
+        android.content.res.ColorStateList thumb =
+                android.content.res.ColorStateList.valueOf(accent);
+        android.content.res.ColorStateList track =
+                android.content.res.ColorStateList.valueOf(
+                        com.lateshow.app.theme.ThemeEngine.withAlpha(accent, 0.35f));
+        for (Switch sw : pauseSwitches()) {
+            sw.setThumbTintList(thumb);
+            sw.setTrackTintList(track);
         }
     }
 
@@ -1012,8 +1078,10 @@ public class SyncConsoleActivity extends AppCompatActivity {
         String old = etPwOld.getText().toString();
         String nw = etPwNew.getText().toString();
         String nw2 = etPwNew2.getText().toString();
-        if (!nw.equals(nw2)) { toast("两次输入的新密码不一致"); return; }
+        // 内联错误态：先给出发送请求，明确指出哪一项不满足
+        if (old.isEmpty()) { toast("请先填写当前密码"); return; }
         if (nw.length() < 6) { toast("新密码至少 6 位"); return; }
+        if (!nw.equals(nw2)) { toast("两次输入的新密码不一致"); return; }
         try {
             VodSyncApi.get().postJson(com.lateshow.app.util.ApiPaths.AUTH_PASSWORD,
                     new org.json.JSONObject().put("old", old).put("new", nw).toString(),

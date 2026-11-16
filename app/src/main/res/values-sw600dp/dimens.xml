@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 平板 / 大屏：适当加宽留白，避免内容贴边拉得过长 -->
-    <dimen name="console_pad">18dp</dimen>
+    <!-- 平板 / 大屏：加宽留白，避免内容贴边拉得过长（与手机保持同一 token 体系） -->
+    <dimen name="console_pad">24dp</dimen>
+    <!-- 宽屏统计卡从两列放宽到三列，避免卡片被拉得过长 -->
+    <integer name="console_stat_span">3</integer>
 </resources>
