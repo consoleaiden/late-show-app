@@ -556,6 +556,9 @@ public class SettingsFragment extends Fragment
      * 圆点取代原「使用中」文字：与主页源站列表（item_source_menu）的选中态同一语言，
      * 不改变卡片结构、不引入第二处强调色文字；非使用中行 INVISIBLE 占位以保持对齐。
      * 圆点本身无文字，故给使用中行的名称补 contentDescription，兼顾 TalkBack 可读性。
+     *
+     * 使用中行同时隐藏「使用」按钮：圆点已独占「当前」语义，留着该按钮既重复，
+     * 点击还会再跑一次 applySavedSource + 连通性探测。
      */
     private void renderSavedSources() {
         if (savedList == null || !isAdded()) return;
@@ -576,9 +579,11 @@ public class SettingsFragment extends Fragment
             if (isActive) {
                 name.setContentDescription(it.name + "，使用中");
             }
-            row.findViewById(R.id.btnUse).setOnClickListener(v -> applySavedSource(it));
-            ((TextView) row.findViewById(R.id.btnUse)).setTextColor(
+            TextView btnUse = (TextView) row.findViewById(R.id.btnUse);
+            btnUse.setOnClickListener(v -> applySavedSource(it));
+            btnUse.setTextColor(
                     com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext()));
+            btnUse.setVisibility(isActive ? View.GONE : View.VISIBLE);
             row.findViewById(R.id.btnEditSource).setOnClickListener(v -> showSavedSourceEditDialog(it));
             row.findViewById(R.id.btnDelSource).setOnClickListener(v -> confirmDeleteSavedSource(it));
             savedList.addView(row);
