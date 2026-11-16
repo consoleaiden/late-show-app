@@ -26,10 +26,12 @@ import com.lateshow.app.R;
  *
  * <p>实现说明：
  *  <ul>
- *    <li><b>全 API 可用</b>：模糊走「画进 1/8~1/28 小图再双线性放大」的纯 Canvas 方案，
- *        不依赖 RenderEffect / RenderNode。后者在华为等部分 GPU 驱动上会被静默丢弃，
- *        导致玻璃整块变透明（Mate30 实测过），降采样则任何设备都能出磨砂；</li>
- *    <li><b>降采样倍数</b>由模糊强度推导：强度越大 → 小图越小 → 放大后越糊；</li>
+ *    <li><b>全 API 可用</b>：模糊走「画进小图 → 小图上做多次可分离 box 模糊(近似高斯)
+ *        → 双线性放大」的纯 Canvas 方案，不依赖 RenderEffect / RenderNode。
+ *        后者在华为等部分 GPU 驱动上会被静默丢弃，导致玻璃整块变透明（Mate30 实测过）；</li>
+ *    <li><b>降采样倍数</b>由模糊强度推导：强度越大 → 小图越小 → 放大后越糊；
+ *        但「糊」来自小图上的真实卷积，而不是单纯的像素放大，因此强模糊也是柔和过渡、
+ *        不会出现块状马赛克；</li>
  *    <li><b>采样节流</b>：滚动时最多 ~11fps 重采，静止时零开销（不主动 invalidate 自我续帧）；</li>
  *    <li><b>永不全透明</b>：采样失败时白雾层仍在，最坏情况只是「一层磨砂底色」。</li>
  *  </ul>
@@ -41,9 +43,9 @@ public class FrostedGlassRenderer {
 
     private static final String TAG = "FrostedGlass";
 
-    /** 降采样倍数上下限：1/8（轻磨砂）~ 1/28（接近纯色雾面） */
-    private static final int MIN_DOWNSCALE = 8;
-    private static final int MAX_DOWNSCALE = 28;
+    /** 降采样倍数上下限：1/6（轻磨砂，小图仍有足够分辨率做卷积）~ 1/20（强模糊） */
+    private static final int MIN_DOWNSCALE = 6;
+    private static final int MAX_DOWNSCALE = 20;
     /** 模糊强度映射到的最大 sigma（dp），对应 MAX_DOWNSCALE */
     private static final float MAX_SIGMA_DP = 40f;
 
@@ -111,10 +113,14 @@ public class FrostedGlassRenderer {
         forceCapture();
     }
 
-    /** 底色浓度 0~1：玻璃关闭、或采样失败时保证玻璃可见。 */
+    /**
+     * 玻璃不透明度 0~1（主题里的 barAlpha）：整体玻璃层的通透程度。
+     * 只影响绘制，不需要重采背景，故只刷新背景 + 重绘。
+     */
     public void setBaseAlpha(float a) {
         baseAlpha = Math.max(0f, Math.min(1f, a));
         refreshBackground();
+        host.invalidate();
     }
 
     /** 白雾 / 底色使用的颜色（主题方案的 surface，或内置 barBg）。 */
@@ -230,6 +236,81 @@ public class FrostedGlassRenderer {
         c.scale(s, s);
         c.translate(srcPos[0] - selfPos[0], srcPos[1] - selfPos[1]);
         backdrop.draw(c);
+
+        // 关键：在小图上做真正的卷积模糊，再放大才柔和（否则只是像素块放大 → 马赛克）
+        float sigmaPx = blurSigma > 0f ? blurSigma : 9f * host.getResources().getDisplayMetrics().density;
+        int radius = Math.max(1, Math.round(sigmaPx / ds));
+        boxBlur(backdropBmp, Math.min(radius, 24));
+    }
+
+    /**
+     * 可分离 box 模糊（水平 + 垂直各一次为一轮，重复 3 轮近似高斯）。
+     * 在小图上执行，成本与放大倍数无关；边缘做 clamp，避免黑边。
+     */
+    private static void boxBlur(Bitmap bmp, int radius) {
+        int w = bmp.getWidth(), h = bmp.getHeight();
+        if (radius < 1 || w <= 0 || h <= 0) return;
+        int[] px = new int[w * h];
+        bmp.getPixels(px, 0, w, 0, 0, w, h);
+        int[] tmp = new int[px.length];
+        for (int p = 0; p < 3; p++) {
+            boxPassH(px, tmp, w, h, radius);
+            boxPassV(tmp, px, w, h, radius);
+        }
+        bmp.setPixels(px, 0, w, 0, 0, w, h);
+    }
+
+    private static void boxPassH(int[] src, int[] dst, int w, int h, int r) {
+        final int div = r * 2 + 1;
+        for (int y = 0; y < h; y++) {
+            int off = y * w;
+            int sa = 0, sr = 0, sg = 0, sb = 0;
+            for (int x = -r; x <= r; x++) {
+                int xx = x < 0 ? 0 : (x >= w ? w - 1 : x);
+                int c = src[off + xx];
+                sa += (c >>> 24);
+                sr += (c >> 16) & 255;
+                sg += (c >> 8) & 255;
+                sb += c & 255;
+            }
+            for (int x = 0; x < w; x++) {
+                dst[off + x] = ((sa / div) << 24) | ((sr / div) << 16)
+                        | ((sg / div) << 8) | (sb / div);
+                int add = x + r + 1; if (add >= w) add = w - 1;
+                int sub = x - r;     if (sub < 0)  sub = 0;
+                int ca = src[off + add], cs = src[off + sub];
+                sa += (ca >>> 24) - (cs >>> 24);
+                sr += ((ca >> 16) & 255) - ((cs >> 16) & 255);
+                sg += ((ca >> 8) & 255) - ((cs >> 8) & 255);
+                sb += (ca & 255) - (cs & 255);
+            }
+        }
+    }
+
+    private static void boxPassV(int[] src, int[] dst, int w, int h, int r) {
+        final int div = r * 2 + 1;
+        for (int x = 0; x < w; x++) {
+            int sa = 0, sr = 0, sg = 0, sb = 0;
+            for (int y = -r; y <= r; y++) {
+                int yy = y < 0 ? 0 : (y >= h ? h - 1 : y);
+                int c = src[yy * w + x];
+                sa += (c >>> 24);
+                sr += (c >> 16) & 255;
+                sg += (c >> 8) & 255;
+                sb += c & 255;
+            }
+            for (int y = 0; y < h; y++) {
+                dst[y * w + x] = ((sa / div) << 24) | ((sr / div) << 16)
+                        | ((sg / div) << 8) | (sb / div);
+                int add = y + r + 1; if (add >= h) add = h - 1;
+                int sub = y - r;     if (sub < 0)  sub = 0;
+                int ca = src[add * w + x], cs = src[sub * w + x];
+                sa += (ca >>> 24) - (cs >>> 24);
+                sr += ((ca >> 16) & 255) - ((cs >> 16) & 255);
+                sg += ((ca >> 8) & 255) - ((cs >> 8) & 255);
+                sb += (ca & 255) - (cs & 255);
+            }
+        }
     }
 
     private void relPos() {
@@ -245,12 +326,16 @@ public class FrostedGlassRenderer {
 
         if (backdropBmp != null && !backdropBmp.isRecycled()) {
             drawRect.set(0, 0, w, h);
+            // 玻璃不透明度（barAlpha）：越低越透出背后内容，越高越实
+            drawPaint.setAlpha(Math.round(255f * baseAlpha));
             canvas.drawBitmap(backdropBmp, null, drawRect, drawPaint);
+            drawPaint.setAlpha(255);
         }
-        // 白雾：磨砂的关键 —— 把内容「压」成半透明白，玻璃才有实体感
-        if (frost > 0.001f) {
+        // 白雾：磨砂的关键 —— 把内容「压」成半透明白，玻璃才有实体感。
+        // 白雾同样受整体不透明度调制，否则 barAlpha 调低时白雾仍把玻璃糊实。
+        if (frost > 0.001f && baseAlpha > 0.001f) {
             float radius = cornerRadiusPx > 0 ? cornerRadiusPx : h / 2f;
-            frostPaint.setColor(applyAlpha(tintColor, Math.min(0.92f, frost)));
+            frostPaint.setColor(applyAlpha(tintColor, Math.min(0.92f, frost) * baseAlpha));
             canvas.drawRoundRect(0f, 0f, (float) w, (float) h, radius, radius, frostPaint);
         }
     }
