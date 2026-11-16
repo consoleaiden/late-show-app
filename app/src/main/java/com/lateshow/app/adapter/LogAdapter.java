@@ -67,7 +67,9 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.VH> {
         Models.SyncLog l = items.get(pos);
         Context ctx = h.itemView.getContext();
 
-        int dot = 0, color = 0;
+        // 兜底值：default 分支（同步中）只切到主色语义，未显式赋值；
+        // 若引擎关闭（themed=false）会拿资源 id 0 去取 drawable/color，直接 Resources.NotFound 崩溃。
+        int dot = R.drawable.dot_warn, color = R.color.warn;
         boolean accent = false;   // 「同步中」：主色语义，运行时按方案取色
         String label;
         switch (l.status == null ? "" : l.status) {

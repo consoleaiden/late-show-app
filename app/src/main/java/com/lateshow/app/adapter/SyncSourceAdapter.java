@@ -168,7 +168,9 @@ public class SyncSourceAdapter extends RecyclerView.Adapter<SyncSourceAdapter.VH
         // running > paused > queued > 断点 > 从未同步 > 已完成
         Context ctx = h.itemView.getContext();
         String pill;
-        int dotRes = 0, colorRes = 0;
+        // 兜底值：running / queued 分支只切到主色语义，未显式赋值；
+        // 若引擎关闭（themed=false）会拿资源 id 0 去取 drawable/color，直接 Resources.NotFound 崩溃。
+        int dotRes = R.drawable.dot_warn, colorRes = R.color.warn;
         boolean accent = false;   // 「同步中 / 排队中」：主色语义，运行时按方案取色
         int lp = s.lastPage == null ? 0 : (int) Math.round(s.lastPage);
         int tp = s.totalPages == null ? 0 : (int) Math.round(s.totalPages);
