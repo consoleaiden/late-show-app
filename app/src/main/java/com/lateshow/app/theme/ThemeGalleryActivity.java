@@ -1,10 +1,8 @@
 package com.lateshow.app.theme;
 
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -31,18 +29,23 @@ import java.util.List;
  * 主题管理主页：预设主题选用 + 自定义方案入口 + 明暗双绑定。
  *
  * 行为约定：
- *  - 顶部「当前模式预览」实时反映亮/暗两套绑定（点按钮切换预览模式）；
+ *  - 顶部「状态卡」实时反映亮/暗两套绑定（点按钮切换预览模式）；
  *  - 选中某方案 = 把它绑到当前预览的模式上，并立即开启主题引擎；
  *  - 「新建自定义」进入编辑器；长按已选方案可编辑 / 删除；
  *  - 关闭主题引擎回到内置「方寸」明暗配色（原系统）。
+ *
+ * 视觉口径与 {@link ThemeEditorActivity} 共用同一套 token
+ * （页边距 16 / 大卡 18dp / 标准卡 12dp / 小按钮 8dp / 字阶 22·15·12.5·10.5·9.5）。
  */
 public class ThemeGalleryActivity extends AppCompatActivity {
 
     /** 预览模式：false=亮色 true=暗色 */
     private boolean previewNight = false;
 
-    private LinearLayout previewCard;
+    private LinearLayout statusCard;
     private TextView tvPreviewTitle, tvLightBind, tvDarkBind;
+    private TextView btnMode;
+    private View[] previewSwatches;
     private RecyclerView grid;
     private SchemeAdapter adapter;
 
@@ -54,7 +57,7 @@ public class ThemeGalleryActivity extends AppCompatActivity {
 
         View root = buildContent();
         setContentView(root);
-        // 页面自身背景跟随「当前生效方案」（必须在校 setContentView 之后取 content）
+        // 页面自身背景跟随「当前生效方案」（必须在 setContentView 之后取 content）
         refreshAll();
     }
 
@@ -64,8 +67,8 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         float d = getResources().getDisplayMetrics().density;
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        int pad = Math.round(14 * d);
-        page.setPadding(pad, 0, pad, Math.round(28 * d));
+        int pad = Math.round(16 * d);
+        page.setPadding(pad, 0, pad, Math.round(24 * d));
 
         // 标题行
         TextView title = new TextView(this);
@@ -79,135 +82,24 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         sub.setText("为亮色与暗色分别绑定一套配色；预设一键套用，也可创建你自己的方案");
         sub.setTextSize(11);
         sub.setTextColor(color(R.color.t2));
-        sub.setLineSpacing(0f, 1.5f);
+        sub.setLineSpacing(0f, 1.45f);
         sub.setPadding(0, Math.round(4 * d), 0, Math.round(12 * d));
         page.addView(sub);
 
-        // 预览卡（实时预览当前绑定）
-        previewCard = new LinearLayout(this);
-        previewCard.setOrientation(LinearLayout.VERTICAL);
-        previewCard.setPadding(Math.round(12 * d), Math.round(12 * d),
-                Math.round(12 * d), Math.round(12 * d));
-        previewCard.setBackground(cardBg());
-        LinearLayout.LayoutParams pcp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        pcp.bottomMargin = Math.round(10 * d);
-        previewCard.setLayoutParams(pcp);
-        page.addView(previewCard);
-
-        tvPreviewTitle = new TextView(this);
-        tvPreviewTitle.setTextSize(13);
-        tvPreviewTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        tvPreviewTitle.setPadding(0, 0, 0, Math.round(8 * d));
-        previewCard.addView(tvPreviewTitle);
-
-        // 预览样本：主色块 / 辅助色块 / 文字
-        LinearLayout sampleRow = new LinearLayout(this);
-        sampleRow.setOrientation(LinearLayout.HORIZONTAL);
-        sampleRow.setGravity(Gravity.CENTER_VERTICAL);
-        previewCard.addView(sampleRow);
-        previewSwatches = new View[3];
-        for (int i = 0; i < 3; i++) {
-            View sw = new View(this);
-            int sz = Math.round(40 * d);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(sz, sz);
-            lp.rightMargin = Math.round(10 * d);
-            sw.setLayoutParams(lp);
-            sampleRow.addView(sw);
-            previewSwatches[i] = sw;
-        }
-
-        // 模式切换（一行）：切换预览的亮/暗模式
-        LinearLayout modeRow = new LinearLayout(this);
-        modeRow.setOrientation(LinearLayout.HORIZONTAL);
-        modeRow.setGravity(Gravity.CENTER_VERTICAL);
-        modeRow.setPadding(0, Math.round(10 * d), 0, 0);
-        previewCard.addView(modeRow);
-
-        TextView btnMode = smallBtn("预览：亮色");
-        btnMode.setOnClickListener(v -> { previewNight = !previewNight; refreshAll(); });
-        modeRow.addView(btnMode);
-
-        TextView modeHint = new TextView(this);
-        modeHint.setText("点一下切换预览模式；选中方案后绑到亮色或暗色");
-        modeHint.setTextSize(9.5f);
-        modeHint.setTextColor(color(R.color.t3));
-        modeHint.setLineSpacing(0f, 1.4f);
-        LinearLayout.LayoutParams mhlp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        mhlp.leftMargin = Math.round(8 * d);
-        modeRow.addView(modeHint, mhlp);
-
-        // 绑定行（一行两个，避免横向溢出屏幕）
-        LinearLayout bindRow = new LinearLayout(this);
-        bindRow.setOrientation(LinearLayout.HORIZONTAL);
-        bindRow.setPadding(0, Math.round(8 * d), 0, 0);
-        previewCard.addView(bindRow);
-
-        tvLightBind = smallBtn("亮色：未绑定");
-        tvLightBind.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        blp.rightMargin = Math.round(4 * d);
-        tvLightBind.setLayoutParams(blp);
-        tvLightBind.setOnClickListener(v -> bindCurrentTo(false));
-        bindRow.addView(tvLightBind);
-
-        tvDarkBind = smallBtn("暗色：未绑定");
-        tvDarkBind.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams blp2 = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        blp2.leftMargin = Math.round(4 * d);
-        tvDarkBind.setLayoutParams(blp2);
-        tvDarkBind.setOnClickListener(v -> bindCurrentTo(true));
-        bindRow.addView(tvDarkBind);
-
-        // 操作行
-        LinearLayout actionRow = new LinearLayout(this);
-        actionRow.setOrientation(LinearLayout.HORIZONTAL);
-        actionRow.setPadding(0, Math.round(10 * d), 0, 0);
-        previewCard.addView(actionRow);
-
-        TextView btnNew = smallBtn("＋ 新建自定义");
-        btnNew.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        nlp.rightMargin = Math.round(4 * d);
-        btnNew.setLayoutParams(nlp);
-        btnNew.setOnClickListener(v -> openEditor(null));
-        actionRow.addView(btnNew);
-
-        TextView btnReset = smallBtn("恢复内置");
-        btnReset.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        rlp.leftMargin = Math.round(4 * d);
-        btnReset.setLayoutParams(rlp);
-        btnReset.setOnClickListener(v -> {
-            new MaterialAlertDialogBuilder(this)
-                    .setTitle("恢复内置主题")
-                    .setMessage("将关闭自定义主题引擎，回到应用内置的「方寸」明暗配色。\n"
-                            + "你创建的自定义方案会保留，随时可以再用。")
-                    .setPositiveButton("恢复", (dlg, w) -> {
-                        PrefStore.get().setThemeEngineOn(false);
-                        finishToMain();
-                    })
-                    .setNegativeButton("取消", null)
-                    .show();
-        });
-        actionRow.addView(btnReset);
+        page.addView(buildStatusCard());
+        page.addView(buildActionRow());
 
         // 主题列表
         TextView listTitle = new TextView(this);
         listTitle.setText("全部方案");
-        listTitle.setTextSize(14);
+        listTitle.setTextSize(15);
         listTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         listTitle.setTextColor(color(R.color.t1));
         listTitle.setPadding(0, Math.round(14 * d), 0, Math.round(6 * d));
         page.addView(listTitle);
 
         grid = new RecyclerView(this);
-        GridLayoutManager glm = new GridLayoutManager(this, 2);
+        GridLayoutManager glm = new GridLayoutManager(this, spanCount());
         grid.setLayoutManager(glm);
         grid.setOverScrollMode(View.OVER_SCROLL_NEVER);
         adapter = new SchemeAdapter();
@@ -221,7 +113,145 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         return scroll;
     }
 
-    private View[] previewSwatches;
+    /** 窄屏 2 列、宽屏（≥600dp）3 列，避免平板上一列铺满 */
+    private int spanCount() {
+        float wdp = getResources().getConfiguration().screenWidthDp;
+        return wdp >= 600 ? 3 : 2;
+    }
+
+    /**
+     * 状态卡：预览模式 + 亮/暗两套绑定。
+     *
+     * 三块信息压在一张卡里但分行对齐，避免原先四个功能块各自一行导致的松散节奏。
+     * 卡片底色走 ink800（bg_card_lg），不叠背景渐变 —— 渐变交给页面 content，
+     * 否则会出现「渐变上再渐变」，层次反而糊。
+     */
+    private View buildStatusCard() {
+        float dd = d();
+        statusCard = new LinearLayout(this);
+        statusCard.setOrientation(LinearLayout.VERTICAL);
+        int pad = Math.round(14 * dd);
+        statusCard.setPadding(pad, pad, pad, pad);
+        statusCard.setBackgroundResource(R.drawable.bg_card_lg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = Math.round(10 * dd);
+        statusCard.setLayoutParams(lp);
+
+        // 第一行：预览模式切换 + 状态说明
+        LinearLayout modeRow = new LinearLayout(this);
+        modeRow.setOrientation(LinearLayout.HORIZONTAL);
+        modeRow.setGravity(Gravity.CENTER_VERTICAL);
+        statusCard.addView(modeRow);
+
+        btnMode = smallBtn("预览：亮色");
+        btnMode.setOnClickListener(v -> { previewNight = !previewNight; refreshAll(); });
+        modeRow.addView(btnMode);
+
+        tvPreviewTitle = new TextView(this);
+        tvPreviewTitle.setTextSize(10.5f);
+        tvPreviewTitle.setTextColor(color(R.color.t3));
+        tvPreviewTitle.setLineSpacing(0f, 1.4f);
+        LinearLayout.LayoutParams mhlp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        mhlp.leftMargin = Math.round(8 * dd);
+        modeRow.addView(tvPreviewTitle, mhlp);
+
+        // 第二行：预览样本（主色 / 辅助色 / 卡片面）+ 图例
+        LinearLayout sampleRow = new LinearLayout(this);
+        sampleRow.setOrientation(LinearLayout.HORIZONTAL);
+        sampleRow.setGravity(Gravity.CENTER_VERTICAL);
+        sampleRow.setPadding(0, Math.round(10 * dd), 0, Math.round(8 * dd));
+        statusCard.addView(sampleRow);
+
+        previewSwatches = new View[3];
+        for (int i = 0; i < 3; i++) {
+            View sw = new View(this);
+            int sz = Math.round(26 * dd);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(sz, sz);
+            slp.rightMargin = Math.round(6 * dd);
+            sw.setLayoutParams(slp);
+            sampleRow.addView(sw);
+            previewSwatches[i] = sw;
+        }
+
+        TextView swName = new TextView(this);
+        swName.setText("主色 · 辅助色 · 卡片面");
+        swName.setTextSize(10.5f);
+        swName.setTextColor(color(R.color.t3));
+        LinearLayout.LayoutParams snp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        snp.leftMargin = Math.round(2 * dd);
+        sampleRow.addView(swName, snp);
+
+        // 第三行：亮 / 暗两个绑定槽（各占一半，当前预览的那一个高亮）
+        LinearLayout bindRow = new LinearLayout(this);
+        bindRow.setOrientation(LinearLayout.HORIZONTAL);
+        bindRow.setPadding(0, Math.round(8 * dd), 0, 0);
+        statusCard.addView(bindRow);
+
+        tvLightBind = smallBtn("亮色：未绑定");
+        tvLightBind.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        blp.rightMargin = Math.round(4 * dd);
+        tvLightBind.setLayoutParams(blp);
+        tvLightBind.setOnClickListener(v -> bindCurrentTo(false));
+        bindRow.addView(tvLightBind);
+
+        tvDarkBind = smallBtn("暗色：未绑定");
+        tvDarkBind.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams blp2 = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        blp2.leftMargin = Math.round(4 * dd);
+        tvDarkBind.setLayoutParams(blp2);
+        tvDarkBind.setOnClickListener(v -> bindCurrentTo(true));
+        bindRow.addView(tvDarkBind);
+
+        return statusCard;
+    }
+
+    /** 操作行：新建 / 恢复内置，独立成行，不与状态卡抢层次 */
+    private View buildActionRow() {
+        float dd = d();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = Math.round(14 * dd);
+        row.setLayoutParams(lp);
+
+        TextView btnNew = smallBtn("＋ 新建自定义");
+        btnNew.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        nlp.rightMargin = Math.round(4 * dd);
+        btnNew.setLayoutParams(nlp);
+        btnNew.setOnClickListener(v -> openEditor(null));
+        row.addView(btnNew);
+
+        TextView btnReset = smallBtn("恢复内置");
+        btnReset.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        rlp.leftMargin = Math.round(4 * dd);
+        btnReset.setLayoutParams(rlp);
+        btnReset.setOnClickListener(v -> {
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle("恢复内置主题")
+                    .setMessage("将关闭自定义主题引擎，回到应用内置的「方寸」明暗配色。\n"
+                            + "你创建的自定义方案会保留，随时可以再用。")
+                    .setPositiveButton("恢复", (dlg, w) -> {
+                        PrefStore.get().setThemeEngineOn(false);
+                        finishToMain();
+                    })
+                    .setNegativeButton("取消", null)
+                    .show();
+        });
+        row.addView(btnReset);
+
+        return row;
+    }
 
     // ==================== 交互 ====================
 
@@ -240,12 +270,6 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         refreshAll();
     }
 
-    /**
-     * 返回主页并让 MainActivity 立即应用新绑定。
-     *
-     * 关键点：不能只靠 onNewIntent —— MainActivity 已在栈底且启动模式是 singleTop，
-     * 它会被复用（不会重建），onResume 里统一走 applyRuntimeTheme + Fragment 重绘回调。
-     */
     private void openEditor(@Nullable ThemeScheme base) {
         Intent it = new Intent(this, ThemeEditorActivity.class);
         if (base != null) it.putExtra(ThemeEditorActivity.EXTRA_SCHEME_JSON,
@@ -287,11 +311,12 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         boolean on = PrefStore.get().themeEngineOn();
         ThemeEngine engine = ThemeEngine.get();
 
-        // 预览卡
+        // 状态卡
         String lightName = nameOf(engine.lightId());
         String darkName = nameOf(engine.darkId());
+        btnMode.setText(previewNight ? "预览：暗色" : "预览：亮色");
         tvPreviewTitle.setText(on
-                ? ("预览模式：" + (previewNight ? "暗色" : "亮色") + " · 实时预览")
+                ? ("实时预览当前绑定 · " + (previewNight ? "暗色" : "亮色"))
                 : "自定义主题未启用（当前为内置「方寸」）");
         tvLightBind.setText("亮色：" + lightName);
         tvDarkBind.setText("暗色：" + darkName);
@@ -301,13 +326,14 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         for (int i = 0; i < previewSwatches.length; i++) {
             setSwatchColor(previewSwatches[i], sw[i]);
         }
-        previewCard.setBackground(ThemeEngine.get().backgroundDrawable(r));
-        tvPreviewTitle.setTextColor(r.textPrimary);
+        tvPreviewTitle.setTextColor(on ? r.textSecondary : color(R.color.t3));
+        // 当前预览的槽位用方案主色，另一个用半透明表面色，形成「选中槽位」的层级
+        bindSlotBg(tvLightBind, previewNight ? withAlpha(r.surface, 0.55f) : r.primary,
+                !previewNight);
+        bindSlotBg(tvDarkBind, !previewNight ? withAlpha(r.surface, 0.55f) : r.primary,
+                previewNight);
         tvLightBind.setTextColor(previewNight ? color(R.color.t2) : r.onPrimary);
         tvDarkBind.setTextColor(!previewNight ? color(R.color.t2) : r.onPrimary);
-        // 用圆角 drawable 上色（setBackgroundColor 会退化成方形，丢掉 8dp 圆角）
-        bindBtnBg(tvLightBind, previewNight ? withAlpha(r.surface, 0.7f) : r.primary);
-        bindBtnBg(tvDarkBind, !previewNight ? withAlpha(r.surface, 0.7f) : r.primary);
 
         // 页面背景随预览模式联动（真正的「所见即所得」）
         if (on) {
@@ -352,6 +378,10 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         return ContextCompat.getColor(this, id);
     }
 
+    private float d() {
+        return getResources().getDisplayMetrics().density;
+    }
+
     private static int withAlpha(int c, float a) {
         return ThemeEngine.withAlpha(c, a);
     }
@@ -365,7 +395,7 @@ public class ThemeGalleryActivity extends AppCompatActivity {
     }
 
     /**
-     * 选中卡片底：复制 bg_card 的形状（12dp 圆角 + 1dp 描边），仅替换底色为方案主色。
+     * 选中卡片底：复制 bg_card 的形状（12dp 圆角 + 1dp 描边），仅替换底色。
      * 不用自绘圆角，避免和未选中卡片形状不一致。
      */
     private android.graphics.drawable.Drawable tintedCardBg(int color) {
@@ -384,7 +414,6 @@ public class ThemeGalleryActivity extends AppCompatActivity {
                 new android.graphics.drawable.GradientDrawable();
         gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
         gd.setColor(color);
-        // 选中卡片底色 = 方案主色，主色圆块与背景同色会糊在一起；加一圈白色描边即可区分
         gd.setStroke(Math.max(2, Math.round(getResources().getDisplayMetrics().density * 2f)),
                 android.graphics.Color.WHITE);
         v.setBackground(gd);
@@ -401,13 +430,17 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         return gd;
     }
 
-    /** 绑定按钮底色：8dp 圆角（与 bg_smbtn 一致），避免 setBackgroundColor 退化成方形 */
-    private void bindBtnBg(TextView tv, int color) {
+    /** 绑定槽位底色：8dp 圆角（与 bg_smbtn 一致），当前预览态额外加 1dp 强调描边 */
+    private void bindSlotBg(TextView tv, int color, boolean active) {
         android.graphics.drawable.GradientDrawable gd =
                 new android.graphics.drawable.GradientDrawable();
         gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         gd.setCornerRadius(8 * getResources().getDisplayMetrics().density);
         gd.setColor(color);
+        if (active) {
+            gd.setStroke(Math.max(1, Math.round(getResources().getDisplayMetrics().density)),
+                    ThemeEngine.accentOf(this));
+        }
         tv.setBackground(gd);
     }
 
@@ -466,16 +499,16 @@ public class ThemeGalleryActivity extends AppCompatActivity {
             h.bindTag.setText(boundLight && boundDark ? "亮+暗"
                     : boundLight ? "亮" : "暗");
             h.itemView.setActivated(sel);
-            // 选中态：沿用 bg_card 的形状（12dp 圆角 + 1dp 描边），只把底色换成方案主色；
-            // 未选中回到资源背景。形状不变，避免变成胶囊。
+            // 选中态：沿用 bg_card 的形状（12dp 圆角 + 1dp 描边），底色换成方案主色的
+            // 低透明度版本 —— 比整卡铺满主色更轻，名称始终可读。
             if (sel) {
-                h.itemView.setBackground(tintedCardBg(s.primary));
-                // 卡片底换成方案主色后，标题文字也要随之对比，否则深主色上深字读不出来
-                h.name.setTextColor(com.lateshow.app.theme.ThemeEngine.inkOn(s.primary));
+                h.itemView.setBackground(tintedCardBg(ThemeEngine.withAlpha(s.primary, 0.22f)));
+                h.name.setTypeface(null, android.graphics.Typeface.BOLD);
             } else {
                 h.itemView.setBackgroundResource(R.drawable.bg_card);
-                h.name.setTextColor(color(R.color.t1));
+                h.name.setTypeface(null, android.graphics.Typeface.NORMAL);
             }
+            h.name.setTextColor(color(R.color.t1));
             h.bindTag.setBackground(dotBg(s.primary));
             // 标签底 = 方案主色，文字按主色亮度自动对比（深主色给浅字，浅主色给深字）
             h.bindTag.setTextColor(com.lateshow.app.theme.ThemeEngine.inkOn(s.primary));
@@ -509,7 +542,7 @@ public class ThemeGalleryActivity extends AppCompatActivity {
             float d = getResources().getDisplayMetrics().density;
             LinearLayout item = new LinearLayout(parent.getContext());
             item.setOrientation(LinearLayout.VERTICAL);
-            int pad = Math.round(10 * d);
+            int pad = Math.round(12 * d);
             item.setPadding(pad, pad, pad, pad);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -527,8 +560,7 @@ public class ThemeGalleryActivity extends AppCompatActivity {
             LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(sz, sz);
             slp.rightMargin = Math.round(6 * d);
             vh.swPrimary.setLayoutParams(slp);
-            vh.swSecondary.setLayoutParams(new LinearLayout.LayoutParams(
-                    sz, sz));
+            vh.swSecondary.setLayoutParams(new LinearLayout.LayoutParams(sz, sz));
             ((LinearLayout.LayoutParams) vh.swSecondary.getLayoutParams()).rightMargin = Math.round(6 * d);
             vh.swBg.setLayoutParams(new LinearLayout.LayoutParams(sz, sz));
 

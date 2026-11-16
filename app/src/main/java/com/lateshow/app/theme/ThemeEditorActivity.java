@@ -27,11 +27,19 @@ import com.lateshow.app.util.ThemeManager;
  *
  * 可配置项（与需求一一对应）：
  *  - 名称；
- *  - 主色（点击打开取色板，含推荐色板 + 自动生成辅助色）；
+ *  - 主色（点击打开取色板，含自动生成辅助色）；
  *  - 辅助色（默认跟随主色自动计算，可单独修改）；
  *  - 背景：纯色 / 渐变（两个色 + 角度）；
  *  - 表面色 / 一级文字 / 二级文字；
  *  - 毛玻璃：开关 / 模糊强度 / 白雾浓度 / 玻璃不透明度（均有默认值，实时生效）。
+ *
+ * 结构（自上而下）：
+ *   ① 顶部实时预览卡（背景 / 主辅色 / 卡片面 / 两级文字）
+ *   ② 表单滚动区（名称 → 颜色 → 背景 → 文字与表面 → 毛玻璃）
+ *   ③ 底部固定保存栏（不随内容滚动，长表单不用滚到底）
+ *
+ * 视觉口径与 {@link ThemeGalleryActivity} 共用同一套 token
+ * （页边距 16 / 大卡 18dp / 标准卡 12dp / 小按钮 8dp / 字阶 22·15·12.5·10.5·9.5）。
  */
 public class ThemeEditorActivity extends AppCompatActivity {
 
@@ -42,9 +50,9 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
     // 预览控件
     private LinearLayout previewRoot;
-    private View pvPrimary, pvSecondary, pvSurface, pvBg;
+    private View pvPrimary, pvSecondary, pvSurface;
     private TextView pvName, pvText1, pvText2;
-    // 配色实时预览区（「颜色」分区下方）
+    // 配色实时预览条（「颜色」分区下方）
     private LinearLayout colorPreviewBox;
     private TextView cpBtn, cpPill, cpT1, cpT2;
     // 毛玻璃实时预览（「毛玻璃」分区）：彩色背景 + 玻璃浮层卡片 + 玻璃底栏
@@ -56,7 +64,8 @@ public class ThemeEditorActivity extends AppCompatActivity {
     // 表单控件（编辑过程中实时联动）
     private EditText etName;
     private TextView swPrimary, swSecondary, swBgFrom, swBgTo, swSurface, swText1, swText2;
-    private TextView tvAutoSec, tvAngleVal;
+    private TextView tvAutoSec, tvAngleVal, tvNameError;
+    private TextView btnSaveRef;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -81,29 +90,81 @@ public class ThemeEditorActivity extends AppCompatActivity {
             isNew = false;
         }
 
-        View root = buildContent();
-        setContentView(root);
+        setContentView(buildScaffold());
         bindValues();
     }
 
-    // ==================== 构建 ====================
+    /**
+     * 页面骨架：竖向两段。
+     * 上半 ScrollView（表单，weight=1 占满剩余空间），下半固定保存栏。
+     */
+    private View buildScaffold() {
+        float d = getResources().getDisplayMetrics().density;
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(buildContent());
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        root.addView(buildSaveBar());
+        return root;
+    }
+
+    /** 底部固定保存栏：常驻可见，长表单不必滚到底 */
+    private View buildSaveBar() {
+        float dd = d();
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        int padH = Math.round(16 * dd);
+        int padV = Math.round(10 * dd);
+        bar.setPadding(padH, padV, padH, padV);
+        bar.setBackgroundResource(R.drawable.bg_card_lg);
+
+        TextView hint = new TextView(this);
+        hint.setText("保存后立即应用到当前模式");
+        hint.setTextSize(10.5f);
+        hint.setTextColor(color(R.color.t3));
+        hint.setLineSpacing(0f, 1.3f);
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        hlp.rightMargin = Math.round(10 * dd);
+        bar.addView(hint, hlp);
+
+        btnSaveRef = new TextView(this);
+        btnSaveRef.setText("保存并应用");
+        btnSaveRef.setGravity(Gravity.CENTER);
+        btnSaveRef.setTextSize(13);
+        btnSaveRef.setTypeface(null, android.graphics.Typeface.BOLD);
+        btnSaveRef.setTextColor(Color.WHITE);
+        int ph = Math.round(14 * dd);
+        btnSaveRef.setPadding(ph, Math.round(11 * dd), ph, Math.round(11 * dd));
+        btnSaveRef.setBackground(ThemeEngine.accentBlockBg(this, 10));
+        btnSaveRef.setOnClickListener(v -> save());
+        bar.addView(btnSaveRef);
+        return bar;
+    }
+
+    // ==================== 内容构建 ====================
 
     private View buildContent() {
         float d = getResources().getDisplayMetrics().density;
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        int pad = Math.round(14 * d);
-        page.setPadding(pad, Math.round(18 * d), pad, Math.round(28 * d));
+        int pad = Math.round(16 * d);
+        page.setPadding(pad, Math.round(14 * d), pad, Math.round(18 * d));
 
         // 标题
         TextView title = new TextView(this);
         title.setText(isNew ? "新建自定义主题" : "编辑主题");
-        title.setTextSize(20);
+        title.setTextSize(22);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setTextColor(color(R.color.t1));
         page.addView(title);
 
-        // 预览卡
+        // 实时预览卡（大卡 18dp，内部即背景本身，不叠第二层底）
         previewRoot = new LinearLayout(this);
         previewRoot.setOrientation(LinearLayout.VERTICAL);
         previewRoot.setPadding(Math.round(12 * d), Math.round(12 * d),
@@ -125,7 +186,6 @@ public class ThemeEditorActivity extends AppCompatActivity {
         sampleRow.setGravity(Gravity.CENTER_VERTICAL);
         sampleRow.setPadding(0, Math.round(10 * d), 0, Math.round(8 * d));
         previewRoot.addView(sampleRow);
-        int sz = Math.round(38 * d);
         pvPrimary = swatch(); pvSecondary = swatch(); pvSurface = swatch();
         sampleRow.addView(pvPrimary);
         sampleRow.addView(pvSecondary);
@@ -151,6 +211,13 @@ public class ThemeEditorActivity extends AppCompatActivity {
         etName.setHintTextColor(color(R.color.t3));
         styleInput(etName);
         page.addView(etName);
+        tvNameError = new TextView(this);
+        tvNameError.setText("请填写主题名称后再保存");
+        tvNameError.setTextSize(10.5f);
+        tvNameError.setTextColor(color(R.color.bad));
+        tvNameError.setVisibility(View.GONE);
+        tvNameError.setPadding(0, Math.round(4 * d), 0, Math.round(4 * d));
+        page.addView(tvNameError);
 
         // 颜色组
         page.addView(section("颜色"));
@@ -158,7 +225,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
         page.addView(colorRow("辅助色", swSecondary = colorSwatch()));
         tvAutoSec = new TextView(this);
         tvAutoSec.setText("辅助色跟随主色自动计算（可点色块单独指定）");
-        tvAutoSec.setTextSize(9.5f);
+        tvAutoSec.setTextSize(10.5f);
         tvAutoSec.setTextColor(color(R.color.t3));
         tvAutoSec.setPadding(0, Math.round(2 * d), 0, Math.round(6 * d));
         page.addView(tvAutoSec);
@@ -177,31 +244,12 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
         page.addView(section("毛玻璃"));
         page.addView(glassSwitchRow());
-        page.addView(buildGlassPreview());
         page.addView(sliderRow("模糊强度", SLIDER_BLUR));
         page.addView(sliderRow("白雾浓度", SLIDER_FROST));
         page.addView(sliderRow("玻璃不透明度", SLIDER_ALPHA));
+        page.addView(buildGlassPreview());
 
-        // 保存按钮
-        TextView btnSave = new TextView(this);
-        btnSave.setText("保存并应用");
-        btnSave.setGravity(Gravity.CENTER);
-        btnSave.setTextSize(13);
-        btnSave.setTypeface(null, android.graphics.Typeface.BOLD);
-        btnSave.setTextColor(Color.WHITE);
-        int ph = Math.round(14 * d);
-        btnSave.setPadding(ph, Math.round(12 * d), ph, Math.round(12 * d));
-        btnSave.setBackground(com.lateshow.app.theme.ThemeEngine.accentButtonBg(this));
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        slp.topMargin = Math.round(16 * d);
-        btnSave.setLayoutParams(slp);
-        btnSave.setOnClickListener(v -> save());
-        page.addView(btnSave);
-
-        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
-        scroll.addView(page);
-        return scroll;
+        return page;
     }
 
     /** 实时预览背景（纯色 / 渐变） */
@@ -230,10 +278,10 @@ public class ThemeEditorActivity extends AppCompatActivity {
     private TextView section(String t) {
         TextView tv = new TextView(this);
         tv.setText(t);
-        tv.setTextSize(13);
+        tv.setTextSize(15);
         tv.setTypeface(null, android.graphics.Typeface.BOLD);
         tv.setTextColor(color(R.color.t1));
-        tv.setPadding(0, Math.round(12 * d()), 0, Math.round(4 * d()));
+        tv.setPadding(0, Math.round(14 * d()), 0, Math.round(6 * d()));
         return tv;
     }
 
@@ -248,7 +296,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
         TextView lb = new TextView(this);
         lb.setText(labelText);
-        lb.setTextSize(11.5f);
+        lb.setTextSize(12.5f);
         lb.setTextColor(color(R.color.t2));
         LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -259,15 +307,30 @@ public class ThemeEditorActivity extends AppCompatActivity {
         return row;
     }
 
+    /** 色块：圆角方形（12dp）+ 描边 + 涟漪，点击打开取色器 */
     private TextView colorSwatch() {
         TextView sw = new TextView(this);
-        int sz = Math.round(32 * d());
+        int sz = Math.round(34 * d());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(sz, sz);
         sw.setLayoutParams(lp);
         sw.setText(" ");
         sw.setBackgroundColor(Color.GRAY);
+        sw.setBackground(swatchBg(Color.GRAY));
         sw.setOnClickListener(v -> openPicker((TextView) v));
         return sw;
+    }
+
+    /** 色块底：12dp 圆角 + 1dp 描边 + 按压涟漪 */
+    private android.graphics.drawable.Drawable swatchBg(int c) {
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(d() * 12f);
+        gd.setColor(c);
+        gd.setStroke(Math.max(1, Math.round(d())), color(R.color.lineStrong));
+        return new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(color(R.color.ripple)),
+                gd, gd);
     }
 
     /** 「颜色」分区下方的实时预览卡：背景 + 主色按钮 + 辅助胶囊 + 两级文字 */
@@ -275,7 +338,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
         float dd = d();
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        int pad = Math.round(10 * dd);
+        int pad = Math.round(12 * dd);
         card.setPadding(pad, pad, pad, pad);
         card.setBackgroundResource(R.drawable.bg_card);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -335,7 +398,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
         float dd = d();
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        int pad = Math.round(10 * dd);
+        int pad = Math.round(12 * dd);
         card.setPadding(pad, pad, pad, pad);
         card.setBackgroundResource(R.drawable.bg_card);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -478,7 +541,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
     private View swatch() {
         View v = new View(this);
-        int sz = Math.round(38 * d());
+        int sz = Math.round(34 * d());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(sz, sz);
         lp.rightMargin = Math.round(8 * d());
         v.setLayoutParams(lp);
@@ -519,7 +582,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
         TextView lb = new TextView(this);
         lb.setText("启用毛玻璃（模糊背后内容）");
-        lb.setTextSize(11.5f);
+        lb.setTextSize(12.5f);
         lb.setTextColor(color(R.color.t2));
         row.addView(lb, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -547,13 +610,13 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
         TextView lb = new TextView(this);
         lb.setText("渐变角度");
-        lb.setTextSize(11.5f);
+        lb.setTextSize(12.5f);
         lb.setTextColor(color(R.color.t2));
         row.addView(lb, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         tvAngleVal = new TextView(this);
-        tvAngleVal.setTextSize(11.5f);
+        tvAngleVal.setTextSize(12.5f);
         tvAngleVal.setTextColor(color(R.color.t1));
         tvAngleVal.setMinWidth(Math.round(40 * d()));
         row.addView(tvAngleVal);
@@ -580,12 +643,12 @@ public class ThemeEditorActivity extends AppCompatActivity {
         head.setGravity(Gravity.CENTER_VERTICAL);
         TextView lb = new TextView(this);
         lb.setText(name);
-        lb.setTextSize(11.5f);
+        lb.setTextSize(12.5f);
         lb.setTextColor(color(R.color.t2));
         head.addView(lb, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         TextView val = new TextView(this);
-        val.setTextSize(11.5f);
+        val.setTextSize(12.5f);
         val.setTextColor(color(R.color.t1));
         head.addView(val);
         row.addView(head);
@@ -636,12 +699,12 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
     private void openPicker(final TextView target) {
         // 色盘取色：饱和/明度 + 色相 + 透明度，可取任意颜色，实时写回并联动预览
-        float dd = getResources().getDisplayMetrics().density;
+        float dd = d();
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(Math.round(10 * dd), Math.round(10 * dd),
-                Math.round(10 * dd), Math.round(10 * dd));
+        box.setPadding(Math.round(12 * dd), Math.round(12 * dd),
+                Math.round(12 * dd), Math.round(12 * dd));
 
         final ColorPickerView picker = new ColorPickerView(this);
         picker.setColor(currentColorOf(target));
@@ -653,6 +716,8 @@ public class ThemeEditorActivity extends AppCompatActivity {
         hex.setSingleLine(true);
         hex.setHint("或输入 HEX，如 #FF5A36");
         hex.setTextSize(12);
+        hex.setTextColor(color(R.color.t1));
+        hex.setHintTextColor(color(R.color.t3));
         hex.setPadding(Math.round(10 * dd), Math.round(8 * dd),
                 Math.round(10 * dd), Math.round(8 * dd));
         styleInput(hex);
@@ -683,24 +748,41 @@ public class ThemeEditorActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** 取色块当前颜色（ColorDrawable）；异常时给灰色兜底 */
+    /** 取色块当前颜色（RippleDrawable 包裹的 GradientDrawable）；异常时给灰色兜底 */
     private int currentColorOf(TextView sw) {
         android.graphics.drawable.Drawable d = sw.getBackground();
+        if (d instanceof android.graphics.drawable.RippleDrawable) {
+            d = ((android.graphics.drawable.RippleDrawable) d).getDrawable(0);
+        }
+        if (d instanceof android.graphics.drawable.GradientDrawable) {
+            // GradientDrawable 未暴露取色 API，用快照兜底：色块颜色由 applyColorTo 记录
+            return lastColorOf(sw);
+        }
         if (d instanceof android.graphics.drawable.ColorDrawable) {
             return ((android.graphics.drawable.ColorDrawable) d).getColor();
         }
         return Color.GRAY;
     }
 
+    /** 色块颜色跟踪表：applyColorTo 写入，供重新打开取色器时定位 */
+    private final java.util.Map<TextView, Integer> swatchColors = new java.util.HashMap<>();
+
+    private int lastColorOf(TextView sw) {
+        Integer c = swatchColors.get(sw);
+        return c == null ? Color.GRAY : c;
+    }
+
     private android.app.Dialog currentDialog;
 
     private void applyColorTo(TextView target, int color) {
-        target.setBackgroundColor(color);
+        target.setBackground(swatchBg(color));
+        swatchColors.put(target, color);
         if (target == swPrimary) {
             scheme.primary = color;
             if (scheme.secondaryAuto) {
                 scheme.secondary = ThemeEngine.autoSecondary(color);
-                swSecondary.setBackgroundColor(scheme.secondary);
+                swSecondary.setBackground(swatchBg(scheme.secondary));
+                swatchColors.put(swSecondary, scheme.secondary);
             }
         } else if (target == swSecondary) {
             scheme.secondary = color;
@@ -724,7 +806,8 @@ public class ThemeEditorActivity extends AppCompatActivity {
     private void resetSecondaryAuto() {
         scheme.secondaryAuto = true;
         scheme.secondary = ThemeEngine.autoSecondary(scheme.primary);
-        swSecondary.setBackgroundColor(scheme.secondary);
+        swSecondary.setBackground(swatchBg(scheme.secondary));
+        swatchColors.put(swSecondary, scheme.secondary);
         tvAutoSec.setText("辅助色跟随主色自动计算（可点色块单独指定）");
         refreshPreview();
     }
@@ -754,24 +837,31 @@ public class ThemeEditorActivity extends AppCompatActivity {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void afterTextChanged(Editable s) {
-                scheme.name = s.toString().trim().isEmpty() ? "我的主题" : s.toString().trim();
+                String t = s.toString().trim();
+                scheme.name = t.isEmpty() ? "我的主题" : t;
                 pvName.setText(scheme.name);
+                tvNameError.setVisibility(t.isEmpty() ? View.VISIBLE : View.GONE);
             }
         });
 
-        swPrimary.setBackgroundColor(scheme.primary);
-        swSecondary.setBackgroundColor(
-                scheme.secondaryAuto ? ThemeEngine.autoSecondary(scheme.primary) : scheme.secondary);
-        swBgFrom.setBackgroundColor(scheme.bgMode == 0 ? scheme.bgColor : scheme.bgFrom);
-        swBgTo.setBackgroundColor(scheme.bgTo);
-        swSurface.setBackgroundColor(scheme.surface);
-        swText1.setBackgroundColor(scheme.textPrimary);
-        swText2.setBackgroundColor(scheme.textSecondary);
+        applySwatchColor(swPrimary, scheme.primary);
+        applySwatchColor(swSecondary, scheme.secondaryAuto
+                ? ThemeEngine.autoSecondary(scheme.primary) : scheme.secondary);
+        applySwatchColor(swBgFrom, scheme.bgMode == 0 ? scheme.bgColor : scheme.bgFrom);
+        applySwatchColor(swBgTo, scheme.bgTo);
+        applySwatchColor(swSurface, scheme.surface);
+        applySwatchColor(swText1, scheme.textPrimary);
+        applySwatchColor(swText2, scheme.textSecondary);
         tvAngleVal.setText(scheme.bgAngle + "°");
 
         bindSeg();
         bindSliders();
         refreshPreview();
+    }
+
+    private void applySwatchColor(TextView sw, int c) {
+        sw.setBackground(swatchBg(c));
+        swatchColors.put(sw, c);
     }
 
     private void bindSeg() {
@@ -808,7 +898,6 @@ public class ThemeEditorActivity extends AppCompatActivity {
     }
 
     private void refreshPreview() {
-        int bg = scheme.bgMode == 0 ? scheme.bgColor : scheme.bgFrom;
         previewRoot.setBackgroundDrawable(backgroundDrawable());
         pvPrimary.setBackgroundColor(scheme.primary);
         pvSecondary.setBackgroundColor(
@@ -836,6 +925,27 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
         // 毛玻璃预览实时跟随（开关 / 滑杆 / 表面色变化都会走到这里）
         applyGlassPreview();
+
+        // 强调色控件跟随当前草稿（引擎未开启时用内置橙）
+        applyAccentToChrome();
+    }
+
+    /** 让分段选中态、保存按钮、滑杆进度跟随「当前正在编辑的草稿主色」 */
+    private void applyAccentToChrome() {
+        int accent = ThemeEngine.isEnabled(this)
+                ? scheme.primary : ThemeEngine.accentOf(this);
+        bindSeg();
+        if (btnSaveRef != null) {
+            btnSaveRef.setBackground(ThemeEngine.accentBlockBg(this, 10));
+            btnSaveRef.setTextColor(ThemeEngine.inkOn(accent));
+        }
+        for (android.widget.SeekBar sb : sliders.values()) {
+            int on = ThemeEngine.withAlpha(accent, 0.9f);
+            int off = color(R.color.ink700);
+            sb.setProgressTintList(android.content.res.ColorStateList.valueOf(on));
+            sb.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(off));
+            sb.setThumbTintList(android.content.res.ColorStateList.valueOf(on));
+        }
     }
 
     // ==================== 保存 ====================
@@ -843,9 +953,13 @@ public class ThemeEditorActivity extends AppCompatActivity {
     private void save() {
         String name = etName.getText().toString().trim();
         if (name.isEmpty()) {
+            // 内联错误态：滚动到名称输入框，闪烁提示而非直接中断
+            tvNameError.setVisibility(View.VISIBLE);
+            etName.requestFocus();
             Toast.makeText(this, "请填写主题名称", Toast.LENGTH_SHORT).show();
             return;
         }
+        tvNameError.setVisibility(View.GONE);
         scheme.name = name;
         ThemeEngine engine = ThemeEngine.get();
         engine.save(scheme);

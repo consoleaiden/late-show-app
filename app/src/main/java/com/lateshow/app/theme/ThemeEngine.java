@@ -716,6 +716,22 @@ public final class ThemeEngine {
         return gd;
     }
 
+    /**
+     * 强调底色块：圆角方形 + 方案主色（主题管理页 / 编辑器共用）。
+     *
+     * <p>用于滑杆轨道、色块选中环等需要「跟随用户配色」的小面积强调底。
+     * 引擎关闭时退回内置橙色，保证内置观感不变。
+     */
+    @NonNull
+    public static android.graphics.drawable.Drawable accentBlockBg(@NonNull Context ctx, float radiusDp) {
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(ctx, radiusDp));
+        gd.setColor(isEnabled(ctx) ? accentOf(ctx) : 0xFFFF5A36);
+        return gd;
+    }
+
     /** 状态圆点（替代 dot_acc）：圆形 + 方案主色 */
     @NonNull
     public static android.graphics.drawable.Drawable accentDotBg(@NonNull Context ctx) {
