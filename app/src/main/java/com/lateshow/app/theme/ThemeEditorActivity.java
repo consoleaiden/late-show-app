@@ -34,8 +34,7 @@ import java.util.List;
  *  - 辅助色（默认跟随主色自动计算，可单独修改）；
  *  - 背景：纯色 / 渐变（两个色 + 角度）；
  *  - 表面色 / 一级文字 / 二级文字；
- *  - 导航栏 / 搜索栏 / 分类栏不透明度；
- *  - 玻璃模糊强度 / 白雾强度。
+ *  - 毛玻璃：开关 / 模糊强度 / 白雾浓度 / 玻璃不透明度（均有默认值，实时生效）。
  */
 public class ThemeEditorActivity extends AppCompatActivity {
 
@@ -170,12 +169,11 @@ public class ThemeEditorActivity extends AppCompatActivity {
         page.addView(colorRow("一级文字", swText1 = colorSwatch()));
         page.addView(colorRow("二级文字", swText2 = colorSwatch()));
 
-        page.addView(section("玻璃参数"));
-        page.addView(sliderRow("导航栏不透明度", SLIDER_NAV));
-        page.addView(sliderRow("搜索栏不透明度", SLIDER_SEARCH));
-        page.addView(sliderRow("分类栏不透明度", SLIDER_CATEGORY));
-        page.addView(sliderRow("玻璃模糊强度", SLIDER_BLUR));
-        page.addView(sliderRow("玻璃白雾强度", SLIDER_FROST));
+        page.addView(section("毛玻璃"));
+        page.addView(glassSwitchRow());
+        page.addView(sliderRow("模糊强度", SLIDER_BLUR));
+        page.addView(sliderRow("白雾浓度", SLIDER_FROST));
+        page.addView(sliderRow("玻璃不透明度", SLIDER_ALPHA));
 
         // 保存按钮
         TextView btnSave = new TextView(this);
@@ -211,8 +209,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
     // ==================== 控件工厂 ====================
 
-    private static final int SLIDER_NAV = 1, SLIDER_SEARCH = 2, SLIDER_CATEGORY = 3,
-            SLIDER_BLUR = 4, SLIDER_FROST = 5;
+    private static final int SLIDER_BLUR = 1, SLIDER_FROST = 2, SLIDER_ALPHA = 3;
 
     private TextView label(String t) {
         TextView tv = new TextView(this);
@@ -297,6 +294,35 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
     private TextView segSolid, segGradient;
 
+    /** 毛玻璃总开关 */
+    private LinearLayout glassSwitchRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = Math.round(6 * d());
+        row.setLayoutParams(lp);
+
+        TextView lb = new TextView(this);
+        lb.setText("启用毛玻璃（模糊背后内容）");
+        lb.setTextSize(11.5f);
+        lb.setTextColor(color(R.color.t2));
+        row.addView(lb, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        swGlass = new android.widget.Switch(this);
+        swGlass.setChecked(scheme.glassOn);
+        swGlass.setOnCheckedChangeListener((b, checked) -> {
+            scheme.glassOn = checked;
+            refreshPreview();
+        });
+        row.addView(swGlass);
+        return row;
+    }
+
+    private android.widget.Switch swGlass;
+
     private LinearLayout angleRow() {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -358,11 +384,9 @@ public class ThemeEditorActivity extends AppCompatActivity {
                 val.setText(p + "%");
                 if (!user) return;
                 switch (type) {
-                    case SLIDER_NAV: scheme.navAlpha = p; break;
-                    case SLIDER_SEARCH: scheme.searchAlpha = p; break;
-                    case SLIDER_CATEGORY: scheme.categoryAlpha = p; break;
                     case SLIDER_BLUR: scheme.barBlur = p; break;
                     case SLIDER_FROST: scheme.barFrost = p; break;
+                    case SLIDER_ALPHA: scheme.barAlpha = p; break;
                 }
             }
             @Override public void onStartTrackingTouch(android.widget.SeekBar s) { }
@@ -564,11 +588,10 @@ public class ThemeEditorActivity extends AppCompatActivity {
     }
 
     private void bindSliders() {
-        setSlider(SLIDER_NAV, scheme.navAlpha);
-        setSlider(SLIDER_SEARCH, scheme.searchAlpha);
-        setSlider(SLIDER_CATEGORY, scheme.categoryAlpha);
         setSlider(SLIDER_BLUR, scheme.barBlur);
         setSlider(SLIDER_FROST, scheme.barFrost);
+        setSlider(SLIDER_ALPHA, scheme.barAlpha);
+        if (swGlass != null) swGlass.setChecked(scheme.glassOn);
     }
 
     private void setSlider(int type, int value) {

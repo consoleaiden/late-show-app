@@ -12,36 +12,34 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * 液态玻璃弹层卡片（源站列表 / 全部分类列表共用）。
+ * 毛玻璃弹层卡片（源站列表 / 全部分类列表共用）。
  *
- * 与 {@link LiquidGlassBar} 同一套 {@link GlassRenderer}：
- *  - tier 2（API 33+）：AGSL 边缘折射 + 色散，背后海报会「弯」进卡片边缘；
- *  - tier 1（API 31+）：CPU 降采样磨砂 + 白雾 + 高光（Mate30 落这档，华为掉 RenderEffect 也不影响）；
- *  - tier 0（API < 31）：静态半透明圆角卡片。
+ * 与 {@link FrostedGlassBar} 同一套 {@link FrostedGlassRenderer}：
+ * 采样背后内容 → 降采样模糊 → 白雾。全 API 可用，不依赖 RenderEffect。
  *
  * 弹层是页面内浮层（不是独立 Window），才能真实采样到背后列表内容，
  * 也因此省掉了 PopupWindow / Dialog 在这类设备上的模糊不支持问题。
  */
-public class LiquidGlassPanel extends FrameLayout {
+public class FrostedGlassPanel extends FrameLayout {
 
-    private final GlassRenderer glass;
+    private final FrostedGlassRenderer glass;
     private float cornerPx = -1f;
 
-    public LiquidGlassPanel(@NonNull Context context) {
+    public FrostedGlassPanel(@NonNull Context context) {
         super(context);
-        glass = new GlassRenderer(this);
+        glass = new FrostedGlassRenderer(this);
         init();
     }
 
-    public LiquidGlassPanel(@NonNull Context context, @Nullable AttributeSet attrs) {
+    public FrostedGlassPanel(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
-        glass = new GlassRenderer(this);
+        glass = new FrostedGlassRenderer(this);
         init();
     }
 
-    public LiquidGlassPanel(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+    public FrostedGlassPanel(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        glass = new GlassRenderer(this);
+        glass = new FrostedGlassRenderer(this);
         init();
     }
 
@@ -55,9 +53,9 @@ public class LiquidGlassPanel extends FrameLayout {
         setClipToOutline(true);
         setElevation(10f * getResources().getDisplayMetrics().density);
         // 弹层需要更实一点，保证小字可读
-        glass.setBaseAlpha(0.42f);
-        glass.setFrost(1.36f);   // 磨砂 4 倍强度（原 0.34 × 4，渲染端钳到 1）
-        glass.setBlurSigma(32f * getResources().getDisplayMetrics().density);
+        glass.setBaseAlpha(0.92f);
+        glass.setFrost(0.55f);
+        glass.setBlurSigma(28f * getResources().getDisplayMetrics().density);
         glass.refreshBackground();
     }
 
@@ -78,10 +76,6 @@ public class LiquidGlassPanel extends FrameLayout {
         invalidateOutline();
     }
 
-    public void setRefraction(float heightPx, float amountPx) {
-        glass.setRefraction(heightPx, amountPx);
-    }
-
     public void setBlurSigma(float sigma) {
         glass.setBlurSigma(sigma);
     }
@@ -90,16 +84,17 @@ public class LiquidGlassPanel extends FrameLayout {
         glass.setFrost(f);
     }
 
-    public void setHighlight(float h) {
-        glass.setHighlight(h);
+    public void setBaseAlpha(float a) {
+        glass.setBaseAlpha(a);
     }
 
-    public void setDispersion(float d) {
-        glass.setDispersion(d);
+    public void setTintColor(int color) {
+        glass.setTintColor(color);
     }
 
-    public int getGlassTier() {
-        return glass.tier();
+    /** 毛玻璃总开关 */
+    public void setGlassOn(boolean on) {
+        glass.setGlassOn(on);
     }
 
     /** 显示时强制重采背景（浮层刚变为可见时位置/内容才有意义） */

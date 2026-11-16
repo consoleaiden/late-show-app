@@ -12,46 +12,44 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * 液态玻璃栏（底部导航 / 首页顶栏共用）。
+ * 毛玻璃栏（底部导航 / 首页顶栏共用）。
  *
- * 绘制逻辑全部在 {@link GlassRenderer}：tier2 = AGSL 折射+色散，tier1 = CPU 降采样磨砂，
- * tier0 = 静态半透明。本类只负责「圆角裁切 + 阴影 + 把玻璃层画在子 View 之下」。
+ * 绘制逻辑全部在 {@link FrostedGlassRenderer}：采样背后内容 → 降采样模糊 → 白雾。
+ * 本类只负责「圆角裁切 + 阴影 + 把玻璃层画在子 View 之下」。
  */
-public class LiquidGlassBar extends LinearLayout {
+public class FrostedGlassBar extends LinearLayout {
 
-    private final GlassRenderer glass;
+    private final FrostedGlassRenderer glass;
     private final android.graphics.Path clipPath = new android.graphics.Path();
     private float cornerPx = -1f;
 
-    public LiquidGlassBar(Context context) {
+    public FrostedGlassBar(Context context) {
         super(context);
-        glass = new GlassRenderer(this);
+        glass = new FrostedGlassRenderer(this);
         init();
     }
 
-    public LiquidGlassBar(Context context, @Nullable AttributeSet attrs) {
+    public FrostedGlassBar(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
-        glass = new GlassRenderer(this);
+        glass = new FrostedGlassRenderer(this);
         init();
     }
 
-    public LiquidGlassBar(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+    public FrostedGlassBar(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        glass = new GlassRenderer(this);
+        glass = new FrostedGlassRenderer(this);
         init();
     }
 
     private void init() {
         setWillNotDraw(false);
-        if (glass.tier() >= GlassRenderer.TIER_BLUR) {
-            setOutlineProvider(new ViewOutlineProvider() {
-                @Override public void getOutline(View view, @NonNull Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerPx());
-                }
-            });
-            setClipToOutline(true);
-            setElevation(6f * getResources().getDisplayMetrics().density);
-        }
+        setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, @NonNull Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerPx());
+            }
+        });
+        setClipToOutline(true);
+        setElevation(6f * getResources().getDisplayMetrics().density);
         glass.refreshBackground();
     }
 
@@ -61,11 +59,7 @@ public class LiquidGlassBar extends LinearLayout {
         return getHeight() > 0 ? Math.min(getHeight() / 2f, 24f * d) : 24f * d;
     }
 
-    public int getGlassTier() {
-        return glass.tier();
-    }
-
-    /** 设置采样源：玻璃模糊/折射的就是它的内容（主界面的内容容器）。 */
+    /** 设置采样源：玻璃模糊的就是它的内容（主界面的内容容器）。 */
     public void setBackdropSource(View source) {
         glass.setBackdrop(source);
     }
@@ -77,10 +71,6 @@ public class LiquidGlassBar extends LinearLayout {
         invalidateOutline();
     }
 
-    public void setRefraction(float heightPx, float amountPx) {
-        glass.setRefraction(heightPx, amountPx);
-    }
-
     public void setBlurSigma(float sigma) {
         glass.setBlurSigma(sigma);
     }
@@ -89,12 +79,22 @@ public class LiquidGlassBar extends LinearLayout {
         glass.setFrost(f);
     }
 
-    public void setHighlight(float h) {
-        glass.setHighlight(h);
+    public void setBaseAlpha(float a) {
+        glass.setBaseAlpha(a);
     }
 
-    public void setDispersion(float d) {
-        glass.setDispersion(d);
+    public void setTintColor(int color) {
+        glass.setTintColor(color);
+    }
+
+    /** 毛玻璃总开关：关闭后只保留底色，不再模糊背后内容。 */
+    public void setGlassOn(boolean on) {
+        glass.setGlassOn(on);
+    }
+
+    /** 显示时强制重采背景（位置/内容刚有意义时） */
+    public void refreshGlass() {
+        glass.forceCapture();
     }
 
     @Override

@@ -12,10 +12,12 @@ import androidx.core.content.ContextCompat;
 import androidx.core.util.Pair;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.lateshow.app.R;
 
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,7 +30,7 @@ import java.util.List;
  *    <li>亮色 / 暗色各自绑定一个方案 id（{@code lightSchemeId} / {@code darkSchemeId}），
  *        默认「方寸」= 原应用内置明暗配色；</li>
  *    <li>{@link #applyRuntime(Context, View)} 把当前生效方案的解析色写到窗口背景 / 系统栏 /
- *        各液态玻璃栏，Activity 重建后即可复用（无需每次 onCreate 都读盘）；</li>
+ *        各毛玻璃栏，Activity 重建后即可复用（无需每次 onCreate 都读盘）；</li>
  *    <li>辅助色（{@code accent2}）默认由主色按 HSL 偏移自动生成，用户可覆盖为任意值。</li>
  *  </ul>
  */
@@ -36,6 +38,14 @@ public final class ThemeEngine {
 
     /** 保留原内置配色的方案 id（不可删除） */
     public static final String ID_FANG_CUN = "fangcun";
+
+    // -------------------- 毛玻璃默认值 --------------------
+    // 毛玻璃（模糊 + 白雾）是「有默认值」的：预设与旧版落盘方案都取这组值，
+    // 保证用户没主动调过时观感稳定，也避免老方案缺字段反序列化成 0 导致玻璃消失。
+    public static final boolean DEF_GLASS_ON = true;
+    public static final int DEF_GLASS_BLUR = 36;    // 模糊强度 0~100
+    public static final int DEF_GLASS_FROST = 40;   // 白雾浓度 0~100
+    public static final int DEF_GLASS_ALPHA = 88;   // 底色浓度 0~100
 
     private static volatile ThemeEngine sInstance;
 
@@ -88,10 +98,10 @@ public final class ThemeEngine {
      *  - textPrimary     一级文字
      *  - textSecondary   二级文字
      *  - navAlpha        底部导航栏不透明度（0~100）
-     *  - searchAlpha     搜索栏不透明度
-     *  - categoryAlpha   分类栏不透明度
-     *  - barBlur         玻璃模糊强度（0~100）
-     *  - barFrost        玻璃白雾强度（0~100）
+     *  - glassOn         毛玻璃总开关（默认开）
+     *  - barBlur         毛玻璃模糊强度（0~100）
+     *  - barFrost        毛玻璃白雾浓度（0~100）
+     *  - barAlpha        毛玻璃底色浓度（0~100）
      */
     public static class ThemeScheme {
         public String id;
@@ -108,10 +118,11 @@ public final class ThemeEngine {
         public int textPrimary;
         public int textSecondary;
         public int navAlpha;
-        public int searchAlpha;
-        public int categoryAlpha;
-        public int barBlur;
-        public int barFrost;
+        /** 毛玻璃总开关（默认开）；字段初始化保证老方案 JSON 缺 key 时不会变成「关」 */
+        public boolean glassOn = DEF_GLASS_ON;
+        public int barBlur = DEF_GLASS_BLUR;
+        public int barFrost = DEF_GLASS_FROST;
+        public int barAlpha = DEF_GLASS_ALPHA;
 
         public ThemeScheme() {}
 
@@ -132,10 +143,10 @@ public final class ThemeEngine {
             c.textPrimary = textPrimary;
             c.textSecondary = textSecondary;
             c.navAlpha = navAlpha;
-            c.searchAlpha = searchAlpha;
-            c.categoryAlpha = categoryAlpha;
+            c.glassOn = glassOn;
             c.barBlur = barBlur;
             c.barFrost = barFrost;
+            c.barAlpha = barAlpha;
             return c;
         }
     }
@@ -280,10 +291,10 @@ public final class ThemeEngine {
         s.textPrimary = isLight(surface2) ? 0xFF1B2026 : 0xFFECEDEF;
         s.textSecondary = isLight(surface2) ? 0xFF5C6672 : 0xFF98A0AA;
         s.navAlpha = 88;
-        s.searchAlpha = 80;
-        s.categoryAlpha = 72;
-        s.barBlur = 36;
-        s.barFrost = 40;
+        s.glassOn = DEF_GLASS_ON;
+        s.barBlur = DEF_GLASS_BLUR;
+        s.barFrost = DEF_GLASS_FROST;
+        s.barAlpha = DEF_GLASS_ALPHA;
         return s;
     }
 
@@ -316,9 +327,7 @@ public final class ThemeEngine {
             List<ThemeScheme> user = new ArrayList<>();
             if (raw != null && !raw.isEmpty()) {
                 try {
-                    Type t = new TypeToken<List<ThemeScheme>>() {}.getType();
-                    List<ThemeScheme> parsed = gson.fromJson(raw, t);
-                    if (parsed != null) user = parsed;
+                    user = parseSchemes(raw);
                 } catch (Exception ignored) { }
             }
             java.util.LinkedHashMap<String, ThemeScheme> byId = new java.util.LinkedHashMap<>();
@@ -359,16 +368,41 @@ public final class ThemeEngine {
         s.textPrimary = 0xFFECEDEF;
         s.textSecondary = 0xFF98A0AA;
         s.navAlpha = 88;
-        s.searchAlpha = 80;
-        s.categoryAlpha = 72;
-        s.barBlur = 36;
-        s.barFrost = 40;
+        s.glassOn = DEF_GLASS_ON;
+        s.barBlur = DEF_GLASS_BLUR;
+        s.barFrost = DEF_GLASS_FROST;
+        s.barAlpha = DEF_GLASS_ALPHA;
         return s;
     }
 
-    private static List<ThemeScheme> copyList(List<ThemeScheme> in) {
-        List<ThemeScheme> out = new ArrayList<>(in.size());
+    private static List<ThemeScheme> copyList(List<ThemeScheme> in) {        List<ThemeScheme> out = new ArrayList<>(in.size());
         for (ThemeScheme s : in) out.add(s.copy());
+        return out;
+    }
+
+    /**
+     * 解析落盘方案并补默认值。
+     *
+     * <p>不能直接 {@code gson.fromJson}：Gson 对 JSON 里缺失的 int 给 0、缺失的 boolean 给
+     * false。老版本保存的方案没有 glassOn / barBlur / barFrost / barAlpha 字段，
+     * 直接反序列化会得到「玻璃关 + 模糊 0 + 白雾 0」—— 毛玻璃整块消失。
+     * 这里按「字段是否存在」判断，缺的补 {@link #DEF_GLASS_ON} 等默认值。
+     */
+    private List<ThemeScheme> parseSchemes(String raw) {
+        JsonArray arr = JsonParser.parseString(raw).getAsJsonArray();
+        List<ThemeScheme> out = new ArrayList<>();
+        for (JsonElement e : arr) {
+            if (e == null || !e.isJsonObject()) continue;
+            JsonObject o = e.getAsJsonObject();
+            ThemeScheme s = gson.fromJson(o, ThemeScheme.class);
+            if (s == null) continue;
+            if (!o.has("glassOn")) s.glassOn = DEF_GLASS_ON;
+            if (!o.has("barBlur")) s.barBlur = DEF_GLASS_BLUR;
+            if (!o.has("barFrost")) s.barFrost = DEF_GLASS_FROST;
+            if (!o.has("barAlpha")) s.barAlpha = DEF_GLASS_ALPHA;
+            if (!o.has("navAlpha")) s.navAlpha = 88;
+            out.add(s);
+        }
         return out;
     }
 
@@ -485,10 +519,10 @@ public final class ThemeEngine {
         r.secondary = s.secondaryAuto ? autoSecondary(s.primary) : s.secondary;
         r.onPrimary = isLight(r.primary) ? 0xFF1B2026 : 0xFFFFFFFF;
         r.navAlpha = clamp100(s.navAlpha) / 100f;
-        r.searchAlpha = clamp100(s.searchAlpha) / 100f;
-        r.categoryAlpha = clamp100(s.categoryAlpha) / 100f;
+        r.glassOn = s.glassOn;
         r.barBlur = clamp100(s.barBlur);
         r.barFrost = clamp100(s.barFrost);
+        r.barAlpha = clamp100(s.barAlpha);
         r.angle = ((s.bgAngle % 360) + 360) % 360;
         return r;
     }
@@ -499,8 +533,9 @@ public final class ThemeEngine {
         public int surface;
         public int textPrimary, textSecondary;
         public int primary, secondary, onPrimary;
-        public float navAlpha, searchAlpha, categoryAlpha;
-        public int barBlur, barFrost;
+        public float navAlpha;
+        public boolean glassOn;
+        public int barBlur, barFrost, barAlpha;
         public int angle;
     }
 

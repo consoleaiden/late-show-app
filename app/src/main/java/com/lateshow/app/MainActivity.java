@@ -59,8 +59,8 @@ public class MainActivity extends AppCompatActivity {
     private View detailHost;
     private OnBackPressedCallback detailBack;
 
-    /** 底部导航玻璃胶囊（滚动时下滑隐藏 / 滚动结束上滑回位） */
-    private com.lateshow.app.ui.widget.LiquidGlassBar tabbar;
+    /** 底部导航毛玻璃胶囊（滚动时下滑隐藏 / 滚动结束上滑回位） */
+    private com.lateshow.app.ui.widget.FrostedGlassBar tabbar;
     private boolean tabbarHidden;
 
     private final ImageView[] icons = new ImageView[TAB_COUNT];
@@ -157,20 +157,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 液态玻璃底部导航（效果移植自 Kyant0/AndroidLiquidGlass，Apache-2.0）：
-     * 折射 container 里的列表内容，Android 13+ 生效，低版本自动退化为半透明圆角条。
-     * 参数对着 Kyant0 目录 App 的 bottom-tabs 预设调的，观感可在真机上微调。
+     * 毛玻璃底部导航：采样 container 里的列表内容，模糊后叠白雾。
+     * 强度 / 浓度 / 开关来自主题方案（引擎关闭时用默认值）。
      */
     private void setupGlassTabbar() {
-        com.lateshow.app.ui.widget.LiquidGlassBar bar = findViewById(R.id.tabbar);
+        com.lateshow.app.ui.widget.FrostedGlassBar bar = findViewById(R.id.tabbar);
         tabbar = bar;
         bar.setBackdropSource(findViewById(R.id.container));
         float d = getResources().getDisplayMetrics().density;
         bar.setGlassCornerRadius(24f * d);
-        bar.setRefraction(18f * d, 42f * d);   // 折射带宽 / 折射量（边缘透镜放大）
         applyGlassParams(bar);
-        bar.setHighlight(0.30f);               // 边缘高光
-        bar.setDispersion(0.8f);               // 色散（彩虹边）
     }
 
     /** 底部导航指示条底色：2dp 圆角长条，颜色由调用方给（选中=方案主色 / 未选中=灰） */
@@ -183,19 +179,15 @@ public class MainActivity extends AppCompatActivity {
         return gd;
     }
 
-    /** 玻璃栏模糊/白雾强度来自当前绑定方案（引擎关闭时保持原默认参数） */
-    private void applyGlassParams(com.lateshow.app.ui.widget.LiquidGlassBar bar) {
+    /** 玻璃栏参数来自当前绑定方案（引擎关闭时用默认值） */
+    private void applyGlassParams(com.lateshow.app.ui.widget.FrostedGlassBar bar) {
         float d = getResources().getDisplayMetrics().density;
+        com.lateshow.app.theme.ThemeEngine.Resolved r = null;
         if (isThemeEngineOn()) {
-            com.lateshow.app.theme.ThemeEngine.Resolved r =
-                    com.lateshow.app.theme.ThemeEngine.get()
-                            .resolve(com.lateshow.app.util.ThemeManager.actualNight(this));
-            bar.setBlurSigma(Math.max(4f, r.barBlur / 100f * 44f) * d);
-            bar.setFrost(r.barFrost / 100f * 1.4f);
-        } else {
-            bar.setBlurSigma(32f * d);
-            bar.setFrost(0.88f);
+            r = com.lateshow.app.theme.ThemeEngine.get()
+                    .resolve(com.lateshow.app.util.ThemeManager.actualNight(this));
         }
+        com.lateshow.app.ui.widget.GlassTheme.applyBar(bar, this, r, d);
     }
 
     /**
@@ -415,10 +407,7 @@ public class MainActivity extends AppCompatActivity {
             if (content != null) content.setBackgroundResource(R.color.ink900);
             getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
             getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
-            if (tabbar != null) {
-                tabbar.setBlurSigma(32f * d);
-                tabbar.setFrost(0.88f);
-            }
+            if (tabbar != null) applyGlassParams(tabbar);
             if (curTab >= 0) renderTabs(curTab, false);   // 还原内置橙
             return;
         }
@@ -429,10 +418,9 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setStatusBarColor(r.bgStart);
         getWindow().setNavigationBarColor(
                 com.lateshow.app.theme.ThemeEngine.withAlpha(r.bgStart, r.navAlpha));
-        // 玻璃栏参数：模糊强度 + 白雾 + 底色透明度
+        // 玻璃栏参数：模糊强度 + 白雾 + 底色 + 总开关
         if (tabbar != null) {
-            tabbar.setBlurSigma(Math.max(4f, r.barBlur / 100f * 44f) * d);
-            tabbar.setFrost(r.barFrost / 100f * 1.4f);
+            com.lateshow.app.ui.widget.GlassTheme.applyBar(tabbar, this, r, d);
         }
         // 导航选中态（图标 / 指示条）也跟随新方案
         if (curTab >= 0) renderTabs(curTab, false);

@@ -39,14 +39,14 @@
 | `accentGlowBg(ctx)` | 底栏光斑（替代 `bg_nav_glow`） |
 
 `Resolved` 字段：`bgStart/bgEnd`（背景）、`surface`、`textPrimary/textSecondary`、`primary/secondary/onPrimary`、
-`navAlpha/searchAlpha/categoryAlpha`、`barBlur/barFrost`、`angle`。
+`navAlpha`、`glassOn/barBlur/barFrost/barAlpha`、`angle`。
 
 ## 3. 各页面接入清单
 
 | 页面 | 跟随主题的部件 |
 | --- | --- |
 | 开屏 `SplashActivity` | 品牌三角（`FangcunMarkDrawable`），方框恒为宣白 |
-| 首页 `HomeFragment` | 分类芯片选中底/字、源站呼吸环、源站菜单圆点、顶栏玻璃模糊/白雾 |
+| 首页 `HomeFragment` | 分类芯片选中底/字、源站呼吸环、源站菜单圆点、顶栏/弹层毛玻璃（模糊/白雾/底色/开关） |
 | 详情页 `DetailFragment` | 页面底色、主按钮底/字、选集选中底、线路/明星 Tab、源站胶囊圆点、品牌 loading、简介展开文字色、收藏色 |
 | 收藏页 `FavFragment` | 分段胶囊选中底/字（`switchSegSilent`）、卡片角标与进度 |
 | 设置页 `SettingsFragment` | 分段控件、保存/检查更新按钮、打开同步控制台/新增代理文字、代理圆点、页脚字标三角 |
@@ -76,3 +76,22 @@
 
 5. **主题变更不重建 Activity**：`ThemeEngine.applyRuntime()` 只换窗口/内容底色，
    页面内控件由 `onThemeChanged()` 逐个重绘，切换才顺滑。
+
+## 5. 毛玻璃（底栏 / 顶栏 / 弹层）
+
+实现集中在 `ui/widget/`：
+`FrostedGlassBar`（底栏 + 顶栏）、`FrostedGlassPanel`（源站/分类弹层）、`FrostedGlassRenderer`（共用渲染）、
+`GlassTheme`（把方案参数映射到控件）。
+
+- **效果**：采样背后内容 → 降采样模糊 → 叠白雾。**不做**边缘折射 / 色散 / 彩虹边（原「液态玻璃」已移除，
+  `res/raw/liquid_glass_bar.agsl` 一并删除）。
+- **全 API 可用**：模糊走「画进 1/8~1/28 小图再双线性放大」的纯 Canvas 方案，不依赖 `RenderEffect`/
+  `RenderNode`（后者在华为等部分 GPU 上会被静默丢弃，玻璃会整块变透明）。
+- **可调参数**（`ThemeScheme`，均有默认值）：
+  `glassOn`（默认开）、`barBlur`（默认 36）、`barFrost`（默认 40）、`barAlpha`（默认 88）。
+  主题编辑器的「毛玻璃」分区可实时调节并保存；底栏/顶栏在 `onThemeChanged()` 里重刷，弹层在每次显示时重刷。
+- **默认值兜底**：老版本落盘的方案没有这几个字段，Gson 会把缺失的 int 读成 0、boolean 读成 false
+  （等于「玻璃关 + 无模糊」，毛玻璃整块消失）。因此 `ThemeScheme` 字段带初始值，
+  且 `ThemeEngine.parseSchemes()` 再按「字段是否存在」补一次默认值。
+- **永不全透明**：采样失败或用户关掉毛玻璃时，控件 background 仍有一层 `barAlpha` 的底色。
+- **省电**：采样节流 ~11fps，且只在有绘制时进行（不主动 `invalidate` 自我续帧），静止零开销。

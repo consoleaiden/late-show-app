@@ -89,7 +89,7 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
     private int listGeneration = 0;
     /** 源站 / 全部分类 共用的玻璃弹层（页面内浮层，真实采样背后海报） */
     private View menuOverlay, menuScrim;
-    private com.lateshow.app.ui.widget.LiquidGlassPanel menuPanel;
+    private com.lateshow.app.ui.widget.FrostedGlassPanel menuPanel;
     private androidx.activity.OnBackPressedCallback menuBack;
     /** 弹层开关代次：防止关闭动画的收尾把刚重开的面板又藏掉 */
     private int menuSeq = 0;
@@ -107,7 +107,7 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
     /** 分类横滑侧按钮状态：true = 源站/搜索按钮已滑出、chips 边距已扩展 */
     private boolean chipsBtnHidden;
     /** 顶部功能玻璃胶囊（setupTopBar 装配，滚动隐显用） */
-    private com.lateshow.app.ui.widget.LiquidGlassBar topbar;
+    private com.lateshow.app.ui.widget.FrostedGlassBar topbar;
 
     /** 首屏骨架屏：9 张占位卡 + 呼吸动画，避免首次加载白屏 */
     private LinearLayout skeletonBox;
@@ -367,7 +367,7 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
         if (skelAnim != null) skelAnim.cancel();
     }
 
-    // ---------- 顶栏：液态玻璃 + 搜索展开/收起 + 分类长按弹层 ----------
+    // ---------- 顶栏：毛玻璃 + 搜索展开/收起 + 分类长按弹层 ----------
 
     /** 顶栏玻璃参数与底部导航一致；采样源 = 网格（内容从顶栏后面穿过） */
     private void setupTopBar(View v) {
@@ -376,10 +376,7 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
             topbar.setBackdropSource(grid);
             float d = getResources().getDisplayMetrics().density;
             topbar.setGlassCornerRadius(24f * d);
-            topbar.setRefraction(18f * d, 42f * d);   // 折射带 / 折射量
             applyGlassParams(topbar);
-            topbar.setHighlight(0.30f);
-            topbar.setDispersion(0.8f);
         }
         applyTopInsets(v, topbar);
         // 统一交互规则：顶栏虽在弹层之上（保持芯片可点），但点它的空白/边距仍算「弹层外部」，
@@ -419,7 +416,7 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
      * 首页自己把顶栏/网格/骨架屏/历史面板整体下移状态栏高度。
      * 布局里的 4/64/58dp 是相对状态栏下沿的原设计值，这里叠加 bars.top。
      */
-    private void applyTopInsets(View root, com.lateshow.app.ui.widget.LiquidGlassBar topbar) {
+    private void applyTopInsets(View root, com.lateshow.app.ui.widget.FrostedGlassBar topbar) {
         View gridV = root.findViewById(R.id.grid);
         View skelV = root.findViewById(R.id.skeletonBox);
         View histV = root.findViewById(R.id.histPanel);
@@ -472,10 +469,7 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
         menuPanel.setLayoutParams(lp);
 
         menuPanel.setGlassCornerRadius(14f * d);
-        menuPanel.setRefraction(18f * d, 30f * d);
         applyGlassParams(menuPanel);
-        menuPanel.setHighlight(0.28f);
-        menuPanel.setDispersion(0.6f);
         menuPanel.setBackdropSource(grid);
 
         // 返回键：弹层打开时先关弹层（与 PopupWindow 的返回行为一致）
@@ -768,7 +762,7 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
                 : new android.view.animation.DecelerateInterpolator(1.8f);
         final int overshoot = dp(28);   // 滑出缓冲：多移一段距离，确保完全离开可视区
         if (btnSource.getWidth() > 0) {
-            // 源站按钮整体移出父栏左边界再多退一段（LiquidGlassBar 按圆角轮廓裁剪）
+            // 源站按钮整体移出父栏左边界再多退一段（FrostedGlassBar 按圆角轮廓裁剪）
             btnSource.animate()
                     .translationX(hide ? -(btnSource.getLeft() + btnSource.getWidth() + overshoot) : 0f)
                     .setDuration(hide ? 190 : 240).setInterpolator(itp).start();
@@ -1689,33 +1683,25 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
         return getResources().getColor(R.color.acc, null);
     }
 
-    /** 玻璃栏参数：模糊强度 / 白雾来自当前绑定方案（开关关闭时保持原默认） */
-    private void applyGlassParams(com.lateshow.app.ui.widget.LiquidGlassBar bar) {
+    /** 玻璃栏参数：模糊强度 / 白雾 / 底色 / 开关来自当前绑定方案（引擎关闭时用默认值） */
+    private void applyGlassParams(com.lateshow.app.ui.widget.FrostedGlassBar bar) {
         float d = getResources().getDisplayMetrics().density;
+        com.lateshow.app.theme.ThemeEngine.Resolved r = null;
         if (PrefStore.get().themeEngineOn()) {
-            com.lateshow.app.theme.ThemeEngine.Resolved r =
-                    com.lateshow.app.theme.ThemeEngine.get()
-                            .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()));
-            bar.setBlurSigma(Math.max(4f, r.barBlur / 100f * 44f) * d);
-            bar.setFrost(r.barFrost / 100f * 1.4f);
-        } else {
-            bar.setBlurSigma(36f * d);
-            bar.setFrost(1.04f);
+            r = com.lateshow.app.theme.ThemeEngine.get()
+                    .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()));
         }
+        com.lateshow.app.ui.widget.GlassTheme.applyBar(bar, requireContext(), r, d);
     }
 
     /** 同上，弹层面板 */
-    private void applyGlassParams(com.lateshow.app.ui.widget.LiquidGlassPanel panel) {
+    private void applyGlassParams(com.lateshow.app.ui.widget.FrostedGlassPanel panel) {
         float d = getResources().getDisplayMetrics().density;
+        com.lateshow.app.theme.ThemeEngine.Resolved r = null;
         if (PrefStore.get().themeEngineOn()) {
-            com.lateshow.app.theme.ThemeEngine.Resolved r =
-                    com.lateshow.app.theme.ThemeEngine.get()
-                            .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()));
-            panel.setBlurSigma(Math.max(4f, r.barBlur / 100f * 44f) * d);
-            panel.setFrost(r.barFrost / 100f * 1.6f);
-        } else {
-            panel.setBlurSigma(32f * d);
-            panel.setFrost(1.36f);
+            r = com.lateshow.app.theme.ThemeEngine.get()
+                    .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()));
         }
+        com.lateshow.app.ui.widget.GlassTheme.applyPanel(panel, requireContext(), r, d);
     }
 }
