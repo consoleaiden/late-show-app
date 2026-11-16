@@ -17,7 +17,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
 import com.google.gson.Gson;
-import com.lateshow.app.MainActivity;
 import com.lateshow.app.R;
 import com.lateshow.app.store.PrefStore;
 import com.lateshow.app.theme.ThemeEngine.ThemeScheme;
@@ -854,13 +853,9 @@ public class ThemeEditorActivity extends AppCompatActivity {
         boolean night = ThemeManager.actualNight(this);
         if (night) engine.setDarkId(scheme.id); else engine.setLightId(scheme.id);
         PrefStore.get().setThemeEngineOn(true);
-        Toast.makeText(this, "已保存并应用「" + scheme.name + "」", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "主题保存成功，已应用「" + scheme.name + "」", Toast.LENGTH_SHORT).show();
 
-        // 回主页应用新主题
-        android.content.Intent it = new android.content.Intent(this, MainActivity.class);
-        it.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-                | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(it);
+        // 保存后回到自定义主题页（不跳回设置页），列表会刷新出刚保存的方案
         finish();
     }
 

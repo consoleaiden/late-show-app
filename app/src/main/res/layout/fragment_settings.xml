@@ -58,46 +58,7 @@
                 android:contentDescription="主题" />
         </LinearLayout>
 
-        <!-- ① 自定义主题入口：点击进入主题管理主页（预设选用 / 明暗双绑定 / 自定义配色） -->
-        <LinearLayout
-            android:id="@+id/entryCustomTheme"
-            style="@style/SettingsCard"
-            android:layout_marginBottom="8dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginRight="7dp"
-                android:src="@drawable/ic_theme"
-                app:tint="@color/t3"
-                android:contentDescription="自定义主题" />
-
-            <TextView
-                style="@style/SectionTitle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="自定义主题" />
-
-            <TextView
-                style="@style/MetaLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginRight="4dp"
-                android:text="配色方案" />
-
-            <androidx.appcompat.widget.AppCompatImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_chevron_down"
-                app:tint="@color/t3"
-                android:rotation="270"
-                android:contentDescription="进入" />
-        </LinearLayout>
-
-        <!-- ② 数据源模式：NAS 同步库 / 资源站直连（手风琴面板，与其他模块一致） -->
+        <!-- ① 数据源模式：NAS 同步库 / 资源站直连（手风琴面板，与其他模块一致） -->
         <LinearLayout
             style="@style/SettingsCard"
             android:orientation="vertical">
@@ -975,6 +936,45 @@
                     android:textSize="12sp"
                     android:textColor="@color/t1" />
             </LinearLayout>
+        </LinearLayout>
+
+        <!-- 自定义主题入口：点击进入主题管理主页（预设选用 / 明暗双绑定 / 自定义配色） -->
+        <LinearLayout
+            android:id="@+id/entryCustomTheme"
+            style="@style/SettingsCard"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginRight="7dp"
+                android:src="@drawable/ic_theme"
+                app:tint="@color/t3"
+                android:contentDescription="自定义主题" />
+
+            <TextView
+                style="@style/SectionTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="自定义主题" />
+
+            <TextView
+                style="@style/MetaLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="4dp"
+                android:text="配色方案" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_chevron_down"
+                app:tint="@color/t3"
+                android:rotation="270"
+                android:contentDescription="进入" />
         </LinearLayout>
 
         <!-- ⑤ 应用更新（手风琴面板） -->
