@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -29,13 +30,39 @@ public class SplashActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // 启动页先于 MainActivity，需自行初始化偏好与主题引擎
+        com.lateshow.app.store.PrefStore.init(this);
+        com.lateshow.app.theme.ThemeEngine.init(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_splash);
 
         ImageView mark = findViewById(R.id.splashMark);
-        View title = findViewById(R.id.splashTitle);
-        View slogan = findViewById(R.id.splashSlogan);
+        TextView title = findViewById(R.id.splashTitle);
+        TextView slogan = findViewById(R.id.splashSlogan);
         View root = findViewById(R.id.splashRoot);
+
+        // 背景 / 题字 / 标语跟随当前方案（引擎关闭时保持品牌暗场 + 宣白字）
+        if (com.lateshow.app.theme.ThemeEngine.isEnabled(this)) {
+            com.lateshow.app.theme.ThemeEngine.Resolved r =
+                    com.lateshow.app.theme.ThemeEngine.get().resolve(
+                            com.lateshow.app.util.ThemeManager.actualNight(this));
+            android.util.Log.d("LS_SPLASH", "bgStart=" + Integer.toHexString(r.bgStart)
+                    + " bgEnd=" + Integer.toHexString(r.bgEnd)
+                    + " primary=" + Integer.toHexString(r.primary)
+                    + " accent=" + Integer.toHexString(
+                            com.lateshow.app.theme.ThemeEngine.accentOf(this)));
+            android.graphics.drawable.Drawable bg =
+                    com.lateshow.app.theme.ThemeEngine.get().backgroundDrawable(r);
+            root.setBackground(bg);
+            if (getWindow() != null) {
+                getWindow().setBackgroundDrawable(bg);
+                getWindow().setStatusBarColor(r.bgStart);
+                getWindow().setNavigationBarColor(
+                        com.lateshow.app.theme.ThemeEngine.withAlpha(r.bgStart, r.navAlpha));
+            }
+            title.setTextColor(r.textPrimary);
+            slogan.setTextColor(r.textPrimary);
+        }
 
         // 三角跟随当前方案主色（引擎关闭时回退品牌朱砂）；方框恒为宣白，保证暗场可读
         int tri = com.lateshow.app.theme.ThemeEngine.isEnabled(this)
