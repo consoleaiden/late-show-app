@@ -329,29 +329,31 @@ public class SettingsFragment extends Fragment
         }
 
         // 首页动效三开关：滚动隐显 / 分类区退让（默认开启；立即生效，回首页即可见）
-        bindAnimSwitch(v, R.id.swAnimTabbar, PrefStore.get().animTabbarHide(),
-                on -> PrefStore.get().setAnimTabbarHide(on),
+        bindAnimSwitch(v, R.id.swAnimTabbar,
+                PrefStore.get()::animTabbarHide, PrefStore.get()::setAnimTabbarHide,
                 "底部导航栏滚动闪避", "列表滚动时底部导航栏不再下滑隐藏");
-        bindAnimSwitch(v, R.id.swAnimTopbar, PrefStore.get().animTopbarHide(),
-                on -> PrefStore.get().setAnimTopbarHide(on),
+        bindAnimSwitch(v, R.id.swAnimTopbar,
+                PrefStore.get()::animTopbarHide, PrefStore.get()::setAnimTopbarHide,
                 "顶部功能区滚动闪避", "列表滚动时顶部功能区不再上滑隐藏");
-        bindAnimSwitch(v, R.id.swAnimChip, PrefStore.get().animChipRetreat(),
-                on -> PrefStore.get().setAnimChipRetreat(on),
+        bindAnimSwitch(v, R.id.swAnimChip,
+                PrefStore.get()::animChipRetreat, PrefStore.get()::setAnimChipRetreat,
                 "分类区两侧退让", "横滑分类时源站与搜索按钮不再向两侧滑出");
     }
 
     /**
      * 绑定一个「首页动效」开关：回填状态 + 变更即存 + 轻提示。
-     * 存储直接走 setter（PrefStore），开关位置在设置页实时生效。
+     * 相等判断必须读「当前存储值」而不是绑定时的旧值，否则第二次点击会被误吞
+     * （开关画面已切换、存储没改、也没有提示 → 开关状态与实际效果不一致）。
      */
-    private void bindAnimSwitch(View root, int id, boolean checked,
+    private void bindAnimSwitch(View root, int id,
+                                java.util.function.BooleanSupplier getter,
                                 java.util.function.Consumer<Boolean> setter,
                                 String title, String offHint) {
         android.widget.Switch sw = root.findViewById(id);
         if (sw == null) return;
-        sw.setChecked(checked);
+        sw.setChecked(getter.getAsBoolean());
         sw.setOnCheckedChangeListener((bv, on) -> {
-            if (on == checked) return;      // 程序化回填不重复处理
+            if (on == getter.getAsBoolean()) return;   // 与当前存储一致：程序化回填，不重复处理
             setter.accept(on);
             toast(on ? title + "已开启" : offHint);
         });
