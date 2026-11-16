@@ -304,9 +304,10 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         previewCard.setBackground(ThemeEngine.get().backgroundDrawable(r));
         tvPreviewTitle.setTextColor(r.textPrimary);
         tvLightBind.setTextColor(previewNight ? color(R.color.t2) : r.onPrimary);
-        tvLightBind.setBackgroundColor(previewNight ? withAlpha(r.surface, 0.7f) : r.primary);
         tvDarkBind.setTextColor(!previewNight ? color(R.color.t2) : r.onPrimary);
-        tvDarkBind.setBackgroundColor(!previewNight ? withAlpha(r.surface, 0.7f) : r.primary);
+        // 用圆角 drawable 上色（setBackgroundColor 会退化成方形，丢掉 8dp 圆角）
+        bindBtnBg(tvLightBind, previewNight ? withAlpha(r.surface, 0.7f) : r.primary);
+        bindBtnBg(tvDarkBind, !previewNight ? withAlpha(r.surface, 0.7f) : r.primary);
 
         // 页面背景随预览模式联动（真正的「所见即所得」）
         if (on) {
@@ -398,6 +399,16 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         int sz = Math.round(9 * getResources().getDisplayMetrics().density);
         gd.setSize(sz, sz);
         return gd;
+    }
+
+    /** 绑定按钮底色：8dp 圆角（与 bg_smbtn 一致），避免 setBackgroundColor 退化成方形 */
+    private void bindBtnBg(TextView tv, int color) {
+        android.graphics.drawable.GradientDrawable gd =
+                new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(8 * getResources().getDisplayMetrics().density);
+        gd.setColor(color);
+        tv.setBackground(gd);
     }
 
     private TextView smallBtn(String text) {
