@@ -95,3 +95,22 @@
   且 `ThemeEngine.parseSchemes()` 再按「字段是否存在」补一次默认值。
 - **永不全透明**：采样失败或用户关掉毛玻璃时，控件 background 仍有一层 `barAlpha` 的底色。
 - **省电**：采样节流 ~11fps，且只在有绘制时进行（不主动 `invalidate` 自我续帧），静止零开销。
+
+## 6. 首页动效开关（设置页）
+
+设置页「自定义主题」入口下方有「首页动效」卡片，三个开关控制首页的滚动隐显 / 退让动画，
+**全局生效**（不随主题方案切换），默认全部开启：
+
+| 开关 | 存储键（`PrefStore`） | 作用 |
+| --- | --- | --- |
+| 底部导航栏闪避 | `anim_tabbar_hide` | 列表滚动时底部导航栏下滑让出空间，滚动结束回位 |
+| 顶部功能区闪避 | `anim_topbar_hide` | 列表滚动时顶部功能区（源站 + 分类 + 搜索）上滑让出空间，滚动结束回位 |
+| 分类区两侧退让 | `anim_chip_retreat` | 横滑分类时源站 / 搜索按钮向各自方向滑出，展示更多分类 |
+
+- **生效链路**：`HomeFragment.setChromeHidden()` 拆成顶栏 / 底栏两个独立幂等状态
+  （`topHidden` / `tabHidden`），各自由对应开关决定是否跟随滚动；
+  `setChipSideButtonsHidden()` 在开关关闭时把 `hide` 强制视为 `false`（已退让则顺势回位）。
+- **回位保证**：关闭开关后若控件正处于隐藏 / 退让态，下一次滚动或 `resetChrome()`
+  （切回首页 / 详情页收起）会立即回位，不会卡在隐藏态。
+- **控件位置**：`res/layout/fragment_settings.xml`
+  （`swAnimTabbar` / `swAnimTopbar` / `swAnimChip`），绑定在 `SettingsFragment.bindAnimSwitch()`。

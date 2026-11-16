@@ -102,8 +102,10 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
     private TextView histCount, histEmpty, histPage, histPrev, histNext, btnClearHist;
     private int histPageNo = 0;
 
-    /** 滚动隐显状态：true = 顶栏上滑隐藏中（底导航由 MainActivity 同步处理） */
-    private boolean chromeHidden;
+    /** 顶部功能区隐藏状态（仅当「顶部功能区闪避」开关开启时才跟随滚动隐藏） */
+    private boolean topHidden;
+    /** 底部导航隐藏状态（仅当「底部导航栏闪避」开关开启时才跟随滚动隐藏，动画在 MainActivity） */
+    private boolean tabHidden;
     /** 分类横滑侧按钮状态：true = 源站/搜索按钮已滑出、chips 边距已扩展 */
     private boolean chipsBtnHidden;
     /** 顶部功能玻璃胶囊（setupTopBar 装配，滚动隐显用） */
@@ -724,20 +726,33 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
     /**
      * 滚动隐显：列表滚动时顶部功能胶囊向上滑出屏幕、底部导航胶囊向下滑出屏幕；
      * 滚动结束（SCROLL_STATE_IDLE）后各自滑回原位。重复调用同方向幂等。
+     * 顶部功能胶囊与底部导航各自由独立开关控制（设置页「首页动效」）：
+     * 关闭的项保持原位；若此前已隐藏，滚动时会顺势回位。
      * 顶部隐藏位移 = 顶栏顶边 + 高度（移出父容器上边界后被裁剪，状态栏区域也不残留）。
      */
     private void setChromeHidden(boolean hide) {
-        if (chromeHidden == hide) return;
-        chromeHidden = hide;
-        if (topbar != null && topbar.getWidth() > 0) {
-            float target = hide ? -(topbar.getTop() + topbar.getHeight()) : 0f;
-            topbar.animate().translationY(target)
-                    .setDuration(hide ? 190 : 240)
-                    .setInterpolator(hide
-                            ? new android.view.animation.AccelerateInterpolator(1.6f)
-                            : new android.view.animation.DecelerateInterpolator(1.8f))
-                    .start();
-        }
+        setTopHidden(hide && PrefStore.get().animTopbarHide());
+        setTabHidden(hide && PrefStore.get().animTabbarHide());
+    }
+
+    /** 顶部功能胶囊隐显（独立幂等；开关关闭时强制回位） */
+    private void setTopHidden(boolean hide) {
+        if (topHidden == hide) return;
+        topHidden = hide;
+        if (topbar == null || topbar.getWidth() <= 0) return;
+        float target = hide ? -(topbar.getTop() + topbar.getHeight()) : 0f;
+        topbar.animate().translationY(target)
+                .setDuration(hide ? 190 : 240)
+                .setInterpolator(hide
+                        ? new android.view.animation.AccelerateInterpolator(1.6f)
+                        : new android.view.animation.DecelerateInterpolator(1.8f))
+                .start();
+    }
+
+    /** 底部导航胶囊隐显（实际动画在 MainActivity，独立幂等；开关关闭时强制回位） */
+    private void setTabHidden(boolean hide) {
+        if (tabHidden == hide) return;
+        tabHidden = hide;
         if (getActivity() instanceof com.lateshow.app.MainActivity) {
             ((com.lateshow.app.MainActivity) getActivity()).animateTabbar(hide);
         }
@@ -753,6 +768,8 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
     private void setChipSideButtonsHidden(boolean hide) {
         if (chips == null || btnSource == null || btnSearch == null || topbar == null) return;
         if (searchBox != null && searchBox.getVisibility() == View.VISIBLE) return;
+        // 「分类区两侧退让」开关关闭：不做退让（此前已退让则顺势回位）
+        hide = hide && PrefStore.get().animChipRetreat();
         if (chipsBtnHidden == hide) return;
         chipsBtnHidden = hide;
         if (chips.getWidth() <= 0 || topbar.getWidth() <= 0) return;
@@ -913,10 +930,14 @@ public class HomeFragment extends Fragment implements com.lateshow.app.MainActiv
         }
     }
 
-    /** 顶栏/底导航强制回位（切回首页或详情页收起露出首页时由宿主触发） */
+    /** 顶栏/底导航强制回位（切回首页或详情页收起露出首页时由宿主触发；忽略动效开关） */
     public void resetChrome() {
-        chromeHidden = false;
+        topHidden = false;
+        tabHidden = false;
         if (topbar != null) topbar.setTranslationY(0f);
+        if (getActivity() instanceof com.lateshow.app.MainActivity) {
+            ((com.lateshow.app.MainActivity) getActivity()).animateTabbar(false);
+        }
         if (chipsBtnHidden) setChipSideButtonsHidden(false);   // 滑出中的侧按钮一并回位
     }
 

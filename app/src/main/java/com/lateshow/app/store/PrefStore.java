@@ -510,6 +510,35 @@ public final class PrefStore {
         sp.edit().putBoolean("theme_engine_on", on).apply();
     }
 
+    // ---------- 首页动效：滚动隐显 / 分类区退让（默认开启，观感与旧版一致） ----------
+
+    /** 底部导航栏：列表滚动时下滑让出空间、滚动结束回位 */
+    public boolean animTabbarHide() {
+        return sp.getBoolean("anim_tabbar_hide", true);
+    }
+
+    public void setAnimTabbarHide(boolean on) {
+        sp.edit().putBoolean("anim_tabbar_hide", on).apply();
+    }
+
+    /** 顶部功能区：列表滚动时上滑让出空间、滚动结束回位 */
+    public boolean animTopbarHide() {
+        return sp.getBoolean("anim_topbar_hide", true);
+    }
+
+    public void setAnimTopbarHide(boolean on) {
+        sp.edit().putBoolean("anim_topbar_hide", on).apply();
+    }
+
+    /** 分类区：横滑分类时源站 / 搜索按钮向两侧退让，展示更多分类 */
+    public boolean animChipRetreat() {
+        return sp.getBoolean("anim_chip_retreat", true);
+    }
+
+    public void setAnimChipRetreat(boolean on) {
+        sp.edit().putBoolean("anim_chip_retreat", on).apply();
+    }
+
     // ---------- 播放偏好：跳过片头/片尾 ----------
 
     public int skipIntroSec() {
