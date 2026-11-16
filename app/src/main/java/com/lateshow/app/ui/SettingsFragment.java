@@ -550,7 +550,13 @@ public class SettingsFragment extends Fragment
 
     // ==================== 已保存播放源（多地址管理） ====================
 
-    /** 渲染已保存播放源列表；当前生效地址标「使用中」 */
+    /**
+     * 渲染已保存播放源列表；当前生效地址用行首主色圆点标记。
+     *
+     * 圆点取代原「使用中」文字：与主页源站列表（item_source_menu）的选中态同一语言，
+     * 不改变卡片结构、不引入第二处强调色文字；非使用中行 INVISIBLE 占位以保持对齐。
+     * 圆点本身无文字，故给使用中行的名称补 contentDescription，兼顾 TalkBack 可读性。
+     */
     private void renderSavedSources() {
         if (savedList == null || !isAdded()) return;
         List<PrefStore.SavedSource> list = PrefStore.get().savedSources();
@@ -560,10 +566,16 @@ public class SettingsFragment extends Fragment
         tvSavedEmpty.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
         for (final PrefStore.SavedSource it : list) {
             View row = getLayoutInflater().inflate(R.layout.item_saved_source, savedList, false);
-            ((TextView) row.findViewById(R.id.sName)).setText(it.name);
+            TextView name = (TextView) row.findViewById(R.id.sName);
+            name.setText(it.name);
             ((TextView) row.findViewById(R.id.sUrl)).setText(it.url);
             boolean isActive = it.url != null && it.url.equals(active);
-            row.findViewById(R.id.sActive).setVisibility(isActive ? View.VISIBLE : View.GONE);
+            View dot = row.findViewById(R.id.sDot);
+            dot.setBackground(com.lateshow.app.theme.ThemeEngine.accentDotBg(requireContext()));
+            dot.setVisibility(isActive ? View.VISIBLE : View.INVISIBLE);
+            if (isActive) {
+                name.setContentDescription(it.name + "，使用中");
+            }
             row.findViewById(R.id.btnUse).setOnClickListener(v -> applySavedSource(it));
             ((TextView) row.findViewById(R.id.btnUse)).setTextColor(
                     com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext()));
