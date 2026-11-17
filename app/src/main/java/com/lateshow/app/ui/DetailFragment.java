@@ -50,7 +50,6 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.bumptech.glide.Glide;
 import com.lateshow.app.MainActivity;
 import com.lateshow.app.R;
 import com.lateshow.app.adapter.VideoAdapter;
@@ -159,8 +158,11 @@ public class DetailFragment extends Fragment
     private ColorDrawable pageBg;
     /** 信息带底色（海报 + 信息模块）：同样在收起时淡出，否则会留一块比卡片大的灰板 */
     private ColorDrawable bandBg;
-    /** 信息模块自己的底色：海报态 = heroBand 深色，播放态 = ink900（与内容区同色） */
+    /** 信息模块自己的底色：海报态 = heroBand 深色，播放态 = ink900 略深一档（与简介区形成层次） */
     private ColorDrawable infoBg;
+    /** 播放态状态栏恢复用：进入播放前记下颜色（方案 bgStart / 引擎关闭透明），退出时还原 */
+    private boolean statusBarSaved;
+    private int savedStatusBarColor, savedNavBarColor;
     /** 源站 / 更新信息两颗胶囊的底色（代码绘制，随播放态一起过渡；原 XML ripple 仅按压反馈，胶囊不可点） */
     private GradientDrawable chipBgSource, chipBgUpdate;
     /** 信息带配色过渡（0 海报态 → 1 播放态），与海报区高度动画同参同步 */
@@ -429,11 +431,11 @@ public class DetailFragment extends Fragment
         chipSource.setBackground(chipBgSource);
         chipUpdate.setBackground(chipBgUpdate);
         applyBandTint(0f);
-        pageBg = new ColorDrawable(PrefStore.get().themeEngineOn()
-                ? com.lateshow.app.theme.ThemeEngine.get()
-                        .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()))
-                        .bgStart
-                : getColor(R.color.ink900));
+        // 页面底色（playRoot）：与简介/选集区（contentCol）完全同源 = ink900。
+        // 播放态下播放器周围的空隙、信息带以下整块都与内容区一色，不再出现
+        // 「方案底色（如葡萄冰茶 #A68DD6）与内容区 #F2F3F6 拼接」的割裂感；
+        // 主题方案色仍作用于文字/强调/按钮等（见 onThemeChanged）。
+        pageBg = new ColorDrawable(getColor(R.color.ink900));
         playRoot.setBackground(pageBg);
 
         // 海报区：横向满屏、纵向半屏（屏幕高度的一半）
@@ -459,7 +461,7 @@ public class DetailFragment extends Fragment
         if (remark != null && !remark.trim().isEmpty()) chipUpdate.setText(remark.trim());
         else chipUpdate.setVisibility(View.GONE);
         if (pic != null) {
-            Glide.with(this).load(pic).placeholder(R.color.heroSurface).centerCrop().into(cover);
+            com.lateshow.app.util.CoverProxy.load(cover, pic, R.color.heroSurface, R.color.heroSurface);
         }
 
         applyInsets(v);
@@ -1045,7 +1047,8 @@ public class DetailFragment extends Fragment
         if (detail == null) return;
         tvTitle.setText(detail.vodName != null ? detail.vodName : title);
         if (detail.vodPic != null && !detail.vodPic.isEmpty()) {
-            Glide.with(this).load(detail.vodPic).placeholder(R.color.heroSurface).centerCrop().into(cover);
+            com.lateshow.app.util.CoverProxy.load(cover, detail.vodPic,
+                    R.color.heroSurface, R.color.heroSurface);
         }
 
         // 源站：显示名优先，回落 slug
@@ -1583,11 +1586,8 @@ public class DetailFragment extends Fragment
                 ImageView cover = v.findViewById(R.id.relCover);
                 TextView name = v.findViewById(R.id.relName);
                 TextView score = v.findViewById(R.id.relScore);
-                Glide.with(DetailFragment.this).load(c.vodPic)
-                        .placeholder(R.color.heroSurface)
-                        .centerCrop()
-                        .dontAnimate()
-                        .into(cover);
+                com.lateshow.app.util.CoverProxy.load(cover, c.vodPic,
+                        R.color.heroSurface, R.color.heroSurface);
                 name.setText(c.vodName != null ? c.vodName : "");
                 // score 只用于排序，不再换算成百分比展示（见方法注释：v1.10.0 口径变更）
                 score.setVisibility(View.GONE);
@@ -1712,11 +1712,8 @@ public class DetailFragment extends Fragment
                 ImageView cover = v.findViewById(R.id.relCover);
                 TextView name = v.findViewById(R.id.relName);
                 TextView tag = v.findViewById(R.id.relScore);
-                Glide.with(DetailFragment.this).load(c.vodPic)
-                        .placeholder(R.color.heroSurface)
-                        .centerCrop()
-                        .dontAnimate()
-                        .into(cover);
+                com.lateshow.app.util.CoverProxy.load(cover, c.vodPic,
+                        R.color.heroSurface, R.color.heroSurface);
                 name.setText(c.vodName != null ? c.vodName : "");
                 // 「全部」Tab 显示共享明星（如「吴京」）；明星 Tab 内已不言自明，隐藏
                 if (curStarTab == null && c.match_stars != null && !c.match_stars.isEmpty()) {
@@ -1932,6 +1929,31 @@ public class DetailFragment extends Fragment
         c.setAppearanceLightStatusBars(light);
     }
 
+    /**
+     * 播放态系统栏：视频画面上下留出的系统栏底色直接可见。播放中把状态栏与导航栏
+     * 都刷成与简介区同源的浅底（ink900）+ 状态栏深色图标，不再露出方案底色
+     * （如葡萄冰茶的紫色）造成的上下两块突兀色块；退出播放恢复进入前的颜色
+     * （状态栏方案 bgStart / 引擎关闭透明；导航栏方案色 + navAlpha）与白色图标。
+     */
+    private void applyPlayingStatusBar(boolean playing) {
+        android.app.Activity a = getActivity();
+        if (a == null || a.getWindow() == null) return;
+        android.view.Window w = a.getWindow();
+        if (playing) {
+            savedStatusBarColor = w.getStatusBarColor();
+            savedNavBarColor = w.getNavigationBarColor();
+            statusBarSaved = true;
+            w.setStatusBarColor(getColor(R.color.ink900));
+            w.setNavigationBarColor(getColor(R.color.ink900));
+            setLightStatusBarIcons(true);
+        } else if (statusBarSaved) {
+            statusBarSaved = false;
+            w.setStatusBarColor(savedStatusBarColor);
+            w.setNavigationBarColor(savedNavBarColor);
+            setLightStatusBarIcons(false);
+        }
+    }
+
     /** 从 from 起找第一条可播且带地址的集；后端 v1.11+ 的 playable=false 直接跳过（A-29） */
     private static int nextPlayable(List<Models.Episode> eps, int from) {
         for (int i = Math.max(0, from); i < eps.size(); i++) {
@@ -2023,12 +2045,12 @@ public class DetailFragment extends Fragment
     private void applyBandTint(float t) {
         t = Math.max(0f, Math.min(1f, t));
         bandTint = t;
-        int pageColor = PrefStore.get().themeEngineOn()
-                ? com.lateshow.app.theme.ThemeEngine.get()
-                        .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()))
-                        .bgStart
-                : getColor(R.color.ink900);
-        if (infoBg != null) infoBg.setColor(colorLerpTo(t, R.color.heroBand, pageColor));
+        // 播放态信息带底色：与简介区（ink900，contentCol 同源）相比略深一档，
+        // 形成信息区 / 内容区的功能划分层次。向黑混 5%：浅色 #F2F3F6 → #E6E7EA，
+        // 夜间 ink900 本身是深灰，同样微深一档，明暗主题都成立。
+        int bandOnPage = com.lateshow.app.theme.ThemeEngine.mix(
+                getColor(R.color.ink900), 0xFF000000, 0.05f);
+        if (infoBg != null) infoBg.setColor(colorLerpTo(t, R.color.heroBand, bandOnPage));
         if (tvTitle != null) tvTitle.setTextColor(colorLerp(t, R.color.heroT1, R.color.t1));
         if (tvMeta != null) tvMeta.setTextColor(colorLerp(t, R.color.heroT3, R.color.t3));
         if (tvActor != null) tvActor.setTextColor(colorLerp(t, R.color.heroT2, R.color.t2));
@@ -2231,6 +2253,8 @@ public class DetailFragment extends Fragment
     private void leaveInline() {
         if (!inlineActive) return;
         inlineActive = false;
+        // 退出播放态：状态栏恢复进入前的颜色与白色图标
+        applyPlayingStatusBar(false);
         com.lateshow.app.util.PlayerPanel.dismissPanel();  // 聚合面板是悬浮窗，退播放态前先收
         if (playerContainer != null && playerView != null) {
             // 常驻布局：只隐藏、不 GONE（见 onViewCreated 注释）
@@ -2260,6 +2284,8 @@ public class DetailFragment extends Fragment
     private void startInline(String url, long startMs) {
         curUrl = url;
         inlineActive = true;
+        // 播放态：状态栏刷成与简介区同源的浅底 + 深色图标（退出时还原）
+        applyPlayingStatusBar(true);
         triedHtmlResolve = false;
         headerRetry = false;
         // 播放器盖在海报之上（海报不隐藏在下面）：收起时播放器淡出，露出的仍是那面海报
@@ -3027,14 +3053,8 @@ public class DetailFragment extends Fragment
     public void onThemeChanged() {
         if (!isAdded() || getContext() == null) return;
         boolean on = PrefStore.get().themeEngineOn();
-        // 页面底色 + 收藏色随新方案刷新
-        if (pageBg != null) {
-            pageBg.setColor(on
-                    ? com.lateshow.app.theme.ThemeEngine.get()
-                            .resolve(com.lateshow.app.util.ThemeManager.actualNight(requireContext()))
-                            .bgStart
-                    : getColor(R.color.ink900));
-        }
+        // 页面底色固定与内容区同源（ink900），不随方案变化（见 onViewCreated 的 pageBg 注释）；
+        // 收藏色随新方案刷新
         // 品牌 loading 的三角跟随方案主色
         if (brandLoading != null) {
             brandLoading.setAccentColor(on

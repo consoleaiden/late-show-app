@@ -16,9 +16,6 @@ import androidx.appcompat.widget.AppCompatImageView;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DecodeFormat;
-import com.bumptech.glide.request.RequestOptions;
 import com.lateshow.app.R;
 import com.lateshow.app.model.CardItem;
 import com.lateshow.app.util.TimeUtil;
@@ -140,17 +137,11 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VH> {
             h.tvRemark.setVisibility(View.GONE);
         }
 
-        // 封面加载：RGB_565 解码省一半内存、无淡入动画。
+        // 封面加载（CoverProxy：直连 500ms 未出图自动转「资源站直连」代理加速）。
+        // RGB_565 解码省一半内存、无淡入动画。
         // 圆角不再烘焙进位图（transform 会覆盖 centerCrop / 565 无 alpha 通道烘不出透明角），
         // 改为 coverBox 按 bg_cover_round 的圆角轮廓做 outline 裁剪：任何加载状态四角都是 8dp
-        Glide.with(h.cover).load(it.pic)
-                .apply(new RequestOptions()
-                        .placeholder(R.color.ink700)
-                        .error(R.color.ink700)
-                        .centerCrop()
-                        .format(DecodeFormat.PREFER_RGB_565)
-                        .dontAnimate())
-                .into(h.cover);
+        com.lateshow.app.util.CoverProxy.load(h.cover, it.pic, R.color.ink700, R.color.ink700);
 
         h.itemView.setOnClickListener(v -> {
             if (listener != null) listener.onCard(it, h.coverBox);

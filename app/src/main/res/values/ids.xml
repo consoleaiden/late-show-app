@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 代码用 setTag(id, ...) 需要的唯一 id 资源 -->
+<resources>
+    <item name="tag_cover_url" type="id" />
+    <item name="tag_cover_task" type="id" />
+</resources>

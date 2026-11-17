@@ -661,7 +661,8 @@ public final class StaticCatalog implements Catalog {
         }
     }
 
-    static String proxyUrlOf(String proxyBase, String raw) {
+    /** 把任意地址编码进代理访问 API（资源站直连的代理规则，封面代理加速共用此实现） */
+    public static String proxyUrlOf(String proxyBase, String raw) {
         try {
             return proxyBase + java.net.URLEncoder.encode(raw, "UTF-8");
         } catch (Exception e) {
