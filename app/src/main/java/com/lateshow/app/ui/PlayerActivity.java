@@ -45,6 +45,8 @@ public class PlayerActivity extends AppCompatActivity {
     private PreviewFrameLoader previewLoader;
     /** 拖拽进度条前的控制栏自动隐藏时长，拖拽期间临时禁用自动隐藏 */
     private int savedShowTimeoutMs = -1;
+    /** 收起帧预览框的任务（出图后延迟 / 拖动停止后兜底）；走 tb.hidePreview() */
+    private Runnable hidePreviewTask;
     /** 是否正在拖动进度条：拖动期间不做「跟随预热」，避免打断在途抓帧 */
     private boolean userScrubbing = false;
     /** 与主播放器同一条链路（含广告过滤），抓帧实例复用，保证时间轴一致 */
@@ -134,11 +136,13 @@ public class PlayerActivity extends AppCompatActivity {
                 com.lateshow.app.util.PlayHeaders.props(url, false));
         this.httpFactory = httpFactory;
 
-        // 播放器构建：DataSource 经 AdFilterDataSource 包装，m3u8 响应体在交还播放器前
-        // 原位重写（剔除广告 run，内置规则本地执行）；分片请求不受影响，仍直连 CDN
+        // 播放器构建：DataSource 经 AdFilterDataSource 包装（m3u8 响应体原位重写剔除
+        // 广告），再套主/副播放器共享的磁盘缓存——主播放器播过的分片落盘，副播放器
+        // 抓「已看区间」预览帧命中本地，出帧从源站的 7~28 秒降到 1 秒内且零额外流量
         player = new ExoPlayer.Builder(this)
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(
-                        new com.lateshow.app.util.AdFilterDataSource.Factory(httpFactory)))
+                        com.lateshow.app.player.MediaCache.cacheFactory(this,
+                                new com.lateshow.app.util.AdFilterDataSource.Factory(httpFactory))))
                 .build();
         pv.setPlayer(player);
         // 控制栏/半透明遮罩超时自动隐藏（media3 默认 5 秒）。原来 2 秒太短，
@@ -329,14 +333,26 @@ public class PlayerActivity extends AppCompatActivity {
         // 抓帧实例走与主播放器同一条 DataSource 链路（含广告过滤），否则
         // 主进度是「过滤后时间轴」而抓帧按原始时间轴 seek，预览画面会整体偏移
         probe = new ThumbnailProbe(this,
-                new com.lateshow.app.util.AdFilterDataSource.Factory(httpFactory),
+                com.lateshow.app.player.MediaCache.cacheFactory(this,
+                        new com.lateshow.app.util.AdFilterDataSource.Factory(httpFactory)),
                 tvProbe, 2000L, 12, 320);
         previewLoader = new PreviewFrameLoader(probe, ivPreview, 2000L);
         tb.setPreviewLoader(previewLoader);
+        // 预览框收起时机（previewAutoHide 已关）：出图后 1.6s 收起，10s 没出图兜底收起。
+        // 必须走 tb.hidePreview()（delegate 状态机），直接 setVisibility 会让 delegate
+        // 的 showingPreview 状态失真，下次拖动时 show() 早退、预览框再也出不来。
+        final PreviewTimeBar tbFinal = tb;
+        hidePreviewTask = () -> tbFinal.hidePreview();
+        previewLoader.onFrameShown = () -> {
+            pv.removeCallbacks(hidePreviewTask);
+            pv.postDelayed(hidePreviewTask, 1600L);
+        };
         // 拖拽期间别让控制栏自动隐藏，否则预览框会跟着消失
         tb.addOnScrubListener(new PreviewBar.OnScrubListener() {
             @Override public void onScrubStart(PreviewBar b) {
                 userScrubbing = true;
+                // 拖动开始：取消还没触发的收起任务，预览框跟随 delegate 显示
+                if (hidePreviewTask != null) pv.removeCallbacks(hidePreviewTask);
                 savedShowTimeoutMs = pv.getControllerShowTimeoutMs();
                 pv.setControllerShowTimeoutMs(Integer.MAX_VALUE);
                 pv.showController();
@@ -353,6 +369,11 @@ public class PlayerActivity extends AppCompatActivity {
                 if (probe != null) probe.pauseSoon();
                 // 补抓松手时的最终位置（拖动中可能被最小间隔/同桶保护跳过）
                 if (previewLoader != null) previewLoader.flush(b.getProgress());
+                // 预览框保持显示等出图；10s 仍没出图就兜底收起（出图回调会提前收起）
+                if (hidePreviewTask != null) {
+                    pv.removeCallbacks(hidePreviewTask);
+                    pv.postDelayed(hidePreviewTask, 10000L);
+                }
             }
         });
         if (streamUrl != null) probe.setMedia(streamUrl);

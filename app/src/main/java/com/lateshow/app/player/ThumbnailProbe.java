@@ -46,6 +46,12 @@ public final class ThumbnailProbe {
     private static final long IDLE_PAUSE_MS = 12000L;
     /** 轮询间隔 */
     private static final long POLL_MS = 40L;
+    /**
+     * 拖动中两次真正 seek 的最小间隔。旧实现每次 get() 都立即 seek：120ms 节流下
+     * 拖动 2 秒能打出十几次 seek，解码器被反复打断永远渲染不出一帧（真机实测
+     * 连续拖动 6 秒 0 次出图）。转向最新目标前先等这么久。
+     */
+    private static final long MIN_SEEK_INTERVAL_MS = 800L;
 
     private final ExoPlayer player;
     private final TextureView textureView;
@@ -55,15 +61,34 @@ public final class ThumbnailProbe {
     private final int maxWidth;
 
     private String url;
-    /** 递增序号：换源 / 取消时让在途轮询立即失效 */
-    private int seq = 0;
     private boolean released = false;
     /**
-     * 是否已渲染出帧。这是比 STATE_READY 更早、更可靠的抓帧信号：
-     * 真机上出现「已 renderedFirstFrame 但 state 仍是 BUFFERING」的情况，
-     * 只等 READY 会白白超时（2026-11-17 实测差 43ms 就放弃）。
+     * 是否已渲染出帧。这是**唯一**的抓帧信号：
+     * - 比 STATE_READY 更早、更可靠：真机出现过「已 renderedFirstFrame 但 state 仍是 BUFFERING」，
+     *   只等 READY 会白白超时（2026-11-17 实测差 43ms 就放弃）。
+     * - 也比 READY 更准确：READY 态下 seek 时 state 仍是 READY，把它当信号会抓到
+     *   seek 之前的旧帧（表现为预览画面静止不动 + 缓存污染，2026-11-17 真机确认）。
+     * onRenderedFirstFrame 在每次 seek 后新位置首帧渲染时重新触发。
      */
     private volatile boolean frameRendered = false;
+
+    // ===== 抓帧状态机：目标可中途更新，新请求不再粗暴取消在途抓帧 =====
+    // 旧实现每次 get() 都 seq++ 取消上一个 poll：源站 seek 出帧要 7~28 秒，远超
+    // 拖动时长，于是拖动中没有任何一次抓帧能活到出帧——预览画面永远静止在
+    // 上一次成功的帧（真机确认）。改为「目标更新」模式：拖动中只更新目标，
+    // 状态机周期性把 seek 转向最新目标（限流），出帧后回调最新目标。
+    /** 最新抓帧目标（ms） */
+    private long pendingTarget = -1L;
+    /** 最新目标所在时间桶 */
+    private long pendingBucket = -1L;
+    /** 最新目标的回调 */
+    private Callback pendingCb = null;
+    /** 状态机是否在跑 */
+    private boolean grabActive = false;
+    /** 当前 seek 指向的位置（用于判断目标是否已漂移） */
+    private long seekingTarget = -1L;
+    /** 本次 seek 的发起时刻 */
+    private long seekAt = 0L;
 
     public ThumbnailProbe(Context ctx,
                           androidx.media3.datasource.DataSource.Factory dataSourceFactory,
@@ -115,7 +140,9 @@ public final class ThumbnailProbe {
 
             @Override public void onPlaybackStateChanged(int state) {
                 // 状态变化低频，留给排查（正式包也不刷屏）
-                PlayHeaders.diag("probe state=" + state + " pos=" + player.getCurrentPosition());
+                PlayHeaders.diag("probe state=" + state + " pos=" + player.getCurrentPosition()
+                        + " vfmt=" + player.getVideoFormat()
+                        + " vsize=" + player.getVideoSize());
             }
 
             @Override public void onRenderedFirstFrame() {
@@ -129,7 +156,11 @@ public final class ThumbnailProbe {
         if (url == null || url.equals(this.url)) return;
         this.url = url;
         cache.evictAll();
-        seq++;
+        // 复位抓帧状态机（换源后旧目标与在途任务全部失效）
+        main.removeCallbacksAndMessages(null);
+        grabActive = false;
+        pendingCb = null;
+        seekingTarget = -1L;
         player.setMediaItem(MediaItem.fromUri(url));
         player.prepare();
         // 预热：先 seek 到开头，让解码器与分片缓存进入就绪态，后续拖动的首次抓帧才够快
@@ -138,20 +169,137 @@ public final class ThumbnailProbe {
     }
 
     public void get(long positionMs, Callback cb) {
+        if (released) return;
         long bucket = Math.max(0, positionMs) / bucketMs;
         Bitmap hit = cache.get(bucket);
         if (hit != null) {
             cb.onBitmap(hit);
+            // 关键：命中缓存说明用户目标已经到此处，必须作废在途抓帧。
+            // 否则之前发起、尚未出帧的慢速抓帧完成后，其迟到回调会把预览
+            // 画面拉回旧位置——反复拖动时画面在已抓过的桶之间来回跳
+            // （真机确认：@1136s→@1135s→@1141s→@1137s→@1134s 倒跳）。
+            cancelPending();
             return;
         }
-        final int mySeq = ++seq;
-        final long startAt = SystemClock.uptimeMillis();
-        frameRendered = false;
-        // 静音播放：暂停态下 seek 后 ExoPlayer 卡在 BUFFERING，渲染不出帧
+        // 只更新目标：状态机在跑就不打断（等待完成后自动转向新目标）
+        pendingTarget = Math.max(0, positionMs);
+        pendingBucket = bucket;
+        pendingCb = cb;
+        if (!grabActive) startGrab();
+    }
+
+    /** 作废在途抓帧（目标已被缓存命中 / 页面退出） */
+    private void cancelPending() {
+        main.removeCallbacks(tickTask);
+        grabActive = false;
+        pendingCb = null;
+        seekingTarget = -1L;
+        pauseSoon();
+    }
+
+    private final Runnable tickTask = new Runnable() {
+        @Override public void run() { tick(); }
+    };
+
+    private void startGrab() {
+        main.removeCallbacks(tickTask);
+        grabActive = true;
+        seekingTarget = -1L;
+        seekAt = 0L;
         cancelPauseSoon();
+        // 静音播放：暂停态下 seek 后 ExoPlayer 卡在 BUFFERING，渲染不出帧
         player.setPlayWhenReady(true);
-        player.seekTo(Math.max(0, positionMs));
-        poll(mySeq, startAt, bucket, cb);
+        tick();
+    }
+
+    private void tick() {
+        if (released || !grabActive) return;
+        main.removeCallbacks(tickTask);
+        long now = SystemClock.uptimeMillis();
+        // 目标漂移且距上次 seek 足够久 → 转向最新目标（限流防解码器风暴）
+        if (pendingTarget != seekingTarget
+                && now - seekAt >= MIN_SEEK_INTERVAL_MS) {
+            frameRendered = false;
+            seekingTarget = pendingTarget;
+            seekAt = now;
+            player.seekTo(seekingTarget);
+        }
+        // 出帧判定：只认 onRenderedFirstFrame。不能把 STATE_READY 也算进去：
+        // 副播放器因 followTo 预热常驻 READY，READY 态下 seek 时 state 不会变回
+        // BUFFERING，若把 READY 当信号会抓到 seek 之前的旧帧——预览画面永远
+        // 静止且旧帧污染 LRU 缓存。onRenderedFirstFrame 在每次 seek 后新位置
+        // 首帧渲染时重新触发。
+        if (frameRendered
+                && textureView.isAvailable()
+                && textureView.getWidth() > 0
+                && textureView.getHeight() > 0) {
+            // 目标已漂移：刚渲染的是 seekingTarget 位置的画面，而 pendingTarget
+            // 已被下一次拖动更新。绝不能拿旧帧冒充新目标（会以新 bucket 写进
+            // LRU 缓存、回调给新目标的请求——预览错位且缓存被污染）。
+            // 丢弃本帧；此时解码器刚空闲，立即转向最新目标（不受 MIN_SEEK_INTERVAL 限制）。
+            if (pendingTarget != seekingTarget) {
+                seekingTarget = pendingTarget;
+                seekAt = SystemClock.uptimeMillis();
+                frameRendered = false;
+                player.seekTo(seekingTarget);
+                main.postDelayed(tickTask, POLL_MS);
+                return;
+            }
+            try {
+                Bitmap raw = textureView.getBitmap();
+                if (raw != null && raw.getWidth() > 0) {
+                    // 诊断：getBitmap 可能返回「非 null 但全黑/全透明」的位图，
+                    // 与「返回 null」是两种完全不同的故障，必须分开看。
+                    int cx = raw.getWidth() / 2;
+                    int cy = raw.getHeight() / 2;
+                    PlayHeaders.diag("probe bitmap bucket=" + pendingBucket
+                            + " target=" + seekingTarget
+                            + " seekAge=" + (now - seekAt) + "ms"
+                            + " wh=" + raw.getWidth() + "x" + raw.getHeight()
+                            + " center=" + Integer.toHexString(raw.getPixel(cx, cy))
+                            + " corner=" + Integer.toHexString(raw.getPixel(2, 2)));
+                    Bitmap out = raw;
+                    if (raw.getWidth() > maxWidth) {
+                        out = Bitmap.createScaledBitmap(raw, maxWidth,
+                                raw.getHeight() * maxWidth / raw.getWidth(), true);
+                    }
+                    cache.put(pendingBucket, out);
+                    if (pendingCb != null) pendingCb.onBitmap(out);
+                    finishGrab();
+                    return;
+                }
+                PlayHeaders.diag("probe bitmap NULL bucket=" + pendingBucket
+                        + " state=" + player.getPlaybackState()
+                        + " avail=" + textureView.isAvailable()
+                        + " wh=" + textureView.getWidth() + "x" + textureView.getHeight());
+            } catch (Throwable t) {
+                // 个别 ROM 上硬解输出可能取不到帧：放弃本次，不影响播放
+                PlayHeaders.diag("probe getBitmap fail: " + t);
+            }
+        }
+        // 超时：本次 seek 后一直没出帧。目标已漂移就转向新目标再试一轮，
+        // 否则收工（保持上一帧，预览框静默等待下一次拖动）。
+        if (now - seekAt > TIMEOUT_MS) {
+            PlayHeaders.diag("probe timeout target=" + seekingTarget
+                    + " latest=" + pendingTarget
+                    + " state=" + player.getPlaybackState()
+                    + " avail=" + textureView.isAvailable());
+            if (pendingTarget != seekingTarget) {
+                tick();
+            } else {
+                finishGrab();
+            }
+            return;
+        }
+        main.postDelayed(tickTask, POLL_MS);
+    }
+
+    private void finishGrab() {
+        grabActive = false;
+        seekingTarget = -1L;
+        pendingCb = null;
+        // 不立刻停：保持解码器就绪，接下来的拖动能秒出帧
+        pauseSoon();
     }
 
     /**
@@ -173,61 +321,15 @@ public final class ThumbnailProbe {
         }
     };
 
-    private void poll(final int mySeq, final long startAt, final long bucket, final Callback cb) {
-        if (released || mySeq != seq) return;
-        main.postDelayed(() -> {
-            if (released || mySeq != seq) return;
-            long now = SystemClock.uptimeMillis();
-            if (now - startAt > TIMEOUT_MS) {
-                PlayHeaders.diag("probe timeout bucket=" + bucket
-                        + " state=" + player.getPlaybackState()
-                        + " avail=" + textureView.isAvailable()
-                        + " wh=" + textureView.getWidth() + "x" + textureView.getHeight()
-                        + " pos=" + player.getCurrentPosition());
-                pauseSoon();
-                return;
-            }
-            if ((frameRendered || player.getPlaybackState() == Player.STATE_READY)
-                    && textureView.isAvailable()
-                    && textureView.getWidth() > 0
-                    && textureView.getHeight() > 0) {
-                try {
-                    Bitmap raw = textureView.getBitmap();
-                    if (raw != null && raw.getWidth() > 0) {
-                        Bitmap out = raw;
-                        if (raw.getWidth() > maxWidth) {
-                            out = Bitmap.createScaledBitmap(raw, maxWidth,
-                                    raw.getHeight() * maxWidth / raw.getWidth(), true);
-                        }
-                        cache.put(bucket, out);
-                        cb.onBitmap(out);
-                        // 不立刻停：保持解码器就绪，接下来的拖动能秒出帧
-                        pauseSoon();
-                        return;
-                    }
-                    PlayHeaders.diag("probe bitmap empty bucket=" + bucket);
-                } catch (Throwable t) {
-                    // 个别 ROM 上硬解输出可能取不到帧：放弃本次，不影响播放
-                    PlayHeaders.diag("probe getBitmap fail: " + t);
-                    return;
-                }
-            }
-            poll(mySeq, startAt, bucket, cb);
-        }, POLL_MS);
-    }
-
     /**
      * 空闲时让副播放器跟随主播放器位置，保持解码器与缓冲「热」。
      * 用户拖到主播放器已缓冲附近时，seek 命中缓冲区能立刻出帧；
      * 若每次都从冷启动 seek，实测要等 8~15 秒才出画（2026-11-17）。
      */
     public void followTo(long positionMs) {
-        if (released) return;
+        if (released || grabActive) return;   // 抓帧进行中不打扰
         long cur = player.getCurrentPosition();
         if (Math.abs(positionMs - cur) < 3000L) return;   // 已足够接近，不打扰
-        // 让在途轮询失效：接下来要以「跟随」为目的，而不是抓某一帧
-        seq++;
-        main.removeCallbacksAndMessages(null);
         cancelPauseSoon();
         player.setPlayWhenReady(true);
         player.seekTo(Math.max(0, positionMs));
@@ -236,9 +338,10 @@ public final class ThumbnailProbe {
 
     /** 取消在途抓帧（onPause / 换源时调用），避免后台继续拉流解码 */
     public void cancel() {
-        seq++;
-        cancelPauseSoon();
-        main.removeCallbacksAndMessages(null);
+        main.removeCallbacksAndMessages(null);   // 清 tick + pause 任务
+        grabActive = false;
+        pendingCb = null;
+        seekingTarget = -1L;
         player.setPlayWhenReady(false);
     }
 

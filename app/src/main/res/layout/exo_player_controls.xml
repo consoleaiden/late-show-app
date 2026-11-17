@@ -129,7 +129,10 @@
         android:visibility="gone" />
   </FrameLayout>
 
-  <!-- 库只负责「预览框显隐 + 跟随 thumb 定位」，画面由 setPreviewLoader 自己抓 -->
+  <!-- 库只负责「预览框显隐 + 跟随 thumb 定位」，画面由 setPreviewLoader 自己抓。
+       previewAutoHide=false：松手后预览框不立即消失——出帧要 7~28 秒（源站实测），
+       立即隐藏会让用户永远看不到松手后补抓的正确画面。收起时机由 PlayerActivity
+       通过 tb.hidePreview() 控制（出图后 1.6s / 兜底 10s）。 -->
   <com.github.rubensousa.previewseekbar.media3.PreviewTimeBar
       android:id="@id/exo_progress"
       android:layout_width="match_parent"
@@ -137,7 +140,7 @@
       android:layout_gravity="bottom"
       android:layout_marginBottom="@dimen/exo_styled_progress_margin_bottom"
       app:previewAnimationEnabled="true"
-      app:previewAutoHide="true"
+      app:previewAutoHide="false"
       app:previewEnabled="true"
       app:previewFrameLayout="@id/previewFrameLayout" />
 

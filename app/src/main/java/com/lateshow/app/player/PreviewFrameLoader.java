@@ -29,6 +29,9 @@ public final class PreviewFrameLoader implements PreviewLoader {
     private long lastBucket = Long.MIN_VALUE;
     private long lastBucketAt = 0L;
 
+    /** 出图并显示到 ImageView 后的回调（主线程）；用于延迟收起预览框，可 null */
+    public Runnable onFrameShown;
+
     public PreviewFrameLoader(ThumbnailProbe probe, ImageView imageView, long bucketMs) {
         this.probe = probe;
         this.imageView = imageView;
@@ -56,6 +59,7 @@ public final class PreviewFrameLoader implements PreviewLoader {
                         + " wh=" + bmp.getWidth() + "x" + bmp.getHeight());
                 imageView.setImageBitmap(bmp);
                 imageView.setVisibility(View.VISIBLE);
+                if (onFrameShown != null) onFrameShown.run();
             }
         });
     }
