@@ -45,6 +45,12 @@ public class PlayerActivity extends AppCompatActivity {
     private PreviewFrameLoader previewLoader;
     /** 拖拽进度条前的控制栏自动隐藏时长，拖拽期间临时禁用自动隐藏 */
     private int savedShowTimeoutMs = -1;
+    /** 预览框容器（previewFrameLayout，与 PreviewTimeBar 同父）；松手后手动钉住等帧用 */
+    private View previewBox;
+    /** 收起预览框的任务：帧到达后 1.6s / 兜底 5s；手动 setVisibility，不走 delegate */
+    private Runnable hidePreviewTask;
+    /** 松手后钉住预览框的任务：等 delegate 的淡出动画结束后再手动 VISIBLE */
+    private Runnable showPreviewBoxTask;
     /** 是否正在拖动进度条：拖动期间不做「跟随预热」，避免打断在途抓帧 */
     private boolean userScrubbing = false;
     /** 与主播放器同一条链路（含广告过滤），抓帧实例复用，保证时间轴一致 */
@@ -323,13 +329,15 @@ public class PlayerActivity extends AppCompatActivity {
         if (probe != null || !PrefStore.get().framePreview()) return;
         PreviewTimeBar tb = pv.findViewById(androidx.media3.ui.R.id.exo_progress);
         ImageView ivPreview = pv.findViewById(R.id.ivPreview);
+        View box = pv.findViewById(R.id.previewFrameLayout);
         // tvProbe 在 activity 根布局（与 PlayerView 同级），不在 PlayerView 子树里
         TextureView tvProbe = findViewById(R.id.tvProbe);
-        if (tb == null || ivPreview == null || tvProbe == null) {
+        if (tb == null || ivPreview == null || tvProbe == null || box == null) {
             if (attempt < 10) pv.postDelayed(() -> tryAttachPreview(attempt + 1), 150);
             else com.lateshow.app.util.PlayHeaders.diag("frame preview attach FAILED: controls not inflated in 1.5s");
             return;
         }
+        previewBox = box;
         // 抓帧实例走与主播放器同一条 DataSource 链路（含广告过滤），否则
         // 主进度是「过滤后时间轴」而抓帧按原始时间轴 seek，预览画面会整体偏移
         probe = new ThumbnailProbe(this,
@@ -338,10 +346,41 @@ public class PlayerActivity extends AppCompatActivity {
                 tvProbe, 2000L, 12, 320);
         previewLoader = new PreviewFrameLoader(probe, ivPreview, 2000L);
         tb.setPreviewLoader(previewLoader);
+        // 松手后的「钉住等帧」：previewAutoHide=true 让库在松手瞬间收起预览框
+        // （delegate 状态=隐藏），而抓帧有固有延迟（命中磁盘缓存也要约 1 秒，内存位图
+        // 缓存启动时是空的）——帧到达时框已经没了，用户永远看到黑框。
+        // 解法：松手后**手动**把框 setVisibility(VISIBLE) 钉回松手位置。关键在于
+        // 不经过 delegate.show()：showingPreview 保持 false，库的 updateProgress 就
+        // 既不会挪框（setX 飘移）也不会用主播放器位置喂 loadPreview（画面乱跳）
+        // ——这正是之前「反复拖动后预览框飘移」的根因链路。delegate 无感知，
+        // 下次拖动时它的 show() 正常接管。收起也手动 setVisibility(INVISIBLE)，
+        // 不能在框手动可见时调 tb.hidePreview() 之外再乱动 delegate 状态。
+        hidePreviewTask = () -> {
+            com.lateshow.app.util.PlayHeaders.diag("preview box hide");
+            if (previewBox != null) previewBox.setVisibility(View.INVISIBLE);
+        };
+        showPreviewBoxTask = () -> {
+            // delegate 淡出动画已结束；再次开始拖动时不抢 delegate 的显示逻辑
+            if (previewBox != null && !userScrubbing
+                    && previewBox.getVisibility() != View.VISIBLE) {
+                com.lateshow.app.util.PlayHeaders.diag("preview box pinned");
+                previewBox.setVisibility(View.VISIBLE);
+            }
+        };
+        previewLoader.onFrameShown = () -> {
+            if (userScrubbing) return;   // 拖动中绝不收起（框由 delegate 管理）
+            pv.removeCallbacks(hidePreviewTask);
+            // 1.9s = 显示 1.6s + 300ms 钉框延迟补偿（帧同步到达时，框还要
+            // 等 delegate 淡出结束才显示，不补偿的话实际只显示 1.3s）
+            pv.postDelayed(hidePreviewTask, 1900L);
+        };
         // 拖拽期间别让控制栏自动隐藏，否则预览框会跟着消失
         tb.addOnScrubListener(new PreviewBar.OnScrubListener() {
             @Override public void onScrubStart(PreviewBar b) {
                 userScrubbing = true;
+                // 拖动开始：取消还没触发的收起/钉住任务，预览框跟随 delegate 显示
+                if (hidePreviewTask != null) pv.removeCallbacks(hidePreviewTask);
+                if (showPreviewBoxTask != null) pv.removeCallbacks(showPreviewBoxTask);
                 if (previewLoader != null) previewLoader.setScrubbing(true);
                 savedShowTimeoutMs = pv.getControllerShowTimeoutMs();
                 pv.setControllerShowTimeoutMs(Integer.MAX_VALUE);
@@ -357,8 +396,21 @@ public class PlayerActivity extends AppCompatActivity {
                 // 不立刻停副播放器：保持 READY/缓冲，紧接着的拖动能秒出帧；
                 // 由 ThumbnailProbe.pauseSoon() 在空闲 12s 后真正暂停。
                 if (probe != null) probe.pauseSoon();
+                // 库 autoHide 刚把预览框收起：手动钉回松手位置等 flush 补抓帧
+                // （5s 兜底收起；帧到达时 onFrameShown 把收起提前到 1.6s）。
+                // 注意 delegate.hide() 是**淡出动画**，动画结束时会把框设回
+                // INVISIBLE——立即 setVisibility(VISIBLE) 会被它覆盖（真机实测框
+                // 闪一下就没了），所以延迟到淡出结束后（300ms）再钉住显示。
+                // 顺序必须先钉框再 flush：缓存命中时 onFrameShown 同步触发，
+                // 会把收起定时覆盖成 1.6s。
+                if (previewBox != null) {
+                    pv.removeCallbacks(showPreviewBoxTask);
+                    pv.postDelayed(showPreviewBoxTask, 300L);
+                    pv.removeCallbacks(hidePreviewTask);
+                    pv.postDelayed(hidePreviewTask, 5000L);
+                }
                 // 补抓松手时的最终位置（拖动中可能被最小间隔/同桶保护跳过）：
-                // 预览框已被库 autoHide 收起，本帧进缓存——下次拖到同位置立即显示
+                // 帧到达后显示 1.6s 并入缓存——下次拖到同位置立即显示
                 if (previewLoader != null) previewLoader.flush(b.getProgress());
                 if (previewLoader != null) previewLoader.setScrubbing(false);
             }
@@ -375,6 +427,10 @@ public class PlayerActivity extends AppCompatActivity {
             probe.release();
             probe = null;
             previewLoader = null;
+            // 可能在松手等帧期间被关掉：把钉住的预览框和收起/钉住任务一并清掉
+            if (hidePreviewTask != null) pv.removeCallbacks(hidePreviewTask);
+            if (showPreviewBoxTask != null) pv.removeCallbacks(showPreviewBoxTask);
+            if (previewBox != null) previewBox.setVisibility(View.INVISIBLE);
         }
     }
 
@@ -578,10 +634,13 @@ public class PlayerActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         tickHandler.removeCallbacksAndMessages(null);
+        if (hidePreviewTask != null && pv != null) pv.removeCallbacks(hidePreviewTask);
+        if (showPreviewBoxTask != null && pv != null) pv.removeCallbacks(showPreviewBoxTask);
         if (probe != null) {
             probe.release();
             probe = null;
             previewLoader = null;
+            previewBox = null;
         }
         if (player != null) {
             player.release();

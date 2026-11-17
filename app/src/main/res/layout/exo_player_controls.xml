@@ -131,10 +131,11 @@
 
   <!-- 库只负责「预览框显隐 + 跟随 thumb 定位」，画面由 setPreviewLoader 自己抓。
        previewAutoHide 必须为 true（库的标准行为）：PreviewTimeBar.setPosition 每次
-       进度更新都会走 delegate.updateProgress，只要预览框还显示着（showingPreview），
-       就会持续 loadPreview(主播放器实时位置) 并 setX 移动预览框——松手后预览框
-       若保持显示，画面会不停被主播放器的位置刷新，跟 thumb 脱钩（预览飘逸）。
-       松手即收起；flush 抓帧照常入缓存，下次拖到同位置立即显示。 -->
+       进度更新都会走 delegate.updateProgress，只要 delegate 认为预览框显示着
+       （showingPreview），就会持续 loadPreview(主播放器实时位置) 并 setX 移动预览框
+       ——预览飘移的根因。松手后由 PlayerActivity 手动把本框 setVisibility(VISIBLE)
+       钉住等补抓帧（不经过 delegate.show()，showingPreview 保持 false，updateProgress
+       全程不动它），帧到达 1.6s / 兜底 5s 后手动 INVISIBLE 收起。 -->
   <com.github.rubensousa.previewseekbar.media3.PreviewTimeBar
       android:id="@id/exo_progress"
       android:layout_width="match_parent"

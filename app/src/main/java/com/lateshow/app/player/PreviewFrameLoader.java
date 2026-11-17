@@ -29,6 +29,11 @@ public final class PreviewFrameLoader implements PreviewLoader {
     private long lastBucket = Long.MIN_VALUE;
     private long lastBucketAt = 0L;
     /**
+     * 出图并显示到 ImageView 后的回调（主线程）；用于松手后把收起定时提前到 1.6s，可 null。
+     * 松手时宿主把预览框手动钉回显示等这帧（见 PlayerActivity），帧一到就该收起了。
+     */
+    public Runnable onFrameShown;
+    /**
      * 是否处于用户拖动中。库的 PreviewTimeBar.setPosition 每次进度更新都会走
      * delegate.updateProgress——只要预览框还显示着，就会以「主播放器实时位置」
      * 调 loadPreview 并把预览框 setX 移过去。抓帧目标绝不能被主播放器位置
@@ -69,6 +74,7 @@ public final class PreviewFrameLoader implements PreviewLoader {
                         + " wh=" + bmp.getWidth() + "x" + bmp.getHeight());
                 imageView.setImageBitmap(bmp);
                 imageView.setVisibility(View.VISIBLE);
+                if (onFrameShown != null) onFrameShown.run();
             }
         });
     }
