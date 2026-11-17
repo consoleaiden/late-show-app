@@ -121,7 +121,7 @@
                         android:layout_marginTop="10dp" android:orientation="vertical" />
                     <TextView android:id="@+id/tvRuntime" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="6dp" android:textSize="10.5sp" android:textColor="@color/t3"
-                        android:lineSpacingMultiplier="1.6" android:visibility="gone" />
+                        android:lineSpacingMultiplier="1.5" android:visibility="gone" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -155,7 +155,7 @@
                     </LinearLayout>
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                         android:text="全量同步仅建议数据异常时使用，耗时较长且会重跑全部页码。"
-                        android:textSize="11sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.55" />
+                        android:textSize="11sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.5" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -178,7 +178,7 @@
                         android:text="优雅停止：当前批次完成后保存断点再停，不丢数据；暂停状态重启后仍保留。" />
                     <TextView android:id="@+id/pauseWarn" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="8dp" android:padding="10dp" android:background="@color/warnSoft"
-                        android:textSize="11sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.55" android:visibility="gone" />
+                        android:textSize="11sp" android:textColor="@color/warn" android:lineSpacingMultiplier="1.5" android:visibility="gone" />
                     <LinearLayout android:id="@+id/pauseRows" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:layout_marginTop="4dp" android:orientation="vertical" />
                 </LinearLayout>
@@ -337,7 +337,7 @@
                 <LinearLayout android:id="@+id/panelAuth" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:visibility="gone">
                     <TextView android:id="@+id/tvAuthState" android:layout_width="match_parent" android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp" android:textSize="11sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6"
+                        android:layout_marginTop="8dp" android:textSize="11sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.5"
                         android:text="读取中…" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                         android:orientation="horizontal" android:gravity="center_vertical">
@@ -497,7 +497,7 @@
                 <LinearLayout android:id="@+id/panelTagIdx" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:visibility="gone">
                     <TextView android:id="@+id/tvTagIdxState" android:layout_width="match_parent" android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp" android:textSize="11sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.6"
+                        android:layout_marginTop="8dp" android:textSize="11sp" android:textColor="@color/t2" android:lineSpacingMultiplier="1.5"
                         android:text="读取中…" />
                     <TextView android:id="@+id/tvTagCapability" style="@style/MetaLabel" android:layout_width="match_parent"
                         android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textAllCaps="false" android:text="" />

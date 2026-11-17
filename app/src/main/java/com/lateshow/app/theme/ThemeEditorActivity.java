@@ -127,7 +127,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
         hint.setText("保存后立即应用到当前模式");
         hint.setTextSize(10.5f);
         hint.setTextColor(color(R.color.t3));
-        hint.setLineSpacing(0f, 1.3f);
+        hint.setLineSpacing(0f, 1.5f);
         LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         hlp.rightMargin = Math.round(10 * dd);

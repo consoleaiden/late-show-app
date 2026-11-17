@@ -1016,8 +1016,8 @@ public class DetailFragment extends Fragment
                     }
                     if (com.lateshow.app.util.AuthGate.handleApiError(requireActivity(), m,
                             DetailFragment.this::loadDetail)) {
-                        showLoadError("需要 API Token，请在设置页填写后重试");
-                        toast("需要 API Token，请在设置页填写后重试");
+                        showLoadError("需 API Token，请在设置页填写");
+                        toast("需 API Token，请在设置页填写");
                         return;
                     }
                     String msg = "详情加载失败：" + m
@@ -1410,7 +1410,7 @@ public class DetailFragment extends Fragment
                 tv.setLayoutParams(lp);
                 Models.Episode e = eps.get(idx);
                 tv.setText(e != null && e.name != null && !e.name.isEmpty()
-                        ? e.name : "第" + (idx + 1) + "集");
+                        ? e.name : "第 " + (idx + 1) + " 集");
                 // A-29：不可播集置灰、不可点；连播与 playCurrent 也会自动跳过
                 final boolean playable = e == null || e.isPlayable();
                 boolean cur = idx == curEp;
@@ -1845,7 +1845,7 @@ public class DetailFragment extends Fragment
         List<Models.Episode> eps = currentEpisodes();
         if (eps.isEmpty()) return "";
         Models.Episode e = eps.get(Math.min(idx, eps.size() - 1));
-        return e.name != null ? e.name : "第" + (idx + 1) + "集";
+        return e.name != null ? e.name : "第 " + (idx + 1) + " 集";
     }
 
     private void updatePlayLabel() {
@@ -2753,7 +2753,7 @@ public class DetailFragment extends Fragment
                     triedHtmlResolve = false;   // 换了地址重新给一次机会
                     playUrl(url, startMs);
                 } else {
-                    toast("该线路只提供网页播放页，无法直接播放，请切换线路");
+                    toast("该线路仅网页播放，请切换线路");
                 }
             });
         }).start();
@@ -2848,7 +2848,7 @@ public class DetailFragment extends Fragment
         epPage = curEp / Math.max(1, epPageSize);
         renderEpisodes();
         if (lines.getAdapter() != null) lines.getAdapter().notifyDataSetChanged();
-        toast("自动播放第" + (next + 1) + "集");
+        toast("自动播放第 " + (next + 1) + " 集");
         playCurrent(0);
     }
 

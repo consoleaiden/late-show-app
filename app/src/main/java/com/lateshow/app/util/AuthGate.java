@@ -69,7 +69,7 @@ public final class AuthGate {
                 + "注意：面板里点过「重新生成」或重新开启访问控制后，旧 Token 会立即失效，需要重新复制。");
         tip.setTextSize(12f);
         tip.setTextColor(act.getColor(R.color.t2));
-        tip.setLineSpacing(dp(act, 2), 1.45f);
+        tip.setLineSpacing(dp(act, 2), 1.5f);
         box.addView(tip);
 
         final EditText input = new EditText(act);

@@ -82,7 +82,7 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         sub.setText("为亮色与暗色分别绑定一套配色；预设一键套用，也可创建你自己的方案");
         sub.setTextSize(11);
         sub.setTextColor(color(R.color.t2));
-        sub.setLineSpacing(0f, 1.45f);
+        sub.setLineSpacing(0f, 1.5f);
         sub.setPadding(0, Math.round(4 * d), 0, Math.round(12 * d));
         page.addView(sub);
 
@@ -151,7 +151,7 @@ public class ThemeGalleryActivity extends AppCompatActivity {
         tvPreviewTitle = new TextView(this);
         tvPreviewTitle.setTextSize(10.5f);
         tvPreviewTitle.setTextColor(color(R.color.t3));
-        tvPreviewTitle.setLineSpacing(0f, 1.4f);
+        tvPreviewTitle.setLineSpacing(0f, 1.5f);
         LinearLayout.LayoutParams mhlp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         mhlp.leftMargin = Math.round(8 * dd);

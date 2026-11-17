@@ -343,7 +343,7 @@
                             android:layout_height="wrap_content"
                             android:textSize="13sp"
                             android:textColor="@color/t2"
-                            android:lineSpacingMultiplier="1.78"
+                            android:lineSpacingMultiplier="1.5"
                             android:maxLines="3"
                             android:ellipsize="end" />
 

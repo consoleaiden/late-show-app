@@ -148,7 +148,7 @@
                     android:layout_marginTop="10dp"
                     android:textSize="10.5sp"
                     android:textColor="@color/t2"
-                    android:lineSpacingMultiplier="1.6"
+                    android:lineSpacingMultiplier="1.5"
                     android:text="NAS 同步库：走自己的 VodSync 聚合库，速度快、数据全，需要 NAS 在线。\n资源站直连：从公开资源站目录直接取片，NAS 关机也能正常浏览与播放。" />
 
                 <!-- 代理访问 API（仅直连模式显示）：源站直连失败/过慢时按顺序尝试 -->
@@ -256,7 +256,7 @@
                     android:text="VodSync 后端地址，保存后全站接口即时生效。"
                     android:textSize="10.5sp"
                     android:textColor="@color/t2"
-                    android:lineSpacingMultiplier="1.6" />
+                    android:lineSpacingMultiplier="1.5" />
 
                 <FrameLayout
                     android:layout_width="match_parent"
@@ -314,7 +314,7 @@
                     android:text="服务端 v1.5.0+ 默认开启访问控制。在浏览器打开服务面板 → 登录 → 右上角「⚙ 设置」→ 复制 API Token 粘贴到这里。服务器未开启鉴权时可留空。"
                     android:textSize="10.5sp"
                     android:textColor="@color/t2"
-                    android:lineSpacingMultiplier="1.6" />
+                    android:lineSpacingMultiplier="1.5" />
 
                 <FrameLayout
                     android:layout_width="match_parent"
@@ -642,7 +642,7 @@
                     android:text="跳过片头：新视频从设定的秒数开始播放（用于跳过片头广告）；跳过片尾：播放到结尾前设定的秒数时自动结束。填 0 表示不跳过，改动即时生效。"
                     android:textSize="10.5sp"
                     android:textColor="@color/t2"
-                    android:lineSpacingMultiplier="1.6" />
+                    android:lineSpacingMultiplier="1.5" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -808,7 +808,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:lineSpacingMultiplier="1.4"
+                    android:lineSpacingMultiplier="1.5"
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp"
                     android:textAllCaps="false"
@@ -822,7 +822,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:lineSpacingMultiplier="1.4"
+                    android:lineSpacingMultiplier="1.5"
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp"
                     android:textAllCaps="false"
@@ -1034,7 +1034,7 @@
                     android:text="读取 GitHub Release 最新版本，可直接下载安装。"
                     android:textSize="10.5sp"
                     android:textColor="@color/t2"
-                    android:lineSpacingMultiplier="1.6" />
+                    android:lineSpacingMultiplier="1.5" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

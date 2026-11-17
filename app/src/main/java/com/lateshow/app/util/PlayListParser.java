@@ -51,7 +51,7 @@ public final class PlayListParser {
                 } else {
                     ep.url = s;
                 }
-                if (empty(ep.name)) ep.name = "第" + (line.episodes.size() + 1) + "集";
+                if (empty(ep.name)) ep.name = "第 " + (line.episodes.size() + 1) + " 集";
                 if (empty(ep.url)) continue;
                 line.episodes.add(ep);
             }

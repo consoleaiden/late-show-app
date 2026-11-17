@@ -732,7 +732,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                             @Override public void onOk(Models.ProbeResp r) {
                                 if (r != null && r.ok) {
                                     probeView.setTextColor(color(R.color.ok));
-                                    probeView.setText("● 可用 · " + (r.total > 0 ? "共 " + r.total + " 条 · " : "") + r.elapsedMs + "ms");
+                                    probeView.setText("● 可用 · " + (r.total > 0 ? "共 " + r.total + " 条 · " : "") + r.elapsedMs + " ms");
                                 } else {
                                     probeView.setTextColor(color(R.color.bad));
                                     probeView.setText("● 不可用 · " + (r != null && r.error != null ? r.error : "未知原因"));
@@ -752,7 +752,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 String desc = inDesc.getText().toString().trim();
                 if (name.isEmpty()) { toast("请填写源站名称"); return; }
                 if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                    toast("接口地址需以 http:// 或 https:// 开头"); return;
+                    toast("地址需以 http:// 或 https:// 开头"); return;
                 }
                 if (isEdit) patchCustomSource(edit, name, url, desc, dialog);
                 else addCustomSource(name, url, inSlug.getText().toString().trim(), desc, dialog, false);
@@ -879,7 +879,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                 boolean partial = r != null && r.has("total_is_partial")
                         && r.get("total_is_partial").getAsBoolean();
                 int failed = arrayOf(r, "sources_failed").size();
-                searchInfo.setText("找到 " + total + " 条 · 耗时 " + ms + "ms · 已搜 "
+                searchInfo.setText("找到 " + total + " 条 · 耗时 " + ms + " ms · 已搜 "
                         + intOf(r, "sources_searched") + " 个源站"
                         + (partial ? " · 结果不完整" : "")
                         + (failed > 0 ? "（" + failed + " 源失败）" : ""));
@@ -1044,7 +1044,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
         if (transientToken == null || transientToken.isEmpty()) {
             String local = PrefStore.get().apiToken();
             if (local == null || local.isEmpty()) {
-                toast("本 App 尚未配置 Token，请到设置页填写");
+                toast("未配置 Token，请到设置页填写");
                 return;
             }
             transientToken = local;
@@ -1067,7 +1067,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                             @Override public void onOk(JsonObject r) {
                                 if (!uiAlive()) return;
                                 adoptNewToken(r);
-                                toast("新 Token 已生成并自动写入本 App 凭据");
+                                toast("新 Token 已生成并写入凭据");
                             }
                             @Override public void onErr(String m) { if (uiAlive()) toast(m); }
                         }))
@@ -1209,7 +1209,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
                     if (!uiAlive()) return;
                     loadAuthTokens();
                     if (r == null || r.token == null || r.token.isEmpty()) {
-                        toast("已签发，但响应里没有明文（请到服务端查看）");
+                        toast("已签发，响应未回显明文，请查服务端");
                         return;
                     }
                     showIssuedToken(r);
@@ -1588,7 +1588,7 @@ public class SyncConsoleActivity extends AppCompatActivity {
             d.setText(sub);
             d.setTextSize(10f);
             d.setTextColor(color(R.color.t3));
-            d.setLineSpacing(1f, 1.4f);
+            d.setLineSpacing(1f, 1.5f);
             box.addView(d);
         }
         parent.addView(box);

@@ -149,7 +149,7 @@ public class SettingsFragment extends Fragment
                 tokenClearIntent = true;
                 renderTokenHint();
                 inputToken.requestFocus();
-                toast("将清除已保存的 Token，点「保存」生效");
+                toast("将清除 Token，点「保存」生效");
             });
         }
 
@@ -388,7 +388,7 @@ public class SettingsFragment extends Fragment
     private void setSourceState(boolean ok, Long ms) {
         sourceAvailable = ok;
         if (!isAdded() || getView() == null) return;
-        tvSourceLatency.setText(ok ? (ms == null ? "已连接" : ms + "ms") : "超时");
+        tvSourceLatency.setText(ok ? (ms == null ? "已连接" : ms + " ms") : "超时");
         applySourceAccents();
         consoleEntry.setVisibility(ok ? View.VISIBLE : View.GONE);
     }
@@ -469,14 +469,14 @@ public class SettingsFragment extends Fragment
                 String state = r.authEnabled ? "已授权 · Token 有效" : "服务端未开启鉴权 · 可不填 Token";
                 if (!save) {
                     srcStatus.setTextColor(getColor(R.color.ok));
-                    srcStatus.setText("● 测试通过 · " + state + " · " + r.elapsedMs + "ms（未保存）");
+                    srcStatus.setText("● 测试通过 · " + state + " · " + r.elapsedMs + " ms（未保存）");
                     toast("连接正常，当前配置未被修改");
                     return;
                 }
                 // 唯一的持久化入口：验证成功后原子提交
                 commitSource(url, token);
                 srcStatus.setTextColor(getColor(R.color.ok));
-                srcStatus.setText("● 已保存 · " + state + " · " + r.elapsedMs + "ms");
+                srcStatus.setText("● 已保存 · " + state + " · " + r.elapsedMs + " ms");
                 btnSave.setText("已保存");
                 btnSave.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.bg_btn_ok));
                 toast("配置已保存");
@@ -922,7 +922,7 @@ public class SettingsFragment extends Fragment
     private void submitClipboardSample() {
         String url = readClipboardUrl();
         if (url == null) {
-            toast("剪贴板里没有播放地址，请先在播放页地址条点「复制」");
+            toast("剪贴板无播放地址，请先在播放页复制");
             return;
         }
         boolean ok = com.lateshow.app.util.AdFilter.reportSample(url);

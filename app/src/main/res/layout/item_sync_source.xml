@@ -91,6 +91,7 @@
             android:layout_height="wrap_content"
             android:layout_marginLeft="8dp"
             android:minWidth="86dp"
+            android:gravity="end"
             android:text="" />
 
         <TextView
