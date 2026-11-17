@@ -45,8 +45,6 @@ public class PlayerActivity extends AppCompatActivity {
     private PreviewFrameLoader previewLoader;
     /** 拖拽进度条前的控制栏自动隐藏时长，拖拽期间临时禁用自动隐藏 */
     private int savedShowTimeoutMs = -1;
-    /** 收起帧预览框的任务（出图后延迟 / 拖动停止后兜底）；走 tb.hidePreview() */
-    private Runnable hidePreviewTask;
     /** 是否正在拖动进度条：拖动期间不做「跟随预热」，避免打断在途抓帧 */
     private boolean userScrubbing = false;
     /** 与主播放器同一条链路（含广告过滤），抓帧实例复用，保证时间轴一致 */
@@ -84,7 +82,8 @@ public class PlayerActivity extends AppCompatActivity {
     };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {        PrefStore.init(this);
+    protected void onCreate(Bundle savedInstanceState) {
+        PrefStore.init(this);
         com.lateshow.app.util.ApiCache.init(this);
         com.lateshow.app.util.OfflineMedia.init(this);
         com.lateshow.app.util.ThemeManager.apply(this);
@@ -328,6 +327,7 @@ public class PlayerActivity extends AppCompatActivity {
         TextureView tvProbe = findViewById(R.id.tvProbe);
         if (tb == null || ivPreview == null || tvProbe == null) {
             if (attempt < 10) pv.postDelayed(() -> tryAttachPreview(attempt + 1), 150);
+            else com.lateshow.app.util.PlayHeaders.diag("frame preview attach FAILED: controls not inflated in 1.5s");
             return;
         }
         // 抓帧实例走与主播放器同一条 DataSource 链路（含广告过滤），否则
@@ -338,21 +338,11 @@ public class PlayerActivity extends AppCompatActivity {
                 tvProbe, 2000L, 12, 320);
         previewLoader = new PreviewFrameLoader(probe, ivPreview, 2000L);
         tb.setPreviewLoader(previewLoader);
-        // 预览框收起时机（previewAutoHide 已关）：出图后 1.6s 收起，10s 没出图兜底收起。
-        // 必须走 tb.hidePreview()（delegate 状态机），直接 setVisibility 会让 delegate
-        // 的 showingPreview 状态失真，下次拖动时 show() 早退、预览框再也出不来。
-        final PreviewTimeBar tbFinal = tb;
-        hidePreviewTask = () -> tbFinal.hidePreview();
-        previewLoader.onFrameShown = () -> {
-            pv.removeCallbacks(hidePreviewTask);
-            pv.postDelayed(hidePreviewTask, 1600L);
-        };
         // 拖拽期间别让控制栏自动隐藏，否则预览框会跟着消失
         tb.addOnScrubListener(new PreviewBar.OnScrubListener() {
             @Override public void onScrubStart(PreviewBar b) {
                 userScrubbing = true;
-                // 拖动开始：取消还没触发的收起任务，预览框跟随 delegate 显示
-                if (hidePreviewTask != null) pv.removeCallbacks(hidePreviewTask);
+                if (previewLoader != null) previewLoader.setScrubbing(true);
                 savedShowTimeoutMs = pv.getControllerShowTimeoutMs();
                 pv.setControllerShowTimeoutMs(Integer.MAX_VALUE);
                 pv.showController();
@@ -367,13 +357,10 @@ public class PlayerActivity extends AppCompatActivity {
                 // 不立刻停副播放器：保持 READY/缓冲，紧接着的拖动能秒出帧；
                 // 由 ThumbnailProbe.pauseSoon() 在空闲 12s 后真正暂停。
                 if (probe != null) probe.pauseSoon();
-                // 补抓松手时的最终位置（拖动中可能被最小间隔/同桶保护跳过）
+                // 补抓松手时的最终位置（拖动中可能被最小间隔/同桶保护跳过）：
+                // 预览框已被库 autoHide 收起，本帧进缓存——下次拖到同位置立即显示
                 if (previewLoader != null) previewLoader.flush(b.getProgress());
-                // 预览框保持显示等出图；10s 仍没出图就兜底收起（出图回调会提前收起）
-                if (hidePreviewTask != null) {
-                    pv.removeCallbacks(hidePreviewTask);
-                    pv.postDelayed(hidePreviewTask, 10000L);
-                }
+                if (previewLoader != null) previewLoader.setScrubbing(false);
             }
         });
         if (streamUrl != null) probe.setMedia(streamUrl);

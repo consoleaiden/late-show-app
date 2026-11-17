@@ -28,9 +28,18 @@ public final class PreviewFrameLoader implements PreviewLoader {
     private long lastAt = 0L;
     private long lastBucket = Long.MIN_VALUE;
     private long lastBucketAt = 0L;
+    /**
+     * 是否处于用户拖动中。库的 PreviewTimeBar.setPosition 每次进度更新都会走
+     * delegate.updateProgress——只要预览框还显示着，就会以「主播放器实时位置」
+     * 调 loadPreview 并把预览框 setX 移过去。抓帧目标绝不能被主播放器位置
+     * 污染（预览会跟着播放跑、与 thumb 脱钩），非拖动触发一律忽略。
+     */
+    private boolean scrubbing = false;
 
-    /** 出图并显示到 ImageView 后的回调（主线程）；用于延迟收起预览框，可 null */
-    public Runnable onFrameShown;
+    /** 由 PlayerActivity 在 onScrubStart/Stop 维护 */
+    public void setScrubbing(boolean scrubbing) {
+        this.scrubbing = scrubbing;
+    }
 
     public PreviewFrameLoader(ThumbnailProbe probe, ImageView imageView, long bucketMs) {
         this.probe = probe;
@@ -40,6 +49,7 @@ public final class PreviewFrameLoader implements PreviewLoader {
 
     @Override
     public void loadPreview(long currentPosition, long max) {
+        if (!scrubbing) return;   // 主播放器进度更新触发（delegate.updateProgress）：忽略
         long now = SystemClock.uptimeMillis();
         long bucket = Math.max(0, currentPosition) / bucketMs;
         if (bucket == lastBucket && now - lastBucketAt < SAME_BUCKET_GUARD_MS) return;
@@ -59,7 +69,6 @@ public final class PreviewFrameLoader implements PreviewLoader {
                         + " wh=" + bmp.getWidth() + "x" + bmp.getHeight());
                 imageView.setImageBitmap(bmp);
                 imageView.setVisibility(View.VISIBLE);
-                if (onFrameShown != null) onFrameShown.run();
             }
         });
     }
@@ -71,7 +80,9 @@ public final class PreviewFrameLoader implements PreviewLoader {
     public void flush(long currentPositionMs) {
         lastBucket = Long.MIN_VALUE;
         lastBucketAt = 0L;
+        scrubbing = true;   // 松手补抓属于拖动语义，放行本次
         loadPreview(currentPositionMs, 0L);
+        scrubbing = false;
     }
 
     /** 取消在途抓帧（页面不可见时） */
