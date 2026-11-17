@@ -196,6 +196,18 @@ public class SettingsFragment extends Fragment
         swStreamTools.setChecked(PrefStore.get().showStreamTools());
         swStreamTools.setOnCheckedChangeListener((bv, on) -> PrefStore.get().setShowStreamTools(on));
 
+        // 播放偏好：进度条帧预览（全屏播放器拖动时显示对应画面）
+        android.widget.Switch swFramePreview = v.findViewById(R.id.swFramePreview);
+        if (swFramePreview != null) {
+            swFramePreview.setChecked(PrefStore.get().framePreview());
+            swFramePreview.setOnCheckedChangeListener((bv, on) -> {
+                if (PrefStore.get().framePreview() == on) return;   // 程序化回填
+                PrefStore.get().setFramePreview(on);
+                toast(on ? "进度条帧预览已开启：会额外消耗流量"
+                         : "进度条帧预览已关闭");
+            });
+        }
+
         // 播放偏好：未成年模式（VodSync v1.15.0 minor_mode）。开启后所有 API 请求带
         // X-Minor-Mode: 1，服务端在内容读接口统一剔除 18+ 源站；缓存命名空间含本开关。
         // 开↔关必须走同一条失效链路：清接口缓存 + 清源站名映射 + 置脏 + 立刻通知首页重载，

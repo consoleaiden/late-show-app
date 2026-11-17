@@ -9,7 +9,20 @@
         android:id="@+id/playerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        app:controller_layout_id="@layout/exo_player_controls"
         app:show_buffering="when_playing" />
+
+    <!-- 抓帧用的离屏渲染面：必须常驻可见且尺寸非 0，SurfaceTexture 才存在。
+         与 PlayerView 同级（而不是放进控制栏布局），这样控制栏自动隐藏时它依旧可见，
+         SurfaceTexture 不会被释放。alpha=0 不显示、不拦截触摸。 -->
+    <TextureView
+        android:id="@+id/tvProbe"
+        android:layout_width="150dp"
+        android:layout_height="90dp"
+        android:layout_gravity="top|end"
+        android:alpha="0"
+        android:clickable="false"
+        android:focusable="false" />
 
     <!-- 滑动进度预览 -->
     <TextView

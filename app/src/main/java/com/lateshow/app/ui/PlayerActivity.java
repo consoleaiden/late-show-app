@@ -5,8 +5,10 @@ import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.TextureView;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -16,7 +18,11 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
+import com.github.rubensousa.previewseekbar.PreviewBar;
+import com.github.rubensousa.previewseekbar.media3.PreviewTimeBar;
 import com.lateshow.app.R;
+import com.lateshow.app.player.PreviewFrameLoader;
+import com.lateshow.app.player.ThumbnailProbe;
 import com.lateshow.app.store.PrefStore;
 import com.lateshow.app.util.GestureSeek;
 
@@ -33,6 +39,16 @@ public class PlayerActivity extends AppCompatActivity {
     /** VodSync v1.11.0：线路稳定标识（original_index），null = 老版本详情页未传 */
     private Integer lineKey;
     private long lastSavedSec = 0;
+
+    /** 帧预览：抓帧器与预览装载器（仅「进度条帧预览」开关开启时创建） */
+    private ThumbnailProbe probe;
+    private PreviewFrameLoader previewLoader;
+    /** 拖拽进度条前的控制栏自动隐藏时长，拖拽期间临时禁用自动隐藏 */
+    private int savedShowTimeoutMs = -1;
+    /** 是否正在拖动进度条：拖动期间不做「跟随预热」，避免打断在途抓帧 */
+    private boolean userScrubbing = false;
+    /** 与主播放器同一条链路（含广告过滤），抓帧实例复用，保证时间轴一致 */
+    private DefaultHttpDataSource.Factory httpFactory;
 
     /** 5 秒周期：检查「跳过片尾」+ 落盘播放进度（审计 A-14，异常退出也不丢进度） */
     private static final long TICK_MS = 5000L;
@@ -52,6 +68,14 @@ public class PlayerActivity extends AppCompatActivity {
                         saveProgress(pos / 1000, durMs / 1000);
                     }
                 }
+            }
+            // 帧预览预热：仅在控制栏可见（用户可能拖动）时，让副播放器跟随主播放器位置，
+            // 保持解码器/缓冲「热」——用户拖到已缓冲附近时 seek 命中缓冲能立刻出帧。
+            // 平时不跟随，避免副播放器一直拉流白耗流量。
+            if (probe != null && player != null && !userScrubbing
+                    && pv.isControllerFullyVisible()
+                    && player.getPlaybackState() == Player.STATE_READY) {
+                probe.followTo(player.getCurrentPosition());
             }
             tickHandler.postDelayed(this, TICK_MS);
         }
@@ -108,6 +132,7 @@ public class PlayerActivity extends AppCompatActivity {
                 .setUserAgent(com.lateshow.app.util.PlayHeaders.UA);
         httpFactory.setDefaultRequestProperties(
                 com.lateshow.app.util.PlayHeaders.props(url, false));
+        this.httpFactory = httpFactory;
 
         // 播放器构建：DataSource 经 AdFilterDataSource 包装，m3u8 响应体在交还播放器前
         // 原位重写（剔除广告 run，内置规则本地执行）；分片请求不受影响，仍直连 CDN
@@ -134,9 +159,12 @@ public class PlayerActivity extends AppCompatActivity {
             }
         });
         // 手势：横向滑动快进/快退（划满全屏 = 总时长 1/2，半屏 = 1/4）；
-        // 纵向滑动：右半屏调亮度、左半屏调音量；轻点显隐控制栏
+        // 纵向滑动：右半屏调亮度、左半屏调音量；轻点显隐控制栏。
+        // 挂到内容帧而不是 PlayerView 根：控制栏区域要留给进度条/按钮，
+        // 否则手势层的 ACTION_DOWN 会把进度条的拖动抢走。
         final TextView seekOverlay = findViewById(R.id.seekOverlay);
-        GestureSeek.attach(pv, 0.5f, new GestureSeek.Callback() {
+        final View gestureTarget = findContentFrame() != null ? findContentFrame() : pv;
+        GestureSeek.attach(gestureTarget, 0.5f, new GestureSeek.Callback() {
             @Override public long durationMs() { return player != null ? player.getDuration() : 0; }
             @Override public long positionMs() { return player != null ? player.getCurrentPosition() : 0; }
             @Override public void onSeekStart() {
@@ -180,6 +208,10 @@ public class PlayerActivity extends AppCompatActivity {
         // 智能去广告：按 TTL 拉取后端规则包 + 冲刷命中上报（老后端无 adfilter 能力时静默跳过）
         com.lateshow.app.util.AdFilter.ensureFresh();
         streamUrl = com.lateshow.app.api.VodSyncApi.get().decorate(url);
+        // 进度条帧预览（默认关闭，见 PrefStore.framePreview）：副 ExoPlayer 抓帧 + 预览框跟随。
+        // 放在 decorate 之后：抓帧实例用同一个（已 decorate 的）地址，与主播放器完全一致；
+        // 且只在这里取一次地址，避免 decorate 每次生成新 token 导致抓帧实例反复换源重载。
+        setupFramePreview();
         // startMs 来自详情页内嵌播放器的当前位置，已经在「过滤后时间轴」上：
         // 时间轴映射只在详情页入口做一次，这里再做会重复前移（见 AdFilter.mapStartMs）。
         com.lateshow.app.util.PlayHeaders.diag("fullscreen play " + streamUrl + " startMs=" + startMs);
@@ -273,6 +305,69 @@ public class PlayerActivity extends AppCompatActivity {
         vidW = w;
         vidH = h;
         applyVideoAspect();
+    }
+
+    /**
+     * 帧预览接线。控制器视图是 PlayerView 懒加载的（setPlayer 时才 inflate），
+     * onCreate 里立刻 findViewById 会拿到 null，因此延迟重试。
+     */
+    private void setupFramePreview() {
+        if (probe != null || !PrefStore.get().framePreview()) return;
+        pv.post(() -> tryAttachPreview(0));
+    }
+
+    private void tryAttachPreview(int attempt) {
+        if (probe != null || !PrefStore.get().framePreview()) return;
+        PreviewTimeBar tb = pv.findViewById(androidx.media3.ui.R.id.exo_progress);
+        ImageView ivPreview = pv.findViewById(R.id.ivPreview);
+        // tvProbe 在 activity 根布局（与 PlayerView 同级），不在 PlayerView 子树里
+        TextureView tvProbe = findViewById(R.id.tvProbe);
+        if (tb == null || ivPreview == null || tvProbe == null) {
+            if (attempt < 10) pv.postDelayed(() -> tryAttachPreview(attempt + 1), 150);
+            return;
+        }
+        // 抓帧实例走与主播放器同一条 DataSource 链路（含广告过滤），否则
+        // 主进度是「过滤后时间轴」而抓帧按原始时间轴 seek，预览画面会整体偏移
+        probe = new ThumbnailProbe(this,
+                new com.lateshow.app.util.AdFilterDataSource.Factory(httpFactory),
+                tvProbe, 2000L, 12, 320);
+        previewLoader = new PreviewFrameLoader(probe, ivPreview, 2000L);
+        tb.setPreviewLoader(previewLoader);
+        // 拖拽期间别让控制栏自动隐藏，否则预览框会跟着消失
+        tb.addOnScrubListener(new PreviewBar.OnScrubListener() {
+            @Override public void onScrubStart(PreviewBar b) {
+                userScrubbing = true;
+                savedShowTimeoutMs = pv.getControllerShowTimeoutMs();
+                pv.setControllerShowTimeoutMs(Integer.MAX_VALUE);
+                pv.showController();
+            }
+
+            @Override public void onScrubMove(PreviewBar b, int progress, boolean fromUser) { }
+
+            @Override public void onScrubStop(PreviewBar b) {
+                userScrubbing = false;
+                if (savedShowTimeoutMs >= 0) pv.setControllerShowTimeoutMs(savedShowTimeoutMs);
+                savedShowTimeoutMs = -1;
+                // 不立刻停副播放器：保持 READY/缓冲，紧接着的拖动能秒出帧；
+                // 由 ThumbnailProbe.pauseSoon() 在空闲 12s 后真正暂停。
+                if (probe != null) probe.pauseSoon();
+                // 补抓松手时的最终位置（拖动中可能被最小间隔/同桶保护跳过）
+                if (previewLoader != null) previewLoader.flush(b.getProgress());
+            }
+        });
+        if (streamUrl != null) probe.setMedia(streamUrl);
+        com.lateshow.app.util.PlayHeaders.diag("frame preview attached");
+    }
+
+    /** 回到前台时按当前偏好对齐：开关可能在设置页被改动 */
+    private void syncFramePreview() {
+        if (PrefStore.get().framePreview()) {
+            setupFramePreview();
+        } else if (probe != null) {
+            probe.release();
+            probe = null;
+            previewLoader = null;
+        }
     }
 
     /** 按类型找到内部内容帧（AspectRatioFrameLayout） */
@@ -410,6 +505,7 @@ public class PlayerActivity extends AppCompatActivity {
         super.onResume();
         // 开关可能在设置页改过：每次回到前台按当前偏好重新决定地址条显隐
         com.lateshow.app.util.StreamBar.bind(findViewById(android.R.id.content), streamUrl);
+        syncFramePreview();
     }
 
     private void saveProgress(long playedSec, long totalSec) {
@@ -455,6 +551,8 @@ public class PlayerActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        // 页面不可见：立刻停掉在途抓帧，避免后台继续拉流解码
+        if (previewLoader != null) previewLoader.cancel();
         if (player != null) {
             long pos = player.getCurrentPosition();
             long dur = player.getDuration() > 0 ? player.getDuration() / 1000 : 0;
@@ -472,6 +570,11 @@ public class PlayerActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         tickHandler.removeCallbacksAndMessages(null);
+        if (probe != null) {
+            probe.release();
+            probe = null;
+            previewLoader = null;
+        }
         if (player != null) {
             player.release();
             player = null;

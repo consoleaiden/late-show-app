@@ -79,6 +79,9 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
     implementation 'androidx.media3:media3-ui:1.4.1'
+    // 拖动进度条时的视频帧预览：只做「预览框显隐 + 定位」，抓帧由 PreviewLoader 自己实现
+    implementation 'com.github.rubensousa:previewseekbar:3.1.1'
+    implementation 'com.github.rubensousa:previewseekbar-media3:1.1.1.0'
 
     testImplementation 'junit:junit:4.13.2'
 }

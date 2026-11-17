@@ -572,6 +572,20 @@ public final class PrefStore {
         sp.edit().putBoolean("show_stream_tools", show).apply();
     }
 
+    // ---------- 播放偏好：拖动进度条显示视频帧预览 ----------
+
+    /**
+     * 拖动进度条时实时显示对应视频帧。默认关闭：抓帧会额外拉取分片、耗流量，
+     * 且低端设备多一个解码实例会增加功耗，交给用户按需开启。
+     */
+    public boolean framePreview() {
+        return sp.getBoolean("frame_preview", false);
+    }
+
+    public void setFramePreview(boolean on) {
+        sp.edit().putBoolean("frame_preview", on).apply();
+    }
+
     // ---------- 播放偏好：未成年模式（仅获取/展示非 18+ 源站内容，VodSync v1.15.0+） ----------
 
     public boolean minorMode() {
