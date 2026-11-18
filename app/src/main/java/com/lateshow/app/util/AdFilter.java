@@ -92,6 +92,13 @@ public final class AdFilter {
         lastSummary = res.removedRuns + "runs/" + (res.removedMs / 1000) + "s of "
                 + (res.totalMs / 1000) + "s";
         rememberSpans(uri.toString(), res.removedSpans);
+        // v1.17.0：指纹命中即回报 hit；同时记到「本地址曾按哪些指纹过滤」，
+        // 用户后续点「有广告」时才能发 miss（服务端按 miss 累计自动停用误杀指纹）。
+        if (!res.matchedFingerprints.isEmpty()) {
+            String key = spanKey(uri.toString());
+            if (key != null) PrefStore.get().rememberFpHits(key, res.matchedFingerprints);
+            for (String hash : res.matchedFingerprints) feedback(hash, "hit");
+        }
         record(uri.toString(), res);
         return res.playlist.getBytes(StandardCharsets.UTF_8);
     }
@@ -278,7 +285,13 @@ public final class AdFilter {
             src = ServerCaps.supports(CAP) ? "内置规则（尚未拉到服务端包）" : "内置规则（后端不支持）";
         }
         int pending = PrefStore.get().adFilterReports().size();
-        return "规则：" + src + (pending > 0 ? " · 待上报 " + pending + " 条" : "");
+        // v1.17.0：指纹条数一起展示，便于确认规则包是否已带上共享知识
+        int fps = 0;
+        for (java.util.List<HlsAdFilter.Fingerprint> list : rules().fingerprints.values()) {
+            fps += list.size();
+        }
+        return "规则：" + src + (fps > 0 ? " · 指纹 " + fps + " 条" : "")
+                + (pending > 0 ? " · 待上报 " + pending + " 条" : "");
     }
 
     /** 设置页「立即刷新规则」：清掉 TTL 防抖后重新拉取（失败仍静默，不影响播放） */
@@ -350,6 +363,21 @@ public final class AdFilter {
             it.addProperty("removed_ms", r.removedMs);
             it.addProperty("total_ms", r.totalMs);
             it.addProperty("at", System.currentTimeMillis() / 1000L);
+            // v1.17.0：随上报附带被删片段的结构特征（服务端跨用户聚合成指纹）。
+            // index/dur_ms 必备；size_b 省略 —— m3u8 不提供分片字节数，契约要求
+            // 「拿不到就省略，不要填 0 以外的占位」（服务端 0 = 未知，不参与大小指纹）。
+            if (!r.removedSegments.isEmpty()) {
+                com.google.gson.JsonArray segs = new com.google.gson.JsonArray();
+                int n = 0;
+                for (HlsAdFilter.SegmentFeature sf : r.removedSegments) {
+                    if (n++ >= 50) break;   // 契约：单条上报最多 50 段，超出服务端也只取前 50
+                    com.google.gson.JsonObject s = new com.google.gson.JsonObject();
+                    s.addProperty("index", sf.index);
+                    s.addProperty("dur_ms", sf.durMs);
+                    segs.add(s);
+                }
+                if (segs.size() > 0) it.add("segments", segs);
+            }
             List<String> list = PrefStore.get().adFilterReports();
             list.add(it.toString());
             while (list.size() > REPORT_MAX) list.remove(0);
@@ -390,12 +418,75 @@ public final class AdFilter {
             while (list.size() > REPORT_MAX) list.remove(0);
             PrefStore.get().setAdFilterReports(list);
             AppLog.d(TAG, "sample queued: " + u);
+            // v1.17.0：这条地址若曾按指纹过滤过，认为指纹误杀 → 逐个回报 miss。
+            // 反馈失败静默；发过即清记录，避免用户连点把 miss_count 虚高。
+            String key = spanKey(u);
+            java.util.Set<String> hits = PrefStore.get().fpHitsFor(key);
+            for (String hash : hits) feedback(hash, "miss");
+            if (!hits.isEmpty()) PrefStore.get().forgetFpHits(key);
             flushReports();      // 举报要立刻到达，不等攒批
             return true;
         } catch (Exception e) {
             AppLog.w(TAG, "reportSample fail: " + e);
             return false;
         }
+    }
+
+    /**
+     * v1.17.0 指纹反馈：命中 hit / 误杀 miss（POST /adfilter/fp-feedback）。
+     *
+     * <p>契约 §5：read Token 即可；未知指纹也返回 200（found=false）；失败一律静默，
+     * 绝不把 HTTP 错误暴露给用户或影响播放过滤。与 report 共用 60/h 限流域，
+     * 429 按 Retry-After 退避（VodSyncApi.ApiCb 扩展回调透传响应头）。
+     */
+    private static void feedback(String hash, String kind) {
+        try {
+            if (hash == null || hash.isEmpty()) return;
+            if (!ServerCaps.supports(CAP)) return;
+            if (System.currentTimeMillis() < sReportBackoffUntil) return;
+            JsonObject body = new JsonObject();
+            body.addProperty("fp_hash", hash);
+            body.addProperty("kind", kind);
+            final String h = hash;
+            VodSyncApi.get().postJson(ApiPaths.ADFILTER_FP_FEEDBACK, body.toString(),
+                    JsonObject.class, new VodSyncApi.ApiCb<JsonObject>() {
+                        @Override public void onOk(JsonObject resp) {
+                            sReportBackoffUntil = 0L;
+                            boolean found = resp != null && resp.has("found")
+                                    && resp.get("found").isJsonPrimitive()
+                                    && resp.get("found").getAsBoolean();
+                            AppLog.d(TAG, "fp-feedback " + kind + " " + shortHash(h)
+                                    + " found=" + found);
+                        }
+
+                        @Override public void onErr(String msg) {
+                            sReportBackoffUntil = System.currentTimeMillis() + REPORT_BACKOFF_MS;
+                            AppLog.w(TAG, "fp-feedback " + kind + " " + shortHash(h) + " fail: " + msg);
+                        }
+
+                        @Override public void onErr(int code, String msg, long retryAfterSec) {
+                            applyRateLimit(code, retryAfterSec);
+                            AppLog.w(TAG, "fp-feedback " + kind + " " + shortHash(h)
+                                    + " fail HTTP " + code + ": " + msg);
+                        }
+                    });
+        } catch (Exception e) {
+            AppLog.w(TAG, "feedback fail: " + e);
+        }
+    }
+
+    /** report / fp-feedback 共用限流域：429 按 Retry-After 退避，其余失败走固定静默期。 */
+    private static void applyRateLimit(int code, long retryAfterSec) {
+        if (code == 429) {
+            long sec = retryAfterSec > 0 ? retryAfterSec : 60L;
+            sReportBackoffUntil = System.currentTimeMillis() + sec * 1000L;
+        } else {
+            sReportBackoffUntil = System.currentTimeMillis() + REPORT_BACKOFF_MS;
+        }
+    }
+
+    private static String shortHash(String h) {
+        return h == null ? "-" : h.substring(0, Math.min(8, h.length()));
     }
 
     /** 队列里是否已有同一地址（队列上限 50 条，直接线性扫） */
@@ -410,7 +501,8 @@ public final class AdFilter {
         return false;
     }
 
-    /** 上报队列快照；成功即清空，失败保留到下次（服务端幂等：按 url+at 去重） */    private static void flushReports() {
+    /** 上报队列快照；成功即清空，失败保留到下次（服务端幂等：按 url+at 去重） */
+    private static void flushReports() {
         try {
             long now = System.currentTimeMillis();
             if (now < sReportBackoffUntil) return;   // 退避中：刚失败过，别每次起播都去撞
@@ -436,6 +528,10 @@ public final class AdFilter {
                                     stat = " accepted=" + resp.get("accepted")
                                             + " dropped=" + resp.get("dropped")
                                             + " dup=" + resp.get("duplicates");
+                                    // v1.17.0：新增字段，老后端没有；忽略即可
+                                    if (resp.has("segments_accepted")) {
+                                        stat += " seg=" + resp.get("segments_accepted");
+                                    }
                                 }
                             } catch (Exception ignored) { }
                             AppLog.d(TAG, "report ok " + sent + " item(s)" + stat);
@@ -443,8 +539,13 @@ public final class AdFilter {
 
                         @Override public void onErr(String msg) {
                             // 保留队列，等退避结束后的下一次 TTL / 起播触发
-                            sReportBackoffUntil = System.currentTimeMillis() + REPORT_BACKOFF_MS;
+                            applyRateLimit(0, 0L);
                             AppLog.w(TAG, "report fail(" + sent + "): " + msg);
+                        }
+
+                        @Override public void onErr(int code, String msg, long retryAfterSec) {
+                            applyRateLimit(code, retryAfterSec);
+                            AppLog.w(TAG, "report fail(" + sent + ") HTTP " + code + ": " + msg);
                         }
                     });
         } catch (Exception e) {

@@ -57,6 +57,8 @@ public final class ApiPaths {
     /** 智能去广告：规则包拉取 / 命中上报（后端 v1.16.0+，契约见 docs/ADFILTER_BACKEND_SPEC.md） */
     public static final String ADFILTER_RULES = V1 + "/adfilter/rules";
     public static final String ADFILTER_REPORT = V1 + "/adfilter/report";
+    /** v1.17.0：广告指纹库命中/误杀反馈（read Token 可用，见 ADFILTER_FINGERPRINT_CLIENT_CONTRACT.md） */
+    public static final String ADFILTER_FP_FEEDBACK = V1 + "/adfilter/fp-feedback";
 
     public static String video(String slug, long vodId) {
         return VIDEOS + "/" + slug + "/" + vodId;

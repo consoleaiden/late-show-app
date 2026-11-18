@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -60,12 +61,86 @@ public final class HlsAdFilter {
          */
         public final long[] removedSpans;
 
-        Result(String playlist, int removedRuns, long removedMs, long totalMs, long[] removedSpans) {
+        /**
+         * 被删片段的结构特征（v1.17.0 指纹库上报用）：按播放顺序的扁平列表，
+         * 每项含分片序号 index 与时长 dur_ms；m3u8 不提供分片字节数，故 size_b
+         * 一律省略（服务端按 0 = 未知处理，不参与大小指纹）。
+         */
+        public final List<SegmentFeature> removedSegments;
+
+        /**
+         * 本次过滤命中的指纹 fp_hash（v1.17.0 反馈闭环用）。
+         * 命中成功 → AdFilter 发 kind=hit；用户后续举报本地址 → 发 kind=miss。
+         */
+        public final java.util.Set<String> matchedFingerprints;
+
+        Result(String playlist, int removedRuns, long removedMs, long totalMs, long[] removedSpans,
+               List<SegmentFeature> removedSegments, java.util.Set<String> matchedFingerprints) {
             this.playlist = playlist;
             this.removedRuns = removedRuns;
             this.removedMs = removedMs;
             this.totalMs = totalMs;
             this.removedSpans = removedSpans == null ? new long[0] : removedSpans;
+            this.removedSegments = removedSegments == null
+                    ? java.util.Collections.<SegmentFeature>emptyList() : removedSegments;
+            this.matchedFingerprints = matchedFingerprints == null
+                    ? java.util.Collections.<String>emptySet() : matchedFingerprints;
+        }
+    }
+
+    /** 单个分片的结构特征；size_b 无法从 m3u8 获得，契约要求「拿不到就省略」。 */
+    public static final class SegmentFeature {
+        /** 分片在播放列表中的序号（从 0 开始，跨 run 累计） */
+        public final int index;
+        /** 分片时长（毫秒，EXTINF × 1000 取整） */
+        public final long durMs;
+
+        SegmentFeature(int index, long durMs) {
+            this.index = index;
+            this.durMs = durMs;
+        }
+    }
+
+    /**
+     * 服务端 v1.17.0 下发的广告指纹：host + 归一化时长/大小桶。
+     *
+     * <p>客户端<b>不重算 fp_hash</b>，只按随包下发的桶宽算桶值并比较。桶宽必须从包里读，
+     * 服务端调整桶宽后客户端自动适配（契约 §4.3 / §7）。
+     */
+    public static final class Fingerprint {
+        public final String hash;
+        public final String host;
+        public final int durBucket;
+        public final int sizeBucket;
+        public final int durBucketMs;
+        public final int sizeBucketB;
+        public final double confidence;
+
+        Fingerprint(String hash, String host, int durBucket, int sizeBucket,
+                    int durBucketMs, int sizeBucketB, double confidence) {
+            this.hash = hash;
+            this.host = host;
+            this.durBucket = durBucket;
+            this.sizeBucket = sizeBucket;
+            this.durBucketMs = durBucketMs;
+            this.sizeBucketB = sizeBucketB;
+            this.confidence = confidence;
+        }
+
+        /** 分片是否命中本指纹；sizeB<=0（未知）时大小桶恒 0，与服务端口径一致。 */
+        boolean matches(long durMs, long sizeB) {
+            if (durBucketMs <= 0 || bucket(durMs, durBucketMs) != durBucket) return false;
+            int sb = (sizeBucketB > 0 && sizeB > 0) ? bucket(sizeB, sizeBucketB) : 0;
+            return sb == sizeBucket;
+        }
+
+        /**
+         * 桶序号 = round(value / width)。必须用 {@link Math#rint}（round-half-to-even）
+         * 对齐服务端 Python 的 round()；用 Math.round()（half-up）会在 .5 边界错一档，
+         * 造成 confirmed 指纹假阴性（例如 2500ms / 1000ms）。
+         */
+        static int bucket(long value, int width) {
+            return (int) Math.rint((double) value / (double) width);
         }
     }
 
@@ -98,6 +173,23 @@ public final class HlsAdFilter {
         /** 站点级覆盖：host(小写) -> mode（目前仅 "off" = 该站点整体不过滤） */
         public Map<String, String> siteMode = new LinkedHashMap<>();
 
+        /**
+         * v1.17.0 广告指纹库：host(小写) -> 该站 fingerprints。
+         * 老服务端/空库时为空 Map —— 完全退回 v1.16.x 本地启发式。
+         */
+        public Map<String, List<Fingerprint>> fingerprints = new LinkedHashMap<>();
+
+        /** 同 host 下按桶值查命中的 fp_hash；未命中返回 null。桶宽取下发值，不硬编码。 */
+        public String matchFingerprint(String host, long durMs, long sizeB) {
+            if (host == null || host.isEmpty() || fingerprints.isEmpty()) return null;
+            List<Fingerprint> list = fingerprints.get(host.toLowerCase(Locale.ROOT));
+            if (list == null) return null;
+            for (Fingerprint fp : list) {
+                if (fp.matches(durMs, sizeB)) return fp.hash;
+            }
+            return null;
+        }
+
         public boolean offFor(String host) {
             if (host == null || siteMode.isEmpty()) return false;
             return "off".equals(siteMode.get(host.toLowerCase(Locale.ROOT)));
@@ -120,6 +212,8 @@ public final class HlsAdFilter {
         final List<String> lines = new ArrayList<>();
         /** 本 run 的分片 URI（相对/原始形式，按出现顺序），用于识别「同一批文件被贴了两遍」 */
         final List<String> segUris = new ArrayList<>();
+        /** 本 run 每个分片的结构特征（全局 index + dur_ms），指纹上报用 */
+        final List<SegmentFeature> segs = new ArrayList<>();
         /** 本 run 生效的 #EXT-X-KEY 行文本；null = 从未声明过（重建时需显式 METHOD=NONE 复位） */
         String keyLine;
         /** 本 run 生效的 #EXT-X-MAP 行文本；null = 无 */
@@ -187,6 +281,8 @@ public final class HlsAdFilter {
                 cur.segUris.add(ln);
                 if (cur.firstUri == null) cur.firstUri = resolve(baseUrl, ln);
                 cur.segCount++;
+                // v1.17.0：全局 index（跨 run 从 0 累计）+ 毫秒时长，供被删片段上报
+                cur.segs.add(new SegmentFeature(uriCount, Math.round(pendDur * 1000)));
                 cur.dur += pendDur;
                 pendDur = -1;
                 uriCount++;
@@ -285,13 +381,29 @@ public final class HlsAdFilter {
         if (longest == null || longestDur <= 0) return reject("no-longest");
 
         Set<Run> removed = new HashSet<>();
+        Set<String> matchedHashes = new LinkedHashSet<>();
         boolean highConfidence = false;
+        // v1.17.0：指纹 host 与服务端 host_of(report.url) 对齐 —— 取播放列表 URL 的 host，
+        // 不是分片 host（分片常落在另一个 CDN 域名，后端上报时只取列表地址 host）。
+        String fpHost = fingerprintHost(baseUrl);
         for (Map.Entry<String, List<Run>> e : groups.entrySet()) {
             List<Run> g = e.getValue();
             if (g == longest) continue;                       // 最长组永远保留（原逻辑）
             double d = 0;
             for (Run r : g) d += r.dur;
-            if (d > rules.absoluteMaxSec) continue;           // 超过绝对上限：当正片分段
+            if (d > rules.absoluteMaxSec) continue;           // 绝对上限保留：防长正片被片段指纹误伤
+            // 指纹扫描独立于阈值判据：即便本组已被阈值判广告，也记下 fp_hash 供命中反馈。
+            // size_b 传 0 = 未知（m3u8 拿不到分片字节数），与上报「省略 size_b」口径一致。
+            boolean fpHit = false;
+            for (Run r : g) {
+                for (SegmentFeature sf : r.segs) {
+                    String h = rules.matchFingerprint(fpHost, sf.durMs, 0);
+                    if (h != null) {
+                        matchedHashes.add(h);
+                        fpHit = true;
+                    }
+                }
+            }
             boolean ad = d < rules.relativeMaxRatio * longestDur;
             boolean dup = false;
             if (!ad && d < rules.duplicateMaxRatio * longestDur && hasSelfDuplicate(g)) {
@@ -299,9 +411,10 @@ public final class HlsAdFilter {
                 dup = true;
             }
             if (!ad && rules.patternHit(g.get(0).firstUri)) ad = true;
+            if (!ad && fpHit) ad = true;                      // 指纹命中：跳过本地阈值启发式
             if (ad) {
                 removed.addAll(g);
-                if (dup) highConfidence = true;
+                if (dup || fpHit) highConfidence = true;
             }
         }
         if (removed.isEmpty()) return reject("no-ad-candidate");
@@ -368,10 +481,32 @@ public final class HlsAdFilter {
 
         AppLog.d(TAG, "filtered " + removedRuns + " ad run(s): "
                 + Math.round(totalDur - keptDur) + "s / " + Math.round(totalDur) + "s"
-                + " spans=" + describeSpans(spanAcc, spanCount));
+                + " spans=" + describeSpans(spanAcc, spanCount)
+                + " fp=" + matchedHashes.size());
+        List<SegmentFeature> removedSegs = new ArrayList<>();
+        for (Run r : runs) {
+            if (removed.contains(r)) removedSegs.addAll(r.segs);
+        }
         return new Result(out.toString(), removedRuns,
                 Math.round((totalDur - keptDur) * 1000), Math.round(totalDur * 1000),
-                spanCount == 0 ? new long[0] : java.util.Arrays.copyOf(spanAcc, spanCount));
+                spanCount == 0 ? new long[0] : java.util.Arrays.copyOf(spanAcc, spanCount),
+                removedSegs, matchedHashes);
+    }
+
+    /**
+     * 取播放列表 URL 的 host 作为指纹匹配键，归一口径与服务端 adfilter.host_of() 一致：
+     * 小写、去端口、去 userinfo（URI.getHost 已处理）、去尾部点。
+     */
+    private static String fingerprintHost(String baseUrl) {
+        try {
+            String h = new URI(baseUrl).getHost();
+            if (h == null || h.isEmpty()) return "";
+            h = h.toLowerCase(Locale.ROOT);
+            while (h.endsWith(".")) h = h.substring(0, h.length() - 1);
+            return h;
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /** 区间数组转 "a-b,c-d"（秒，保留一位小数），仅用于日志。 */

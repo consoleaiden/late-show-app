@@ -71,6 +71,46 @@ public final class AdFilterRules {
                     }
                 }
             }
+
+            // v1.17.0 广告指纹库（可选字段）：老包 / 空库没有 fingerprints 时完全跳过，
+            // 行为与 v1.16.x 逐字一致。单条坏指纹只丢该条，不让整包降级——指纹是增强
+            // 判据，阈值 / 站点覆盖这些核心规则不能因为一条脏指纹一起失效。
+            // 桶宽一律读下发字段，禁止硬编码 1000 / 65536（服务端可配）。
+            if (p.has("fingerprints") && p.get("fingerprints").isJsonArray()) {
+                JsonArray arr = p.getAsJsonArray("fingerprints");
+                int loaded = 0;
+                for (JsonElement e : arr) {
+                    if (!e.isJsonObject() || loaded >= 256) continue;
+                    JsonObject o = e.getAsJsonObject();
+                    String hash = str(o, "fp_hash");
+                    String host = str(o, "host").toLowerCase(Locale.ROOT);
+                    long durWidth = long_(o, "dur_bucket_ms", 0);
+                    long sizeWidth = long_(o, "size_bucket_b", 0);
+                    long durBucket = long_(o, "dur_bucket", -1);
+                    long sizeBucket = long_(o, "size_bucket", -1);
+                    double confidence = dbl(o, "confidence", 0.5);
+                    if (hash.isEmpty() || host.isEmpty() || durWidth <= 0 || sizeWidth < 0
+                            || durBucket < 0 || sizeBucket < 0) continue;
+                    // size_bucket_b=0（服务端关闭大小分桶）时 size_bucket 必为 0；
+                    // 反之拿到了非零桶号却没有桶宽，宁可丢掉这条也不做错匹配。
+                    if (sizeWidth == 0 && sizeBucket != 0) continue;
+                    HlsAdFilter.Fingerprint fp = new HlsAdFilter.Fingerprint(
+                            hash, host,
+                            (int) Math.min(durBucket, Integer.MAX_VALUE),
+                            (int) Math.min(sizeBucket, Integer.MAX_VALUE),
+                            (int) Math.min(durWidth, Integer.MAX_VALUE),
+                            (int) Math.min(sizeWidth, Integer.MAX_VALUE),
+                            clamp(confidence, 0.0, 1.0));
+                    List<HlsAdFilter.Fingerprint> list = r.fingerprints.get(host);
+                    if (list == null) {
+                        list = new ArrayList<>();
+                        r.fingerprints.put(host, list);
+                    }
+                    list.add(fp);
+                    loaded++;
+                }
+                if (loaded > 0) AppLog.d(TAG, "rule pack fingerprints=" + loaded);
+            }
         } catch (Exception e) {
             AppLog.w(TAG, "bad rule pack -> builtin: " + e);
             return new HlsAdFilter.Rules();

@@ -710,6 +710,87 @@ public final class PrefStore {
         sp.edit().putString("ad_filter_reports", sb.toString()).apply();
     }
 
+    // ---------- v1.17.0 指纹命中记录：URL(去 query) -> fp_hash[] ----------
+
+    /** 只留最近 32 条地址，每条最多 16 个指纹，避免 SharedPreferences 无限膨胀。 */
+    private static final int FP_HITS_MAX_URLS = 32;
+    private static final int FP_HITS_MAX_HASHES = 16;
+
+    public String adFilterFpHits() {
+        return sp.getString("ad_filter_fp_hits", "");
+    }
+
+    public void setAdFilterFpHits(String json) {
+        sp.edit().putString("ad_filter_fp_hits", json == null ? "" : json).apply();
+    }
+
+    /** 某地址曾按哪些指纹过滤过（miss 反馈的触发依据）；坏数据一律返回空集合。 */
+    public Set<String> fpHitsFor(String urlKey) {
+        Set<String> out = new java.util.LinkedHashSet<>();
+        if (urlKey == null || urlKey.isEmpty()) return out;
+        try {
+            String raw = adFilterFpHits();
+            if (raw.isEmpty()) return out;
+            com.google.gson.JsonObject o =
+                    com.google.gson.JsonParser.parseString(raw).getAsJsonObject();
+            com.google.gson.JsonArray a = o.getAsJsonArray(urlKey);
+            if (a == null) return out;
+            for (com.google.gson.JsonElement e : a) {
+                if (e.isJsonPrimitive()) {
+                    String h = e.getAsString();
+                    if (!h.isEmpty()) out.add(h);
+                }
+            }
+        } catch (Exception ignored) { }
+        return out;
+    }
+
+    /** 合并记录命中指纹（同地址去重，超出上限丢最旧地址）。 */
+    public void rememberFpHits(String urlKey, Set<String> hashes) {
+        if (urlKey == null || urlKey.isEmpty() || hashes == null || hashes.isEmpty()) return;
+        try {
+            com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+            String raw = adFilterFpHits();
+            List<String> keys = new ArrayList<>();
+            com.google.gson.JsonObject old = null;
+            if (!raw.isEmpty()) {
+                old = com.google.gson.JsonParser.parseString(raw).getAsJsonObject();
+                for (String k : old.keySet()) keys.add(k);   // Gson JsonObject 保持插入序
+            }
+            // 到期先淘汰最旧的地址，保持最多 FP_HITS_MAX_URLS 条
+            while (keys.size() >= FP_HITS_MAX_URLS) o.remove(keys.remove(0));
+            for (String k : keys) o.add(k, old.get(k));
+
+            Set<String> merged = new java.util.LinkedHashSet<>(fpHitsFor(urlKey));
+            merged.addAll(hashes);
+            com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+            int n = 0;
+            for (String h : merged) {
+                if (n++ >= FP_HITS_MAX_HASHES) break;
+                a.add(h);
+            }
+            o.add(urlKey, a);
+            setAdFilterFpHits(o.toString());
+        } catch (Exception e) {
+            AppLog.w("PrefStore", "rememberFpHits fail: " + e);
+        }
+    }
+
+    /** 地址不再按指纹过滤（或已反馈过 miss）时清除，避免重复误杀计数。 */
+    public void forgetFpHits(String urlKey) {
+        if (urlKey == null || urlKey.isEmpty()) return;
+        try {
+            String raw = adFilterFpHits();
+            if (raw.isEmpty()) return;
+            com.google.gson.JsonObject o =
+                    com.google.gson.JsonParser.parseString(raw).getAsJsonObject();
+            if (o.remove(urlKey) == null) return;
+            setAdFilterFpHits(o.toString());
+        } catch (Exception e) {
+            AppLog.w("PrefStore", "forgetFpHits fail: " + e);
+        }
+    }
+
     // ---------- 源站 18+ 标记表（未成年模式下过滤本地播放历史 / 收藏） ----------
     //
     // 为什么不给每条历史/收藏加「是否 18+」字段：源站才是这件事的唯一权威，条目本来就只用

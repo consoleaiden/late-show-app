@@ -54,6 +54,16 @@ public final class VodSyncApi {
     public interface ApiCb<T> {
         void onOk(T result);
         void onErr(String message);
+
+        /**
+         * 带 HTTP 状态码与 Retry-After（秒）的错误回调。
+         *
+         * <p>default 实现回落到 {@link #onErr(String)}，因此所有既有调用点零改动；
+         * 只有需要按 429 退避的调用方（v1.17.0 广告指纹反馈）才 override。
+         */
+        default void onErr(int httpCode, String message, long retryAfterSec) {
+            onErr(message);
+        }
     }
 
     /** onErr 里 token 失效的统一前缀（UI 据此引导用户去设置页） */
@@ -362,7 +372,9 @@ public final class VodSyncApi {
                 String err = r.code() == 401
                         ? tokenErrMsg(extractError(r.code(), body))
                         : extractError(r.code(), body);
-                MAIN.post(() -> cb.onErr(err));
+                int code = r.code();
+                long retryAfter = parseRetryAfter(r.header("Retry-After"));
+                MAIN.post(() -> cb.onErr(code, err, retryAfter));
                 return;
             }
             // 审计 A-20：HTTP 200 也可能是业务失败（code:0 / ok:false），不能当成功渲染
@@ -444,6 +456,28 @@ public final class VodSyncApi {
             return body.isEmpty() ? "HTTP " + code : body;
         } catch (Exception e) {
             return "HTTP " + code;
+        }
+    }
+
+    /**
+     * 解析 Retry-After（秒数或 HTTP-date），供 429 退避使用；无法解析返回 0。
+     *
+     * <p>纯静态函数（无 Android 依赖），可单测。后端 adfilter 限流返回秒数。
+     */
+    static long parseRetryAfter(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return 0;
+        String s = raw.trim();
+        try {
+            return Math.max(0L, Long.parseLong(s));
+        } catch (NumberFormatException ignored) { }
+        try {
+            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat(
+                    "EEE, dd MMM yyyy HH:mm:ss 'GMT'", java.util.Locale.US);
+            fmt.setTimeZone(java.util.TimeZone.getTimeZone("GMT"));
+            java.util.Date d = fmt.parse(s);
+            return d == null ? 0L : Math.max(0L, (d.getTime() - System.currentTimeMillis()) / 1000L);
+        } catch (Exception e) {
+            return 0L;
         }
     }
 
