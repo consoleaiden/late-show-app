@@ -163,6 +163,9 @@ public class DetailFragment extends Fragment
     /** 播放态状态栏恢复用：进入播放前记下颜色（方案 bgStart / 引擎关闭透明），退出时还原 */
     private boolean statusBarSaved;
     private int savedStatusBarColor, savedNavBarColor;
+    /** 海报态状态栏透明化：进详情前记下 MainActivity 的方案色，详情销毁时还原（多层详情各自记录） */
+    private boolean posterBarOverridden;
+    private int attachSavedStatusBarColor;
     /** 源站 / 更新信息两颗胶囊的底色（代码绘制，随播放态一起过渡；原 XML ripple 仅按压反馈，胶囊不可点） */
     private GradientDrawable chipBgSource, chipBgUpdate;
     /** 信息带配色过渡（0 海报态 → 1 播放态），与海报区高度动画同参同步 */
@@ -453,6 +456,16 @@ public class DetailFragment extends Fragment
         // 旋转时由 onConfigurationChanged 重新调用 applyPlayerGeometry()（MainActivity 已
         // 声明 configChanges，旋转不再重建 Activity，播放不中断）
         applyPlayerGeometry();
+
+        // 海报态系统状态栏透明：本页是边到边，海报本来就该盖到屏幕最上沿，
+        // MainActivity 的方案色状态栏会压住海报顶部一条（真机 2026-11-18 用户反馈）。
+        // 记录进入前的颜色，详情销毁时还原（多层详情叠加时各自记录，互不影响）。
+        android.app.Activity pa = getActivity();
+        if (pa != null && pa.getWindow() != null && !posterBarOverridden) {
+            attachSavedStatusBarColor = pa.getWindow().getStatusBarColor();
+            posterBarOverridden = true;
+            pa.getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+        }
 
         tvTitle.setText(title);
         String srcLabel = sourceName != null && !sourceName.isEmpty() ? sourceName : slug;
@@ -785,6 +798,7 @@ public class DetailFragment extends Fragment
         inlineActive = false;
         cancelMotionAnim();
         releasePlayer();
+        restorePosterStatusBar();
         if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).onDetailClosed(this);
         // 视图动画已结束，直接摘掉 Fragment（列表在原位，卡片本来就露着）
         getParentFragmentManager().beginTransaction()
@@ -1911,7 +1925,17 @@ public class DetailFragment extends Fragment
         if (contentCol != null) contentCol.animate().cancel();
         cancelMotionAnim();
         releasePlayer();
+        restorePosterStatusBar();
         super.onDestroyView();
+    }
+
+    /** 详情页离场：把进详情前的系统状态栏颜色还给宿主（列表页的方案色 / 上一层详情的透明） */
+    private void restorePosterStatusBar() {
+        android.app.Activity a = getActivity();
+        if (a != null && a.getWindow() != null && posterBarOverridden) {
+            posterBarOverridden = false;
+            a.getWindow().setStatusBarColor(attachSavedStatusBarColor);
+        }
     }
 
     private void releasePlayer() {
@@ -2161,11 +2185,11 @@ public class DetailFragment extends Fragment
         // 少了这一步竖屏视频在横屏下会被拉满整条 16:9（真机 2026-11-13）
         applyVideoAspect();
         if (inlineActive) {
-            int shift = playingBandShift();
+            // applyPlayerGeometry 先恢复了海报高度：播放态重新收成「状态栏 + 画面」高
+            applyPlayingHeroHeight(true);
+            movePlayingBand(0f, false);
             com.lateshow.app.util.PlayHeaders.diag("rotate -> posterH=" + posterH
-                    + " pvH=" + playerHeightPx() + " shift=" + shift);
-            movePlayingBand(shift > 0 ? -shift : 0f, false);
-            forceTraversal();
+                    + " pvH=" + playerHeightPx() + " heroH=" + playingHeroHeightPx());
             startPlayingShiftGuard();
         }
     }
@@ -2190,26 +2214,57 @@ public class DetailFragment extends Fragment
         return Math.round(w * 9f / 16f);
     }
 
-    /** 播放态「内容上弹」位移量 = 海报区高度 -（状态栏 + 画面高）；横屏放不下 16:9 时为 0 */
-    private int playingBandShift() {
+    /** 播放态海报区（heroWrap）高度 = 状态栏让位 + 画面高；横屏放不下 16:9 时收成 posterH */
+    private int playingHeroHeightPx() {
         int inset = statusBarInsetPx();
         int pvH = Math.min(playerHeightPx(), Math.max(dp(1), posterH - inset));
-        return Math.max(0, posterH - inset - pvH);
+        return Math.min(posterH, inset + pvH);
     }
 
     /**
-     * 播放中位移守卫：播放态上弹是 translation（见 {@link #startInline}，注意是 -shift），
-     * MotionLayout 在旋转/过渡的任意时刻都可能把子 View 的 translationY 重置回约束值
-     * （真机 2026-11-10：横转竖后黑腔 14 秒不自愈）。每 120ms 校验一次，偏了就拉回；
-     * startInline 延迟 400ms 启动（避开进场动画），leaveInline 停止。
+     * 播放态播放器吸顶：heroWrap 从半屏海报高收成「状态栏 + 16:9 画面」高。
+     * heroBand（wrap_content）随之收短，信息带/内容列由布局自然上移，滚动内容总高度
+     * 同步减少 shift —— 页面底部不再多出「海报高 - 播放器高」的空白（旧 translation
+     * 方案的固有取舍，2026-11-18 用户要求移除）。退出播放时恢复海报高度。
+     *
+     * <p>MotionLayout 会吞 requestLayout、且测量规格不变时复用缓存尺寸 —— 改完 lp
+     * 必须走 {@link #forceTraversal()}（markTreeDirty 清缓存 + DecorView 强制遍历）；
+     * shiftGuard 每 120ms 校验实测高度，被吞再补。
+     */
+    private void applyPlayingHeroHeight(boolean playing) {
+        if (heroWrap == null || getView() == null) return;
+        ViewGroup.LayoutParams lp = heroWrap.getLayoutParams();
+        if (lp == null) return;
+        int want = playing ? playingHeroHeightPx() : Math.max(posterH, 1);
+        if (lp.height != want) {
+            lp.height = want;
+            heroWrap.setLayoutParams(lp);
+            forceTraversal();
+        }
+    }
+
+    /**
+     * 播放中位移守卫：播放态的「内容上弹」已改由布局承担（heroWrap 收成播放态高度，
+     * 见 {@link #applyPlayingHeroHeight}），本守卫只做两件防御：
+     * ① 播放态高度被别的流程（旋转补偿、进场动画等）改回海报高度时重新收短；
+     * ② MotionLayout 复位子 View translationY 的场合清掉残留位移。
+     * 每 120ms 校验一次；startInline 延迟 400ms 启动（避开进场动画），leaveInline 停止。
      */
     private final Runnable shiftGuard = new Runnable() {
         @Override public void run() {
-            if (!inlineActive || infoModule == null || getView() == null) return;
-            int shift = playingBandShift();
-            float want = shift > 0 ? -shift : 0f;
-            if (Math.abs(infoModule.getTranslationY() - want) > 1f) {
-                movePlayingBand(want, false);
+            if (!inlineActive || getView() == null) return;
+            int want = playingHeroHeightPx();
+            if (heroWrap != null && heroWrap.getLayoutParams() != null
+                    && heroWrap.getLayoutParams().height != want) {
+                applyPlayingHeroHeight(true);
+            } else if (heroWrap != null && heroWrap.getHeight() > 0
+                    && Math.abs(heroWrap.getHeight() - want) > 2) {
+                // lp 已改对但实测高度没跟上：布局遍历又被 MotionLayout 吞了，再强制一次
+                forceTraversal();
+            }
+            if ((infoModule != null && infoModule.getTranslationY() != 0f)
+                    || (contentCol != null && contentCol.getTranslationY() != 0f)) {
+                movePlayingBand(0f, false);
             }
             getView().postDelayed(this, 120);
         }
@@ -2224,11 +2279,12 @@ public class DetailFragment extends Fragment
     }
 
     /**
-     * 平移信息模块与内容列，实现播放态的内容上弹 / 退出时的回落。
+     * 清掉信息模块 / 内容列的残留位移。
      *
-     * <p>translation 是渲染属性，不经过布局遍历 —— MotionLayout 吞布局请求也影响不到它
-     * （真机 2026-11-10：页面稳定后 heroWrap 的 lp.height 改了却永不重测，位移方案免疫）。
-     * 代价：播放中滚到页面最底部时会多出一段与位移等高的空白，属可接受的取舍。
+     * <p>历史方案（v1.5.13x）：播放态「内容上弹」用 translationY = -shift 平移实现，
+     * 代价是滚动内容总高度不变，页面底部永远多出一段与位移等高的空白（2026-11-18
+     * 用户反馈要求删掉）。现改为布局承担（见 {@link #applyPlayingHeroHeight}），
+     * 本方法只作为 MotionLayout 复位 translationY 时的防御性清零，调用方一律传 0f。
      */
     private void movePlayingBand(float shift, boolean animate) {
         View[] targets = {infoModule, contentCol};
@@ -2245,10 +2301,10 @@ public class DetailFragment extends Fragment
     }
 
     /**
-     * 退出内嵌播放：播放器收起、信息带/内容列平移回原位。
+     * 退出内嵌播放：播放器收起、海报区恢复原始高度（信息带/内容列由布局回落）。
      *
-     * <p>播放态的上弹是 translation（见 {@link #movePlayingBand}），退出时归零即可，
-     * 不需要滚动补偿 —— 布局尺寸从头到尾没变过。
+     * <p>播放态高度收短是布局改动（见 {@link #applyPlayingHeroHeight}），退出恢复
+     * posterH 即可；海报立即回来，与高度恢复同帧对齐，无中间态。
      */
     private void leaveInline() {
         if (!inlineActive) return;
@@ -2275,9 +2331,11 @@ public class DetailFragment extends Fragment
         // 容器 topMargin 常驻状态栏让位、不随播放态回拨（见 onViewCreated 注释）
         if (bandAnim != null) bandAnim.cancel();
         applyBandTint(0f);      // 海报瞬间回来，信息带配色也跟着瞬间回到深色态
-        // 内容列平移回原位（播放态的上弹是 translation，退出时归零即可）
+        // 内容列回原位（位移清零）+ 海报区高度恢复（buildClosedState 按海报原始高度
+        // 算收起终点，两者必须一致）；海报已立即回来，高度恢复与海报出现同帧对齐
         stopPlayingShiftGuard();
-        movePlayingBand(0f, true);
+        movePlayingBand(0f, false);
+        applyPlayingHeroHeight(false);
         buildClosedState();
     }
 
@@ -2318,11 +2376,12 @@ public class DetailFragment extends Fragment
         }
         // 点「播放」时页面通常停在简介/选集处，滚回顶部让画面可见，否则会以为没播
         scrollPlay.smoothScrollTo(0, 0);
-        // 画面区高度已在初始布局定死（见 onViewCreated 注释），播放态不再改任何布局参数；
-        // 「内容上弹」改用平移：信息模块 + 内容列整体上移画面下方的空隙（translation 是
-        // 渲染属性，不经过布局遍历，MotionLayout 吞不掉）。退出播放时平移回 0。
-        int shift = playingBandShift();
-        if (shift > 0) movePlayingBand(-shift, true);
+        // 播放器吸顶：海报区收成「状态栏 + 画面」高（布局承担上移，见
+        // applyPlayingHeroHeight），信息带/内容列自然紧跟画面之下，滚动内容总高度
+        // 同步收短 —— 页面底部不再多出「海报高 - 播放器高」的空白。
+        // 位移清零防残留，随后 shiftGuard 每 120ms 校验高度与位移。
+        movePlayingBand(0f, false);
+        applyPlayingHeroHeight(true);
         // 位移守卫：MotionLayout 任何时候清掉 translationY 都会被拉回（含旋转场景）
         startPlayingShiftGuard();
         if (player == null) {
@@ -3063,6 +3122,13 @@ public class DetailFragment extends Fragment
         }
         // 信息带立即跟上新底色（不必等下一次播放态迁移）
         if (infoBg != null) applyBandTint(bandTint);
+        // MainActivity.applyRuntimeTheme 会重设系统状态栏为方案色：详情页在场时
+        // 按当前状态覆盖回去（海报态透明 / 播放态 ink900）
+        android.app.Activity ta = getActivity();
+        if (ta != null && ta.getWindow() != null && posterBarOverridden) {
+            ta.getWindow().setStatusBarColor(inlineActive
+                    ? getColor(R.color.ink900) : android.graphics.Color.TRANSPARENT);
+        }
         // 选集 / 线路 / 明星 Tab 的选中底、源站胶囊圆点、主按钮随新方案重绘
         if (epGrid != null) renderEpisodes();
         if (lines != null && lines.getAdapter() != null) lines.getAdapter().notifyDataSetChanged();
