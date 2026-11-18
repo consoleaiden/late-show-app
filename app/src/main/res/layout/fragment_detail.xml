@@ -190,10 +190,9 @@
                         </FrameLayout>
 
                         <!-- 信息模块：源站 / 更新信息 / 片名 / 分类·日期 / 演员 / 标签
-                             底色两态（DetailFragment#applyBandTint）：
-                               · 海报态 = heroBand 固定深色，下端直接接内容区（不做渐变）；
-                               · 播放态 = ink900 略深一档（比简介区深 5%），形成信息区/内容区层次。
-                             两种状态之间底色与文字色一起做过渡，见 startInline。 -->
+                             底色恒为 heroBand 深色（2026-11-18 起播放态不再切换配色，
+                             播放态与海报态同色；播放中系统状态栏也用 heroBand，
+                             见 DetailFragment#applyPlayingStatusBar）。 -->
                         <LinearLayout
                             android:id="@+id/infoModule"
                             android:layout_width="match_parent"

@@ -158,7 +158,7 @@ public class DetailFragment extends Fragment
     private ColorDrawable pageBg;
     /** 信息带底色（海报 + 信息模块）：同样在收起时淡出，否则会留一块比卡片大的灰板 */
     private ColorDrawable bandBg;
-    /** 信息模块自己的底色：海报态 = heroBand 深色，播放态 = ink900 略深一档（与简介区形成层次） */
+    /** 信息模块自己的底色：海报态/播放态恒为 heroBand 深色（2026-11-18 起不再随播放态切换） */
     private ColorDrawable infoBg;
     /** 播放态状态栏恢复用：进入播放前记下颜色（方案 bgStart / 引擎关闭透明），退出时还原 */
     private boolean statusBarSaved;
@@ -1954,9 +1954,10 @@ public class DetailFragment extends Fragment
     }
 
     /**
-     * 播放态系统栏：视频画面上下留出的系统栏底色直接可见。播放中把状态栏与导航栏
-     * 都刷成与简介区同源的浅底（ink900）+ 状态栏深色图标，不再露出方案底色
-     * （如葡萄冰茶的紫色）造成的上下两块突兀色块；退出播放恢复进入前的颜色
+     * 播放态系统栏：视频画面上下的系统栏底色直接可见。播放中状态栏刷成与信息带
+     * 同色的 heroBand 深灰 + 白色图标（2026-11-18 用户要求播放态与海报态同色），
+     * 导航栏保持与内容区同源的 ink900，不再露出方案底色（如葡萄冰茶的紫色）；
+     * 退出播放恢复进入前的颜色
      * （状态栏方案 bgStart / 引擎关闭透明；导航栏方案色 + navAlpha）与白色图标。
      */
     private void applyPlayingStatusBar(boolean playing) {
@@ -1967,9 +1968,11 @@ public class DetailFragment extends Fragment
             savedStatusBarColor = w.getStatusBarColor();
             savedNavBarColor = w.getNavigationBarColor();
             statusBarSaved = true;
-            w.setStatusBarColor(getColor(R.color.ink900));
+            // 状态栏与信息带同色（heroBand 深灰）：视频上方的让位条与信息带连成一体；
+            // 深底配白色图标。导航栏保持与内容区同源（ink900）。
+            w.setStatusBarColor(getColor(R.color.heroBand));
             w.setNavigationBarColor(getColor(R.color.ink900));
-            setLightStatusBarIcons(true);
+            setLightStatusBarIcons(false);
         } else if (statusBarSaved) {
             statusBarSaved = false;
             w.setStatusBarColor(savedStatusBarColor);
@@ -2069,9 +2072,9 @@ public class DetailFragment extends Fragment
     private void applyBandTint(float t) {
         t = Math.max(0f, Math.min(1f, t));
         bandTint = t;
-        // 播放态信息带底色：与简介区（ink900，contentCol 同源）相比略深一档，
-        // 形成信息区 / 内容区的功能划分层次。向黑混 5%：浅色 #F2F3F6 → #E6E7EA，
-        // 夜间 ink900 本身是深灰，同样微深一档，明暗主题都成立。
+        // 2026-11-18 起信息带配色不再随播放态切换（播放态与海报态同为 heroBand 深色
+        // + 白字，系统状态栏也用 heroBand），bandTint 恒为 0，本方法只做兜底归零；
+        // 下面的过渡逻辑保留，便于日后需要恢复两态配色时直接启用。
         int bandOnPage = com.lateshow.app.theme.ThemeEngine.mix(
                 getColor(R.color.ink900), 0xFF000000, 0.05f);
         if (infoBg != null) infoBg.setColor(colorLerpTo(t, R.color.heroBand, bandOnPage));
@@ -2330,7 +2333,7 @@ public class DetailFragment extends Fragment
         }
         // 容器 topMargin 常驻状态栏让位、不随播放态回拨（见 onViewCreated 注释）
         if (bandAnim != null) bandAnim.cancel();
-        applyBandTint(0f);      // 海报瞬间回来，信息带配色也跟着瞬间回到深色态
+        applyBandTint(0f);      // 信息带配色已恒为海报态（见 startInline 注释），这里兜底归零
         // 内容列回原位（位移清零）+ 海报区高度恢复（buildClosedState 按海报原始高度
         // 算收起终点，两者必须一致）；海报已立即回来，高度恢复与海报出现同帧对齐
         stopPlayingShiftGuard();
@@ -2367,9 +2370,10 @@ public class DetailFragment extends Fragment
         // 确保盖在海报与渐变之上（某些 ROM 上子 View 的合成顺序不完全按布局顺序）
         playerContainer.bringToFront();
         btnPlayCover.setVisibility(View.GONE);
-        // 播放态：海报随即淡出，让位露出的那条由 heroBand 底色填充（深色，状态栏图标仍可读）。
-        // 画面顶部让位与高度在初始布局已定死，这里不再动布局（见 onViewCreated 注释）。
-        animateBandTint(1f);   // 信息带同时淡入「内容区同色 + 主题文字」
+        // 播放态：海报随即淡出，让位露出的那条由 heroBand 底色填充。
+        // 信息带背景/文字配色不再随播放态切换（2026-11-18 用户要求：播放态与海报态
+        // 同为 heroBand 深色 + 白字，系统状态栏也用 heroBand，见 applyPlayingStatusBar），
+        // bandTint 恒为 0，animateBandTint 退役。
         if (cover != null) {
             cover.animate().cancel();
             cover.animate().alpha(0f).setDuration(180).start();
