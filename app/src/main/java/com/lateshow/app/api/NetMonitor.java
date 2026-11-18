@@ -68,6 +68,8 @@ public final class NetMonitor {
         lastHandled = now;
         SmartDns.invalidate();
         VodSyncApi.onNetworkChanged();
+        // 图片访问的「直连 / 代理谁快」结论与网络环境强相关，换网络后必须重新测速
+        com.lateshow.app.util.CoverProxy.clearSpeedMap();
         for (Runnable r : listeners) {
             try {
                 r.run();

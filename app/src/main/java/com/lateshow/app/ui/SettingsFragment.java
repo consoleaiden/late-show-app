@@ -42,7 +42,7 @@ public class SettingsFragment extends Fragment
     private TextView segModeSync, segModeStatic, tvModeState;
     private TextView tvSavedCount, tvSavedEmpty, tvSourceLatency;
     private View consoleEntry;
-    private LinearLayout savedList, proxySection, proxyList;
+    private LinearLayout savedList, proxyList;
     private Switch swStreamTools;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -57,11 +57,11 @@ public class SettingsFragment extends Fragment
 
     /** 手风琴面板：同一时间只展开一个（同步控制台独立成页后不再占用一个面板） */
     private static final int[] PANEL_HEADERS = {
-            R.id.hdrMode, R.id.hdrSource, R.id.hdrPlay, R.id.hdrCache, R.id.hdrApp};
+            R.id.hdrMode, R.id.hdrSource, R.id.hdrPlay, R.id.hdrProxy, R.id.hdrCache, R.id.hdrApp};
     private static final int[] PANEL_BODIES = {
-            R.id.panelMode, R.id.panelSource, R.id.panelPlay, R.id.panelCache, R.id.panelApp};
+            R.id.panelMode, R.id.panelSource, R.id.panelPlay, R.id.panelProxy, R.id.panelCache, R.id.panelApp};
     private static final int[] PANEL_ARROWS = {
-            R.id.arMode, R.id.arSource, R.id.arPlay, R.id.arCache, R.id.arApp};
+            R.id.arMode, R.id.arSource, R.id.arPlay, R.id.arProxy, R.id.arCache, R.id.arApp};
 
     /** 初始化手风琴：点头部切换，展开一个自动收起其他（默认展开第一个） */
     private void setupAccordion(View root) {
@@ -163,7 +163,6 @@ public class SettingsFragment extends Fragment
         segModeSync = v.findViewById(R.id.segModeSync);
         segModeStatic = v.findViewById(R.id.segModeStatic);
         tvModeState = v.findViewById(R.id.tvModeState);
-        proxySection = v.findViewById(R.id.proxySection);
         proxyList = v.findViewById(R.id.proxyList);
         segModeSync.setOnClickListener(x -> switchDataSource(com.lateshow.app.api.Catalog.MODE_SYNC));
         segModeStatic.setOnClickListener(x -> switchDataSource(com.lateshow.app.api.Catalog.MODE_STATIC));
@@ -718,21 +717,46 @@ public class SettingsFragment extends Fragment
 
     // ==================== 直连模式代理访问 API ====================
 
-    /** 渲染代理列表；直连模式显示，NAS 模式隐藏 */
+    /**
+     * 渲染代理列表：圆点 = 当前使用（参照「已保存播放源」列表的同一语言），
+     * 非使用中行圆点 INVISIBLE 占位保持对齐；当前行隐藏「使用」按钮。
+     */
     private void renderProxies() {
         if (proxyList == null || !isAdded()) return;
         List<String> list = PrefStore.get().proxies();
+        String active = PrefStore.get().activeProxy();
         proxyList.removeAllViews();
         for (int i = 0; i < list.size(); i++) {
             final int idx = i;
             View row = getLayoutInflater().inflate(R.layout.item_proxy, proxyList, false);
-            row.findViewById(R.id.proxyDot).setBackground(
-                    com.lateshow.app.theme.ThemeEngine.accentDotBg(requireContext()));
-            ((TextView) row.findViewById(R.id.pUrl)).setText(list.get(i));
+            String url = list.get(i);
+            ((TextView) row.findViewById(R.id.pUrl)).setText(url);
+            boolean isActive = url != null && url.equals(active);
+            View dot = row.findViewById(R.id.proxyDot);
+            dot.setBackground(com.lateshow.app.theme.ThemeEngine.accentDotBg(requireContext()));
+            dot.setVisibility(isActive ? View.VISIBLE : View.INVISIBLE);
+            TextView btnUse = (TextView) row.findViewById(R.id.btnUseProxy);
+            btnUse.setTextColor(
+                    com.lateshow.app.theme.ThemeEngine.accentTextColor(requireContext()));
+            btnUse.setVisibility(isActive ? View.GONE : View.VISIBLE);
+            btnUse.setOnClickListener(v -> useProxy(idx));
             row.findViewById(R.id.btnEditProxy).setOnClickListener(v -> showProxyDialog(idx));
             row.findViewById(R.id.btnDelProxy).setOnClickListener(v -> confirmDeleteProxy(idx));
             proxyList.addView(row);
         }
+    }
+
+    /**
+     * 切换「当前使用」的代理：立即生效（资源站直连的代理 API + 图片访问的代理 API），
+     * 并清空图片测速结论 —— 换了代理，旧的「直连 / 代理谁快」结论不再适用。
+     */
+    private void useProxy(final int index) {
+        List<String> list = PrefStore.get().proxies();
+        if (index < 0 || index >= list.size()) return;
+        PrefStore.get().setActiveProxy(list.get(index));
+        com.lateshow.app.util.CoverProxy.clearSpeedMap();
+        renderProxies();
+        toast("已切换代理，图片访问将重新测速");
     }
 
     /** 新增（index=-1）/ 修改代理，校验 http(s) 前缀 */
@@ -755,8 +779,16 @@ public class SettingsFragment extends Fragment
                     String url = input.getText().toString().trim();
                     String err = PrefStore.validateProxy(url);
                     if (err != null) { toast(err); return; }
+                    String oldUrl = editing ? list.get(index) : null;
+                    String oldActive = PrefStore.get().activeProxy();
                     if (editing) list.set(index, url); else list.add(url);
                     PrefStore.get().setProxies(list);
+                    // 编辑的正是当前代理且地址变了：标记跟随到新地址（setProxies 的回落是第一个，
+                    // 这里显式纠正），并清测速结论
+                    if (oldUrl != null && oldUrl.equals(oldActive) && !url.equals(oldUrl)) {
+                        PrefStore.get().setActiveProxy(url);
+                        com.lateshow.app.util.CoverProxy.clearSpeedMap();
+                    }
                     renderProxies();
                     toast(editing ? "代理已更新，立即生效" : "代理已添加，立即生效");
                 })
@@ -773,8 +805,13 @@ public class SettingsFragment extends Fragment
                 .setMessage("确认删除代理？\n" + list.get(index)
                         + "\n\n删除后该代理不再参与兜底；列表清空后直连失败将无代理可用。")
                 .setPositiveButton("删除", (d, w) -> {
+                    String oldActive = PrefStore.get().activeProxy();
                     list.remove(index);
                     PrefStore.get().setProxies(list);
+                    // 删掉的正是当前代理：标记回落到第一个（setProxies 内完成），测速结论作废
+                    if (!oldActive.equals(PrefStore.get().activeProxy())) {
+                        com.lateshow.app.util.CoverProxy.clearSpeedMap();
+                    }
                     renderProxies();
                     toast("已删除");
                 })
@@ -867,10 +904,6 @@ public class SettingsFragment extends Fragment
             if (consoleEntry != null) consoleEntry.setVisibility(View.GONE);
             android.widget.ImageView ic = root.findViewById(R.id.icSourceHeader);
             if (ic != null) ic.setColorFilter(getColor(R.color.t3));
-        }
-        if (proxySection != null) {
-            proxySection.setVisibility(st ? View.VISIBLE : View.GONE);
-            if (st) renderProxies();
         }
     }
 

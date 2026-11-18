@@ -408,8 +408,11 @@ public final class PrefStore {
             "https://mconfig.viptv.work/?url=",
     };
 
+    private static final String KEY_PROXY_LIST = "proxy_list";
+    private static final String KEY_ACTIVE_PROXY = "active_proxy";
+
     public List<String> proxies() {
-        String s = sp.getString("proxy_list", null);
+        String s = sp.getString(KEY_PROXY_LIST, null);
         if (s != null) {
             try {
                 List<String> list = gson.fromJson(s, new TypeToken<List<String>>() {}.getType());
@@ -421,8 +424,41 @@ public final class PrefStore {
         return def;
     }
 
+    /**
+     * 保存代理列表并同步「当前使用」标记：被删 / 被改到不在新列表里时回落到第一个；
+     * 列表清空则标记一并清空。旧数据没有标记，首次读取由 {@link #activeProxy()} 默认取第一个。
+     */
     public void setProxies(List<String> list) {
-        sp.edit().putString("proxy_list", gson.toJson(list == null ? new ArrayList<>() : list)).apply();
+        List<String> v = list == null ? new ArrayList<String>() : list;
+        String cur = sp.getString(KEY_ACTIVE_PROXY, "");
+        if (v.isEmpty()) {
+            cur = "";
+        } else if (cur == null || cur.isEmpty() || !v.contains(cur)) {
+            cur = v.get(0);
+        }
+        sp.edit()
+                .putString(KEY_PROXY_LIST, gson.toJson(v))
+                .putString(KEY_ACTIVE_PROXY, cur)
+                .apply();
+    }
+
+    /**
+     * 当前使用的代理 API（设置页圆点标记的那个）：同时作为「资源站直连」的代理 API 与
+     * 「图片访问」的代理 API。旧数据无标记时默认取列表第一个；列表为空返回空串。
+     */
+    public String activeProxy() {
+        List<String> list = proxies();
+        if (list.isEmpty()) return "";
+        String cur = sp.getString(KEY_ACTIVE_PROXY, "");
+        if (cur != null && !cur.isEmpty() && list.contains(cur)) return cur;
+        return list.get(0);
+    }
+
+    /** 标记某个代理为「当前使用」；只接受列表中已存在的地址，不存在则忽略 */
+    public void setActiveProxy(String url) {
+        List<String> list = proxies();
+        if (url == null || url.isEmpty() || !list.contains(url)) return;
+        sp.edit().putString(KEY_ACTIVE_PROXY, url).apply();
     }
 
     public static String validateProxy(String url) {

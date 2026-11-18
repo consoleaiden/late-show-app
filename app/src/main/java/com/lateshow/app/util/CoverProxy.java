@@ -1,148 +1,209 @@
 package com.lateshow.app.util;
 
-import android.content.Context;
-import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.ImageView;
 
-import androidx.annotation.Nullable;
-
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.DecodeFormat;
-import com.bumptech.glide.load.engine.GlideException;
-import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.RequestOptions;
-import com.bumptech.glide.request.target.Target;
 import com.lateshow.app.R;
 import com.lateshow.app.api.StaticCatalog;
 import com.lateshow.app.store.PrefStore;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 /**
- * 封面图代理加速加载器。
+ * 封面图访问方式选择器（本地测速）。
  *
- * <p>封面源站多在公网资源站，直连时部分 host 出图很慢（列表整屏灰块）。策略：
+ * <p>每个资源站的图片访问速度不一且不稳定，故本地按 host 建立「测速结论」：
  * <ul>
- *   <li>先直连加载并计时，<b>500ms 内没出图</b>就把该 host 记入慢站点表，并立即改走
- *       「资源站直连」的代理访问 API（{@link PrefStore#proxies()} 列表 +
- *       {@link StaticCatalog#proxyUrlOf} 把封面地址编码进代理 url 参数）——
- *       与 API 请求共用同一套代理配置，设置页可维护、即时生效；</li>
- *   <li>慢站点 TTL 内的后续封面直接走代理，不再等 500ms；</li>
- *   <li>代理按列表顺序逐个尝试，全部失败回退直连；</li>
- *   <li>直连已出图（成功或失败都算）则定时器作废，不做任何切换；</li>
- *   <li>RecyclerView 复用时，旧绑定挂在该 ImageView 上的定时任务会被撤掉，
- *       代理失败链也会按「视图当前 URL」校验，不会把旧图灌进复用后的卡片。</li>
+ *   <li>首次访问某源站时，用第一张图片对「直连」与「设置中当前使用的代理」
+ *       并发测速（各 1 秒超时），<b>先成功者胜出</b>，后续该源站的图片都沿用
+ *       这个方式；</li>
+ *   <li>两者都失败 / 超时时默认直连（与旧行为一致，不阻塞出图）；</li>
+ *   <li>测速结论只存在于进程内存：<b>重启 App / 切换网络环境 / 切换当前代理</b>
+ *       时清空（见 {@link #clearSpeedMap()}），满足「重新测速」的要求；</li>
+ *   <li>没有配置可用代理时直接直连，不测速；</li>
+ *   <li>RecyclerView 复用时按视图当前 URL 校验，旧绑定不会把结论或图灌进新卡片。</li>
  * </ul>
  *
- * <p>500ms 的代价：慢 host 上第一张封面会先经历一次被取消的直连请求，随后代理出图；
- * 快 host 无任何额外开销（500ms 定时器空转一次）。
+ * <p>测速请求只判「能否在 1 秒内拿到响应」，不读取响应体，避免额外流量。
  */
 public final class CoverProxy {
 
-    /** 直连出图超时：超过即转代理加速 */
-    private static final long TIMEOUT_MS = 500L;
-    /** 慢站点记忆时长：TTL 内该 host 的封面直接走代理 */
-    private static final long SLOW_TTL_MS = 10 * 60 * 1000L;
-    /** 慢站点表上限：超过即清理过期项（同 StaticCatalog.cleanupSlow 的思路） */
-    private static final int MAX_SLOW = 128;
-
+    /** 单张图片测速超时（用户要求 1 秒） */
+    private static final long SPEED_TIMEOUT_MS = 1000L;
     private static final String TAG = "CoverProxy";
-    private static final Map<String, Long> slowUntil = new ConcurrentHashMap<>();
+    private static final String UA =
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) "
+                    + "Chrome/120 Mobile Safari/537.36";
+
+    /**
+     * 各资源站的图片访问方式（进程内，随重启 / 网络变化 / 切换代理清空）：
+     * host -&gt; {@code true} = 走当前代理，{@code false} = 直连。
+     */
+    private static final Map<String, Boolean> speedMode = new ConcurrentHashMap<>();
+    /** 正在测速的 host：同一源站的多张图并发到达时只测一次，其余等结论 */
+    private static final java.util.Set<String> racing = ConcurrentHashMap.newKeySet();
+    /** 测速在途时到达的加载请求：结论出来后统一按结论加载 */
+    private static final Map<String, List<Runnable>> pending = new ConcurrentHashMap<>();
+
+    /** 主线程：Glide 的 into() 只能在主线程调用，测速回调在 OkHttp 线程需切回 */
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
+    /** 测速专用客户端：整体 1 秒超时，失败即判负 */
+    private static final OkHttpClient SPEED_HTTP = new OkHttpClient.Builder()
+            .connectTimeout(SPEED_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .readTimeout(SPEED_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .writeTimeout(SPEED_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .callTimeout(SPEED_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .build();
+
     private CoverProxy() { }
+
+    /** 清空测速结论：网络变化 / 切换当前代理时调用，之后首次访问各源站重新测速 */
+    public static void clearSpeedMap() {
+        speedMode.clear();
+    }
 
     /**
      * 加载封面到 ImageView。placeholder / error 用调用方原配色资源，其余 Glide 选项
      * （centerCrop / RGB_565 / 无动画）与原各处加载保持一致。
      */
     public static void load(ImageView iv, String url, int placeholderRes, int errorRes) {
-        // 视图复用：撤掉上一次绑定挂在该视图上的定时任务
-        Runnable old = (Runnable) iv.getTag(R.id.tag_cover_task);
-        if (old != null) { MAIN.removeCallbacks(old); iv.setTag(R.id.tag_cover_task, null); }
         iv.setTag(R.id.tag_cover_url, url);
-
-        Context c = iv.getContext();
-        if (url == null || url.length() == 0) {
+        if (url == null || url.isEmpty()) {
             iv.setImageResource(placeholderRes);
             return;
         }
-        List<String> proxies = PrefStore.get().proxies();
-        if (proxies.isEmpty()) {
-            AppLog.d(TAG, "代理列表为空，仅直连 " + hostOf(url));
-            direct(iv, url, placeholderRes, errorRes, null);
-            return;
-        }
         final String host = hostOf(url);
-        if (isSlow(host)) {
-            viaProxies(iv, url, proxies, 0, placeholderRes, errorRes);
+        Boolean mode = speedMode.get(host);
+        if (mode != null) {
+            loadMode(iv, url, mode, placeholderRes, errorRes);
             return;
         }
-        // 直连计时：500ms 内没出图（成功/失败都算出图）就转代理
-        final boolean[] settled = {false};
-        RequestListener<Drawable> watcher = new RequestListener<Drawable>() {
-            @Override public boolean onLoadFailed(@Nullable GlideException e, Object model,
-                    Target<Drawable> target, boolean isFirstResource) {
-                settled[0] = true;
-                return false;   // 不消费：error 占位图照常显示
-            }
-            @Override public boolean onResourceReady(Drawable resource, Object model,
-                    Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
-                settled[0] = true;
-                return false;
-            }
-        };
-        direct(iv, url, placeholderRes, errorRes, watcher);
-        Runnable switchTask = () -> {
-            iv.setTag(R.id.tag_cover_task, null);
-            if (settled[0]) return;
-            if (!url.equals(iv.getTag(R.id.tag_cover_url))) return;   // 已被复用绑定别的图
-            AppLog.d(TAG, "封面直连超 " + TIMEOUT_MS + "ms，转代理 " + host);
-            markSlow(host);
-            viaProxies(iv, url, proxies, 0, placeholderRes, errorRes);
-        };
-        iv.setTag(R.id.tag_cover_task, switchTask);
-        MAIN.postDelayed(switchTask, TIMEOUT_MS);
+        // 首次访问该源站：直连 vs 当前代理并发测速；同 host 并发到达只测一次
+        if (!racing.add(host)) {
+            pending.computeIfAbsent(host, k -> new ArrayList<Runnable>()).add(
+                    () -> {
+                        Boolean m = speedMode.get(host);
+                        loadMode(iv, url, m != null && m, placeholderRes, errorRes);
+                    });
+            return;
+        }
+        final String active = PrefStore.get().activeProxy();
+        if (active == null || active.isEmpty()) {
+            // 无可用代理：直连，并记为直连（代理列表变更后会重新测速）
+            speedMode.put(host, Boolean.FALSE);
+            finishRace(host);
+            loadMode(iv, url, false, placeholderRes, errorRes);
+            return;
+        }
+        race(iv, url, host, active, placeholderRes, errorRes);
     }
 
-    /** 代理失败链：按列表顺序逐个尝试，全部失败回退直连 */
-    private static void viaProxies(ImageView iv, String url, List<String> proxies, int idx,
-                                   int placeholderRes, int errorRes) {
-        if (!url.equals(iv.getTag(R.id.tag_cover_url))) return;   // 视图已被复用
-        if (idx >= proxies.size()) {
-            AppLog.d(TAG, "代理全部失败，回退直连 " + hostOf(url));
-            direct(iv, url, placeholderRes, errorRes, null);
-            return;
+    /** 测速结束（无论结论）：解除在途标记，把等待中的加载请求按结论放行 */
+    private static void finishRace(String host) {
+        racing.remove(host);
+        List<Runnable> q = pending.remove(host);
+        if (q == null) return;
+        for (Runnable r : q) MAIN.post(r);
+    }
+
+    /**
+     * 并发测速：同一张图分别「直连」与「经当前代理」请求（各 1 秒超时），
+     * 先成功者胜出并记忆；都失败 / 超时则默认直连。
+     */
+    private static void race(final ImageView iv, final String url, final String host,
+                             final String active, final int placeholderRes, final int errorRes) {
+        final AtomicBoolean settled = new AtomicBoolean(false);
+        final AtomicInteger remain = new AtomicInteger(2);
+        final String proxyUrl = StaticCatalog.proxyUrlOf(active, url);
+        final Call[] issued = new Call[2];
+        final Settler[] box = new Settler[1];
+
+        Callback directCb = new Callback() {
+            @Override public void onFailure(Call call, IOException e) { box[0].settle(false, false); }
+            @Override public void onResponse(Call call, Response resp) {
+                try (Response r = resp) { box[0].settle(false, r.isSuccessful()); }
+                catch (Exception e) { box[0].settle(false, false); }
+            }
+        };
+        Callback proxyCb = new Callback() {
+            @Override public void onFailure(Call call, IOException e) { box[0].settle(true, false); }
+            @Override public void onResponse(Call call, Response resp) {
+                try (Response r = resp) { box[0].settle(true, r.isSuccessful()); }
+                catch (Exception e) { box[0].settle(true, false); }
+            }
+        };
+
+        box[0] = (useProxy, ok) -> {
+            if (ok) {
+                if (!settled.compareAndSet(false, true)) return;
+                speedMode.put(host, useProxy);
+                AppLog.d(TAG, "测速 " + host + "：" + (useProxy ? "代理" : "直连") + " 更快");
+                Call other = issued[useProxy ? 1 : 0];
+                if (other != null) other.cancel();
+                finishRace(host);
+                MAIN.post(() -> loadMode(iv, url, useProxy, placeholderRes, errorRes));
+            } else if (remain.decrementAndGet() == 0) {
+                if (!settled.compareAndSet(false, true)) return;
+                speedMode.put(host, Boolean.FALSE);
+                AppLog.d(TAG, "测速 " + host + "：直连与代理均失败，默认直连");
+                finishRace(host);
+                MAIN.post(() -> loadMode(iv, url, false, placeholderRes, errorRes));
+            }
+        };
+
+        issued[0] = newSpeedCall(url);
+        issued[1] = newSpeedCall(proxyUrl);
+        issued[0].enqueue(directCb);
+        issued[1].enqueue(proxyCb);
+    }
+
+    /** 测速仲裁：useProxy 表示胜出来源（false 直连 / true 代理），ok 表示是否成功 */
+    private interface Settler {
+        void settle(boolean useProxy, boolean ok);
+    }
+
+    private static Call newSpeedCall(String url) {
+        return SPEED_HTTP.newCall(new Request.Builder()
+                .url(url)
+                .header("User-Agent", UA)
+                .header("Accept", "image/*,*/*")
+                .build());
+    }
+
+    /** 按测速结论加载：代理方式用当前代理编码地址；视图已被复用则放弃 */
+    private static void loadMode(ImageView iv, String url, boolean useProxy,
+                                 int placeholderRes, int errorRes) {
+        if (!url.equals(iv.getTag(R.id.tag_cover_url))) return;
+        String target = url;
+        if (useProxy) {
+            String active = PrefStore.get().activeProxy();
+            if (active == null || active.isEmpty()) {
+                useProxy = false;
+            } else {
+                target = StaticCatalog.proxyUrlOf(active, url);
+            }
         }
-        String purl = StaticCatalog.proxyUrlOf(proxies.get(idx), url);
-        Glide.with(iv).load(purl)
+        Glide.with(iv).load(target)
                 .apply(opts(placeholderRes, errorRes))
-                .listener(new RequestListener<Drawable>() {
-                    @Override public boolean onLoadFailed(@Nullable GlideException e, Object model,
-                            Target<Drawable> target, boolean isFirstResource) {
-                        AppLog.d(TAG, "代理 " + idx + " 失败，尝试下一个：" + e);
-                        viaProxies(iv, url, proxies, idx + 1, placeholderRes, errorRes);
-                        return true;   // 消费错误：不闪 error 占位图，链式尝试下一个代理
-                    }
-                    @Override public boolean onResourceReady(Drawable resource, Object model,
-                            Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
-                        return false;
-                    }
-                })
                 .into(iv);
-    }
-
-    private static void direct(ImageView iv, String url, int placeholderRes, int errorRes,
-                               RequestListener<Drawable> listener) {
-        com.bumptech.glide.RequestBuilder<Drawable> b = Glide.with(iv).load(url)
-                .apply(opts(placeholderRes, errorRes));
-        if (listener != null) b = b.listener(listener);
-        b.into(iv);
     }
 
     private static RequestOptions opts(int placeholderRes, int errorRes) {
@@ -154,34 +215,7 @@ public final class CoverProxy {
                 .dontAnimate();
     }
 
-    // ---------------- 慢站点记忆（进程级） ----------------
-
     private static String hostOf(String url) {
         try { return java.net.URI.create(url).getHost(); } catch (Exception e) { return url; }
-    }
-
-    private static boolean isSlow(String host) {
-        cleanup();
-        Long until = slowUntil.get(host);
-        return until != null && until > System.currentTimeMillis();
-    }
-
-    private static void markSlow(String host) {
-        slowUntil.put(host, System.currentTimeMillis() + SLOW_TTL_MS);
-        cleanup();
-    }
-
-    private static void cleanup() {
-        if (slowUntil.size() < MAX_SLOW) return;
-        long now = System.currentTimeMillis();
-        slowUntil.entrySet().removeIf(e -> e.getValue() == null || e.getValue() <= now);
-        while (slowUntil.size() > MAX_SLOW) {
-            String oldest = null; long min = Long.MAX_VALUE;
-            for (Map.Entry<String, Long> e : slowUntil.entrySet()) {
-                if (e.getValue() != null && e.getValue() < min) { min = e.getValue(); oldest = e.getKey(); }
-            }
-            if (oldest == null) break;
-            slowUntil.remove(oldest);
-        }
     }
 }

@@ -151,46 +151,6 @@
                     android:lineSpacingMultiplier="1.5"
                     android:text="NAS 同步库：走自己的 VodSync 聚合库，速度快、数据全，需要 NAS 在线。\n资源站直连：从公开资源站目录直接取片，NAS 关机也能正常浏览与播放。" />
 
-                <!-- 代理访问 API（仅直连模式显示）：源站直连失败/过慢时按顺序尝试 -->
-                <LinearLayout
-                    android:id="@+id/proxySection"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:orientation="vertical"
-                    android:visibility="gone">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
-
-                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="代理访问 API" />
-
-                        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-
-                        <TextView
-                            android:id="@+id/btnAddProxy"
-                            style="@style/Smbtn"
-                            android:text="+ 新增代理"
-                            android:textColor="@color/accText" />
-                    </LinearLayout>
-
-                    <TextView
-                        style="@style/MetaLabel"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="源站直连失败或过慢时，按列表顺序依次尝试以下代理（请求方式：代理地址?url=目标地址）" />
-
-                    <LinearLayout
-                        android:id="@+id/proxyList"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:orientation="vertical" />
-                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 
@@ -908,6 +868,85 @@
                         android:layout_marginLeft="10dp"
                         android:contentDescription="参与规则内测" />
                 </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 代理访问 API（独立模块，位于「播放偏好」下方）：圆点标记的代理为当前使用，
+             同时作为「资源站直连」与「图片访问」的代理 API -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/hdrProxy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="@null">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_static"
+                    app:tint="@color/t3"
+                    android:contentDescription="代理访问 API" />
+
+                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="代理访问 API" />
+
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/arProxy"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_chevron_down"
+                    app:tint="@color/t3"
+                    android:contentDescription="展开" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/panelProxy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="代理列表" />
+
+                    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/btnAddProxy"
+                        style="@style/Smbtn"
+                        android:text="+ 新增代理"
+                        android:textColor="@color/accText" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/MetaLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:lineSpacingMultiplier="1.5"
+                    android:text="圆点标记的代理为当前使用，同时用于「资源站直连」与「图片访问」；图片访问会在首次访问各源站时自动测速（1 秒超时），后续该源站图片沿用更快的方式。请求方式：代理地址?url=目标地址" />
+
+                <LinearLayout
+                    android:id="@+id/proxyList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
             </LinearLayout>
         </LinearLayout>
 

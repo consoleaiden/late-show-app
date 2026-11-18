@@ -650,10 +650,16 @@ public final class StaticCatalog implements Catalog {
         });
     }
 
-    /** 当前代理列表（设置页可维护，即时生效） */
+    /**
+     * 当前生效的代理：设置页圆点标记的那一个（同时作为图片访问的代理 API）。
+     * 代理 API 由用户单选生效，不再按整个列表顺序尝试；旧数据无标记时 PrefStore 默认取第一个。
+     */
     private static List<String> proxies() {
         try {
-            return com.lateshow.app.store.PrefStore.get().proxies();
+            String active = com.lateshow.app.store.PrefStore.get().activeProxy();
+            List<String> out = new ArrayList<>();
+            if (active != null && !active.isEmpty()) out.add(active);
+            return out;
         } catch (Exception e) {
             List<String> def = new ArrayList<>();
             for (String p : com.lateshow.app.store.PrefStore.DEFAULT_PROXIES) def.add(p);
