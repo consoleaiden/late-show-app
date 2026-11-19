@@ -761,7 +761,53 @@
                         android:contentDescription="未成年模式" />
                 </LinearLayout>
 
-                <!-- 播放偏好：智能去广告（App 端 HLS 播放列表过滤，默认开启） -->
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 智能去广告：独立模块，与「播放偏好」平级，位于其下方 -->
+        <LinearLayout
+            style="@style/SettingsCard"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/hdrAdFilter"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:background="@null">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginRight="7dp"
+                    android:src="@drawable/ic_set_adfilter"
+                    app:tint="@color/t3"
+                    android:contentDescription="智能去广告" />
+
+                <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="智能去广告" />
+
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/arAdFilter"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_chevron_down"
+                    app:tint="@color/t3"
+                    android:contentDescription="展开" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/panelAdFilter"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- 智能去广告主开关（App 端 HLS 播放列表过滤，默认开启） -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -800,6 +846,46 @@
                         android:contentDescription="智能去广告" />
                 </LinearLayout>
 
+                <!-- 广告过滤提醒：依赖上面的智能去广告开关，关闭时置灰不可用 -->
+                <LinearLayout
+                    android:id="@+id/rowAdFilterNotify"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="广告过滤提醒"
+                            android:textSize="12.5sp"
+                            android:textColor="@color/t1" />
+
+                        <TextView
+                            style="@style/MetaLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:textAllCaps="false"
+                            android:text="播放时识别到广告并跳过，用气泡提示「检查到广告，已跳过」（需先开启智能去广告）"
+                            android:lineSpacingMultiplier="1.5" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/swAdFilterNotify"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="10dp"
+                        android:contentDescription="广告过滤提醒" />
+                </LinearLayout>
+
                 <!-- 规则包状态：来源（内置/服务端）+ 版本 + 待上报条数；点击强制刷新 -->
                 <TextView
                     android:id="@+id/tvAdFilterInfo"
@@ -811,8 +897,7 @@
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp"
                     android:textAllCaps="false"
-                    android:text="规则：内置规则"
-                    android:visibility="gone" />
+                    android:text="规则：内置规则" />
 
                 <!-- 未过滤广告的反馈入口：地址条「有广告」按钮，或点这里提交剪贴板里的地址 -->
                 <TextView
@@ -825,8 +910,7 @@
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp"
                     android:textAllCaps="false"
-                    android:text="有广告没过滤掉？播放页地址条点「有广告」直接提交；也可先复制播放地址，再点这里提交"
-                    android:visibility="gone" />
+                    android:text="有广告没过滤掉？播放页地址条点「有广告」直接提交；也可先复制播放地址，再点这里提交" />
 
                 <!-- 内测通道：拉规则时带 channel=beta（后端按渠道分版本线） -->
                 <LinearLayout
@@ -835,8 +919,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:visibility="gone">
+                    android:gravity="center_vertical">
 
                     <LinearLayout
                         android:layout_width="0dp"

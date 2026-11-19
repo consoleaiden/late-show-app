@@ -11,9 +11,15 @@ import com.lateshow.app.util.ThemeManager;
 /** 进程入口：在任何 Activity 创建前按用户偏好应用日夜模式，避免首帧/恢复时主题错乱 */
 public class LateShowApp extends Application {
 
+    /** 全局 Application 上下文：供非 UI 层（ CoverProxy / AdFilter）发气泡提示 */
+    private static LateShowApp sInstance;
+
+    public static LateShowApp instance() { return sInstance; }
+
     @Override
     public void onCreate() {
         super.onCreate();
+        sInstance = this;
         ThemeManager.apply(this);
         // 开屏（LAUNCHER）也要按已保存的方案取色，因此两个存储必须在任何 Activity 之前就绪。
         // 双重 init 幂等，MainActivity 再调一次不会重建。

@@ -642,6 +642,15 @@ public final class PrefStore {
         sp.edit().putBoolean("ad_filter", on).apply();
     }
 
+    /** 广告过滤提醒：命中并跳过广告时气泡提示（默认关；需广告过滤开启才生效） */
+    public boolean adFilterNotify() {
+        return sp.getBoolean("ad_filter_notify", false);
+    }
+
+    public void setAdFilterNotify(boolean on) {
+        sp.edit().putBoolean("ad_filter_notify", on).apply();
+    }
+
     /** 后端规则包原文（JsonObject.toString）；"" = 无包，用内置规则 */
     public String adFilterPack() {
         return sp.getString("ad_filter_pack", "");

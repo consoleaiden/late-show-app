@@ -57,11 +57,14 @@ public class SettingsFragment extends Fragment
 
     /** 手风琴面板：同一时间只展开一个（同步控制台独立成页后不再占用一个面板） */
     private static final int[] PANEL_HEADERS = {
-            R.id.hdrMode, R.id.hdrSource, R.id.hdrPlay, R.id.hdrProxy, R.id.hdrCache, R.id.hdrApp};
+            R.id.hdrMode, R.id.hdrSource, R.id.hdrPlay, R.id.hdrAdFilter,
+            R.id.hdrProxy, R.id.hdrCache, R.id.hdrApp};
     private static final int[] PANEL_BODIES = {
-            R.id.panelMode, R.id.panelSource, R.id.panelPlay, R.id.panelProxy, R.id.panelCache, R.id.panelApp};
+            R.id.panelMode, R.id.panelSource, R.id.panelPlay, R.id.panelAdFilter,
+            R.id.panelProxy, R.id.panelCache, R.id.panelApp};
     private static final int[] PANEL_ARROWS = {
-            R.id.arMode, R.id.arSource, R.id.arPlay, R.id.arProxy, R.id.arCache, R.id.arApp};
+            R.id.arMode, R.id.arSource, R.id.arPlay, R.id.arAdFilter,
+            R.id.arProxy, R.id.arCache, R.id.arApp};
 
     /** 初始化手风琴：点头部切换，展开一个自动收起其他（默认展开第一个） */
     private void setupAccordion(View root) {
@@ -229,44 +232,58 @@ public class SettingsFragment extends Fragment
         }
 
         // 播放偏好：智能去广告（App 端 HLS 播放列表过滤，默认开启；后端规则包可选增强）
+        // 过滤提醒依赖主开关：关闭广告过滤时置灰不可用，重新开启后恢复（保留用户选择）
         android.widget.Switch swAdFilter = v.findViewById(R.id.swAdFilter);
+        android.widget.Switch swAdFilterNotify = v.findViewById(R.id.swAdFilterNotify);
+        android.view.View rowAdFilterNotify = v.findViewById(R.id.rowAdFilterNotify);
+        Runnable syncAdFilterNotifyEnabled = () -> {
+            boolean adOn = PrefStore.get().adFilter();
+            if (swAdFilterNotify != null) swAdFilterNotify.setEnabled(adOn);
+            if (rowAdFilterNotify != null) rowAdFilterNotify.setAlpha(adOn ? 1f : 0.45f);
+        };
         if (swAdFilter != null) {
             swAdFilter.setChecked(PrefStore.get().adFilter());
             swAdFilter.setOnCheckedChangeListener((bv, on) -> {
                 if (PrefStore.get().adFilter() == on) return;   // 程序化回填，不重复处理
                 PrefStore.get().setAdFilter(on);
+                syncAdFilterNotifyEnabled.run();
                 toast(on ? "智能去广告已开启"
                          : "智能去广告已关闭：将播放原始片源");
             });
         }
+        syncAdFilterNotifyEnabled.run();
+        if (swAdFilterNotify != null) {
+            swAdFilterNotify.setChecked(PrefStore.get().adFilterNotify());
+            swAdFilterNotify.setOnCheckedChangeListener((bv, on) -> {
+                if (PrefStore.get().adFilterNotify() == on) return;
+                PrefStore.get().setAdFilterNotify(on);
+                toast(on ? "广告过滤提醒已开启" : "广告过滤提醒已关闭");
+            });
+        }
 
-        // 去广告规则包状态：只在后端声明 adfilter 能力时展示——老后端根本没这两个接口，
-        // 显示「规则：内置」会让人误以为服务端出了故障。
+        // 去广告规则包状态 / 反馈入口 / 内测通道：独立模块内的常驻配置，正式版同样保留。
+        // 后端无 adfilter 能力时状态行显示「内置规则（后端不支持）」，内测开关置灰，
+        // 不再整行隐藏，避免用户以为正式版缺少这些功能。
         final boolean backendAdFilter =
                 com.lateshow.app.api.ServerCaps.supports(com.lateshow.app.util.AdFilter.CAP);
         android.widget.TextView tvAdFilterInfo = v.findViewById(R.id.tvAdFilterInfo);
         android.view.View rowBeta = v.findViewById(R.id.rowAdFilterBeta);
         android.widget.Switch swAdFilterBeta = v.findViewById(R.id.swAdFilterBeta);
         if (tvAdFilterInfo != null) {
-            tvAdFilterInfo.setVisibility(backendAdFilter ? android.view.View.VISIBLE
-                    : android.view.View.GONE);
             tvAdFilterInfo.setOnClickListener(x -> {
                 com.lateshow.app.util.AdFilter.refreshNow();
-                toast("正在刷新去广告规则…");
+                toast(backendAdFilter ? "正在刷新去广告规则…"
+                                      : "当前后端不支持规则同步，使用内置规则");
                 // 拉取是异步的：稍后再读一次状态，避免点完仍然显示旧版本
                 handler.postDelayed(this::refreshAdFilterInfo, 1500);
             });
         }
-        if (rowBeta != null) {
-            rowBeta.setVisibility(backendAdFilter ? android.view.View.VISIBLE
-                    : android.view.View.GONE);
-        }
         android.widget.TextView tvAdFilterHelp = v.findViewById(R.id.tvAdFilterHelp);
         if (tvAdFilterHelp != null) {
-            tvAdFilterHelp.setVisibility(backendAdFilter ? android.view.View.VISIBLE
-                    : android.view.View.GONE);
             tvAdFilterHelp.setOnClickListener(x -> submitClipboardSample());
         }
+        if (rowBeta != null) rowBeta.setAlpha(backendAdFilter ? 1f : 0.45f);
+        if (swAdFilterBeta != null) swAdFilterBeta.setEnabled(backendAdFilter);
         if (swAdFilterBeta != null) {
             swAdFilterBeta.setChecked(PrefStore.get().adFilterBeta());
             swAdFilterBeta.setOnCheckedChangeListener((bv, on) -> {
@@ -279,6 +296,8 @@ public class SettingsFragment extends Fragment
             });
         }
         refreshAdFilterInfo();
+        // ServerCaps 由 /healthz 异步填充：进入设置页时可能还没返回，稍后按最新能力再刷一次
+        handler.postDelayed(this::refreshAdFilterInfo, 1500);
 
         // 离线与缓存：展示占用并提供清理入口（离线播放数据不随清缓存删除）
         tvCacheInfo = v.findViewById(R.id.tvCacheInfo);
@@ -950,12 +969,19 @@ public class SettingsFragment extends Fragment
         return String.format(java.util.Locale.US, "%.1f MB", b / 1024f / 1024f);
     }
 
-    /** 去广告规则状态行：规则来源 + 版本 + 待上报条数（后端无 adfilter 能力时整行隐藏） */
+    /** 去广告规则状态行：规则来源 + 版本 + 指纹/待上报条数；内测开关随后端能力置灰 */
     private void refreshAdFilterInfo() {
         if (getView() == null) return;
-        android.widget.TextView tv = getView().findViewById(R.id.tvAdFilterInfo);
-        if (tv == null || tv.getVisibility() != android.view.View.VISIBLE) return;
-        tv.setText(com.lateshow.app.util.AdFilter.statusLine() + " · 点击立即刷新");
+        android.view.View tv = getView().findViewById(R.id.tvAdFilterInfo);
+        if (tv == null) return;
+        boolean cap = com.lateshow.app.api.ServerCaps.supports(
+                com.lateshow.app.util.AdFilter.CAP);
+        android.view.View rowBeta = getView().findViewById(R.id.rowAdFilterBeta);
+        android.view.View swBeta = getView().findViewById(R.id.swAdFilterBeta);
+        if (rowBeta != null) rowBeta.setAlpha(cap ? 1f : 0.45f);
+        if (swBeta != null) swBeta.setEnabled(cap);
+        ((android.widget.TextView) tv).setText(
+                com.lateshow.app.util.AdFilter.statusLine() + " · 点击立即刷新");
     }
 
     /**

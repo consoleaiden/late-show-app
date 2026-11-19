@@ -36,6 +36,9 @@ public final class AdFilter {
     private static final long REPORT_BACKOFF_MS = 10 * 60 * 1000L;
     /** 删除区间缓存条数（每条一个播放列表，几十条足够覆盖最近看的片子） */
     private static final int SPAN_CACHE_MAX = 32;
+    /** 命中提醒最短间隔：同一地址重试/缓冲不重复弹气泡 */
+    private static final long NOTIFY_MIN_GAP_MS = 2500L;
+    private static volatile long sLastNotifyAt;
 
     private static volatile boolean pulling;
     private static volatile HlsAdFilter.Rules sRules;
@@ -91,6 +94,15 @@ public final class AdFilter {
         skipReason = null;
         lastSummary = res.removedRuns + "runs/" + (res.removedMs / 1000) + "s of "
                 + (res.totalMs / 1000) + "s";
+        // 过滤提醒：开关由用户控制，默认关；命中才提示，短时去重避免重试刷屏。
+        // 气泡走 UiNotice（主线程 + Application 上下文），这里可能在 ExoPlayer 线程。
+        if (PrefStore.get().adFilterNotify() && res.removedRuns > 0) {
+            long now = System.currentTimeMillis();
+            if (now - sLastNotifyAt >= NOTIFY_MIN_GAP_MS) {
+                sLastNotifyAt = now;
+                UiNotice.show("检查到广告，已跳过");
+            }
+        }
         rememberSpans(uri.toString(), res.removedSpans);
         // v1.17.0：指纹命中即回报 hit；同时记到「本地址曾按哪些指纹过滤」，
         // 用户后续点「有广告」时才能发 miss（服务端按 miss 累计自动停用误杀指纹）。

@@ -156,6 +156,7 @@ public final class CoverProxy {
                 if (!settled.compareAndSet(false, true)) return;
                 speedMode.put(host, useProxy);
                 AppLog.d(TAG, "测速 " + host + "：" + (useProxy ? "代理" : "直连") + " 更快");
+                UiNotice.show("封面测速 " + host + "：" + (useProxy ? "代理更快" : "直连更快"));
                 Call other = issued[useProxy ? 1 : 0];
                 if (other != null) other.cancel();
                 finishRace(host);
@@ -164,6 +165,7 @@ public final class CoverProxy {
                 if (!settled.compareAndSet(false, true)) return;
                 speedMode.put(host, Boolean.FALSE);
                 AppLog.d(TAG, "测速 " + host + "：直连与代理均失败，默认直连");
+                UiNotice.show("封面测速 " + host + "：均失败，暂用直连");
                 finishRace(host);
                 MAIN.post(() -> loadMode(iv, url, false, placeholderRes, errorRes));
             }
