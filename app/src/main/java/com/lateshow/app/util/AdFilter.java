@@ -32,6 +32,13 @@ public final class AdFilter {
     private static final long PULL_TTL_MS = 30 * 60 * 1000L;
     private static final int REPORT_BATCH = 5;
     private static final int REPORT_MAX = 50;
+    /**
+     * v1.19.0 契约 §4.6：miss 反馈原因口径，服务端按 reason 决定是否计入误杀。
+     * over_deleted  ：确实删多了 → miss_count++，达阈值自动停用；
+     * still_has_ads ：只是还有别的广告 → 不计 miss，仅做服务端漏判统计。
+     */
+    public static final String FP_REASON_OVER_DELETED = "over_deleted";
+    public static final String FP_REASON_STILL_ADS = "still_has_ads";
     /** 上报失败后的静默期：避免每次起播都去撞一个正在 429/断网的接口 */
     private static final long REPORT_BACKOFF_MS = 10 * 60 * 1000L;
     /** 删除区间缓存条数（每条一个播放列表，几十条足够覆盖最近看的片子） */
@@ -105,11 +112,11 @@ public final class AdFilter {
         }
         rememberSpans(uri.toString(), res.removedSpans);
         // v1.17.0：指纹命中即回报 hit；同时记到「本地址曾按哪些指纹过滤」，
-        // 用户后续点「有广告」时才能发 miss（服务端按 miss 累计自动停用误杀指纹）。
+        // 用户后续点「有广告」时发 miss（v1.19.0 §4.6：miss 按 reason 定口径）。
         if (!res.matchedFingerprints.isEmpty()) {
             String key = spanKey(uri.toString());
             if (key != null) PrefStore.get().rememberFpHits(key, res.matchedFingerprints);
-            for (String hash : res.matchedFingerprints) feedback(hash, "hit");
+            for (String hash : res.matchedFingerprints) feedback(hash, "hit", null);
         }
         record(uri.toString(), res);
         return res.playlist.getBytes(StandardCharsets.UTF_8);
@@ -430,11 +437,14 @@ public final class AdFilter {
             while (list.size() > REPORT_MAX) list.remove(0);
             PrefStore.get().setAdFilterReports(list);
             AppLog.d(TAG, "sample queued: " + u);
-            // v1.17.0：这条地址若曾按指纹过滤过，认为指纹误杀 → 逐个回报 miss。
-            // 反馈失败静默；发过即清记录，避免用户连点把 miss_count 虚高。
+            // v1.17.0：这条地址若曾按指纹过滤过 → 逐个回报 miss。
+            // v1.19.0 §4.6：「有广告」按钮的语义是“这条视频还有没过滤掉的广告”，
+            // 不是“你们把正片删了”，因此带 reason=still_has_ads：服务端不计
+            // miss_count，只做漏判统计（真正误删的反馈入口见 FP_REASON_OVER_DELETED）。
+            // 反馈失败静默；发过即清记录，避免用户连点重复上报。
             String key = spanKey(u);
             java.util.Set<String> hits = PrefStore.get().fpHitsFor(key);
-            for (String hash : hits) feedback(hash, "miss");
+            for (String hash : hits) feedback(hash, "miss", FP_REASON_STILL_ADS);
             if (!hits.isEmpty()) PrefStore.get().forgetFpHits(key);
             flushReports();      // 举报要立刻到达，不等攒批
             return true;
@@ -447,11 +457,13 @@ public final class AdFilter {
     /**
      * v1.17.0 指纹反馈：命中 hit / 误杀 miss（POST /adfilter/fp-feedback）。
      *
-     * <p>契约 §5：read Token 即可；未知指纹也返回 200（found=false）；失败一律静默，
+     * <p>契约 §5 + v1.19.0 §4.6：miss 可带 {@code reason}（{@link #FP_REASON_OVER_DELETED}
+     * 计入误杀累计 / {@link #FP_REASON_STILL_ADS} 只做漏判统计），hit 不带。
+     * read Token 即可；未知指纹也返回 200（found=false）；失败一律静默，
      * 绝不把 HTTP 错误暴露给用户或影响播放过滤。与 report 共用 60/h 限流域，
      * 429 按 Retry-After 退避（VodSyncApi.ApiCb 扩展回调透传响应头）。
      */
-    private static void feedback(String hash, String kind) {
+    private static void feedback(String hash, String kind, String reason) {
         try {
             if (hash == null || hash.isEmpty()) return;
             if (!ServerCaps.supports(CAP)) return;
@@ -459,7 +471,10 @@ public final class AdFilter {
             JsonObject body = new JsonObject();
             body.addProperty("fp_hash", hash);
             body.addProperty("kind", kind);
+            if (reason != null && !reason.isEmpty()) body.addProperty("reason", reason);
             final String h = hash;
+            final String label = kind + (reason == null || reason.isEmpty()
+                    ? "" : "[" + reason + "]");
             VodSyncApi.get().postJson(ApiPaths.ADFILTER_FP_FEEDBACK, body.toString(),
                     JsonObject.class, new VodSyncApi.ApiCb<JsonObject>() {
                         @Override public void onOk(JsonObject resp) {
@@ -467,18 +482,18 @@ public final class AdFilter {
                             boolean found = resp != null && resp.has("found")
                                     && resp.get("found").isJsonPrimitive()
                                     && resp.get("found").getAsBoolean();
-                            AppLog.d(TAG, "fp-feedback " + kind + " " + shortHash(h)
+                            AppLog.d(TAG, "fp-feedback " + label + " " + shortHash(h)
                                     + " found=" + found);
                         }
 
                         @Override public void onErr(String msg) {
                             sReportBackoffUntil = System.currentTimeMillis() + REPORT_BACKOFF_MS;
-                            AppLog.w(TAG, "fp-feedback " + kind + " " + shortHash(h) + " fail: " + msg);
+                            AppLog.w(TAG, "fp-feedback " + label + " " + shortHash(h) + " fail: " + msg);
                         }
 
                         @Override public void onErr(int code, String msg, long retryAfterSec) {
                             applyRateLimit(code, retryAfterSec);
-                            AppLog.w(TAG, "fp-feedback " + kind + " " + shortHash(h)
+                            AppLog.w(TAG, "fp-feedback " + label + " " + shortHash(h)
                                     + " fail HTTP " + code + ": " + msg);
                         }
                     });

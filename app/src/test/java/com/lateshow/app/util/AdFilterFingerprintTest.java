@@ -160,4 +160,11 @@ public class AdFilterFingerprintTest {
         HlsAdFilter.Result res = HlsAdFilter.filter(BASE, PLAYLIST, AdFilterRules.load(pack));
         assertNull("桶不匹配时行为与老包一致", res);
     }
+
+    /** v1.19.0 契约 §4.6：reason 字面量必须与服务端口径逐字一致，改错即服务端 400。 */
+    @Test
+    public void feedbackReasonLiteralsMatchServerContract() {
+        assertEquals("still_has_ads", AdFilter.FP_REASON_STILL_ADS);
+        assertEquals("over_deleted", AdFilter.FP_REASON_OVER_DELETED);
+    }
 }
