@@ -39,6 +39,13 @@ public final class AdFilter {
      */
     public static final String FP_REASON_OVER_DELETED = "over_deleted";
     public static final String FP_REASON_STILL_ADS = "still_has_ads";
+
+    /** {@link #reportOverDeleted} 结果：已受理入队 */
+    public static final int OD_OK = 0;
+    /** {@link #reportOverDeleted} 结果：当前后端无 adfilter 能力 */
+    public static final int OD_NO_CAPS = 1;
+    /** {@link #reportOverDeleted} 结果：本次播放未按指纹过滤，没有可反馈的指纹 */
+    public static final int OD_NO_FP_HITS = 2;
     /** 上报失败后的静默期：避免每次起播都去撞一个正在 429/断网的接口 */
     private static final long REPORT_BACKOFF_MS = 10 * 60 * 1000L;
     /** 删除区间缓存条数（每条一个播放列表，几十条足够覆盖最近看的片子） */
@@ -451,6 +458,38 @@ public final class AdFilter {
         } catch (Exception e) {
             AppLog.w(TAG, "reportSample fail: " + e);
             return false;
+        }
+    }
+
+    /**
+     * 用户主动反馈「正片被误删」（v1.19.0 §4.6 over_deleted 入口）。
+     *
+     * <p>只对「本地址曾按指纹过滤」的指纹发 {@code kind=miss, reason=over_deleted}：
+     * 服务端计入 miss_count，达阈值自动停用误杀指纹。结构规则（时长比例/重复插入）
+     * 导致的误删不经过指纹、没有对应反馈通道，返回 {@link #OD_NO_FP_HITS}。
+     *
+     * <p>与「有广告」举报（{@link #reportSample}）互不影响：不写举报队列
+     * （自动上报已带真实 removed 统计，removed_runs=0 的漏判口径不适用于误删）；
+     * 发送后同样清空指纹记录，避免连点把 miss_count 重复累计。
+     *
+     * @return {@link #OD_OK} 已受理 / {@link #OD_NO_CAPS} 后端无能力 /
+     *         {@link #OD_NO_FP_HITS} 无指纹可反馈
+     */
+    public static int reportOverDeleted(String url) {
+        if (url == null || url.trim().isEmpty()) return OD_NO_FP_HITS;
+        if (!ServerCaps.supports(CAP)) return OD_NO_CAPS;
+        final String u = url.trim();
+        try {
+            String key = spanKey(u);
+            java.util.Set<String> hits = PrefStore.get().fpHitsFor(key);
+            if (hits.isEmpty()) return OD_NO_FP_HITS;
+            for (String hash : hits) feedback(hash, "miss", FP_REASON_OVER_DELETED);
+            PrefStore.get().forgetFpHits(key);
+            AppLog.d(TAG, "over_deleted: " + hits.size() + " fp for " + u);
+            return OD_OK;
+        } catch (Exception e) {
+            AppLog.w(TAG, "reportOverDeleted fail: " + e);
+            return OD_NO_FP_HITS;
         }
     }
 

@@ -30,7 +30,7 @@ import com.lateshow.app.store.PrefStore;
  * 播放器悬浮工具：倍速菜单 + 播放设置聚合面板，内嵌（DetailFragment）与全屏（PlayerActivity）共用。
  *
  * <p>聚合面板把分散在播放器各处的功能收进「设置」按钮：倍速、广告提报、
- * 跳过片头/片尾、复制播放地址、下载。面板为黑色 70% 不透明度，关闭方式：
+ * 误删反馈、跳过片头/片尾、复制播放地址、下载。面板为黑色 70% 不透明度，关闭方式：
  * 再点一次设置按钮、点击面板外区域、5 秒无操作，或任一一次性功能执行完。
  */
 public final class PlayerPanel {
@@ -109,6 +109,12 @@ public final class PlayerPanel {
         box.addView(newRow(ctx, "广告提报", v -> {
             closePanel();
             StreamBar.reportAdUrl(ctx, urls.get());
+        }), matchWrap());
+
+        // 误删反馈：正片被误删时对相关指纹发 miss+over_deleted（服务端达标自动停用）
+        box.addView(newRow(ctx, "误删反馈", v -> {
+            closePanel();
+            StreamBar.reportOverDeletedUrl(ctx, urls.get());
         }), matchWrap());
 
         box.addView(newRow(ctx, "播放设置", v -> {

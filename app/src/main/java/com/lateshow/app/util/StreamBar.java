@@ -94,6 +94,22 @@ public final class StreamBar {
         reportAd(ctx, sanitize(url));
     }
 
+    /**
+     * 误删反馈：正片被误删时对相关指纹发 miss+over_deleted（v1.19.0 §4.6），
+     * 服务端按 miss_count 达标自动停用误杀指纹；无指纹可反馈时明确告知。
+     */
+    public static void reportOverDeletedUrl(Context ctx, String url) {
+        if (TextUtils.isEmpty(url)) return;
+        int r = AdFilter.reportOverDeleted(sanitize(url));
+        if (r == AdFilter.OD_OK) {
+            Toast.makeText(ctx, "已反馈误删，相关指纹将被复核停用", Toast.LENGTH_SHORT).show();
+        } else if (r == AdFilter.OD_NO_FP_HITS) {
+            Toast.makeText(ctx, "本次播放未按指纹过滤，暂无可反馈的指纹", Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(ctx, "当前服务器不支持上报", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     /** 「有广告」：把当前地址作为未过滤样本提交给运营侧（走报告通道，removed=0 即标记） */
     private static void reportAd(Context ctx, String url) {
         if (TextUtils.isEmpty(url)) return;
